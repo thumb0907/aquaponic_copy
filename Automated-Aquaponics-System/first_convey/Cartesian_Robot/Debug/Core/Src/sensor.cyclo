@@ -1,0 +1,5 @@
+../Core/Src/sensor.c:9:6:Sensor_IR_Detected	1
+../Core/Src/sensor.c:28:17:DMS80_ReadRaw	1
+../Core/Src/sensor.c:37:10:Sensor_DMS80_ReadRawAvg	3
+../Core/Src/sensor.c:45:7:Sensor_DMS80_VoltageToCm	6
+../Core/Src/sensor.c:66:7:Sensor_DMS80_ReadCmAvg	1

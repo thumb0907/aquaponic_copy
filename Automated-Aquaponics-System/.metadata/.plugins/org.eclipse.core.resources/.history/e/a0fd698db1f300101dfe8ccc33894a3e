@@ -1,0 +1,18 @@
+#ifndef SENSOR_H
+#define SENSOR_H
+
+#include <stdint.h>
+#include <stdbool.h>
+#include "stm32f4xx_hal.h"
+
+void Sensor_Init(ADC_HandleTypeDef *hadc,
+                 GPIO_TypeDef *ir_port, uint16_t ir_pin,
+                 bool ir_active_high);
+
+bool     Sensor_IR_Detected(void);
+
+uint16_t Sensor_DMS80_ReadRawAvg(int n);
+float    Sensor_DMS80_VoltageToCm(float v);
+float    Sensor_DMS80_ReadCmAvg(int n);
+
+#endif

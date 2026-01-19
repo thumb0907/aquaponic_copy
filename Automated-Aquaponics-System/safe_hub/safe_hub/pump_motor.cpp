@@ -8,6 +8,7 @@ void pump_pin()                                          // 펌프모터 핀 설
   {
     pinMode(rel_pin[i], OUTPUT);
   }
+  pump(off, off, off, off);
 }
 
 void pump(bool a, bool b, bool c, bool d)               //펌프모터 구동 함수

@@ -1,0 +1,17 @@
+../Core/Src/main.c:89:13:Encoder_Reset	1
+../Core/Src/main.c:95:16:Encoder_GetPos	1
+../Core/Src/main.c:105:20:Step_PWM_Start	1
+../Core/Src/main.c:110:20:Step_PWM_Stop	1
+../Core/Src/main.c:116:13:Step_SetPPS	5
+../Core/Src/main.c:142:13:Step_SetDir	2
+../Core/Src/main.c:149:17:RampTo	3
+../Core/Src/main.c:161:17:PpsFromErr	3
+../Core/Src/main.c:170:13:Calib_DirInvert	2
+../Core/Src/main.c:187:13:Home_Find	2
+../Core/Src/main.c:211:5:main	4
+../Core/Src/main.c:308:6:SystemClock_Config	3
+../Core/Src/main.c:356:13:MX_TIM2_Init	4
+../Core/Src/main.c:405:13:MX_TIM3_Init	3
+../Core/Src/main.c:454:13:MX_GPIO_Init	1
+../Core/Src/main.c:502:6:HAL_GPIO_EXTI_Callback	4
+../Core/Src/main.c:523:6:Error_Handler	1

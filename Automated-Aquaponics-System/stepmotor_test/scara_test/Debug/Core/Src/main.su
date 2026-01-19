@@ -1,0 +1,17 @@
+../Core/Src/main.c:89:13:Encoder_Reset	4	static
+../Core/Src/main.c:95:16:Encoder_GetPos	16	static
+../Core/Src/main.c:105:20:Step_PWM_Start	8	static
+../Core/Src/main.c:110:20:Step_PWM_Stop	8	static
+../Core/Src/main.c:116:13:Step_SetPPS	24	static
+../Core/Src/main.c:142:13:Step_SetDir	16	static
+../Core/Src/main.c:149:17:RampTo	24	static
+../Core/Src/main.c:161:17:PpsFromErr	24	static
+../Core/Src/main.c:170:13:Calib_DirInvert	16	static
+../Core/Src/main.c:187:13:Home_Find	8	static
+../Core/Src/main.c:211:5:main	32	static
+../Core/Src/main.c:308:6:SystemClock_Config	88	static
+../Core/Src/main.c:356:13:MX_TIM2_Init	48	static
+../Core/Src/main.c:405:13:MX_TIM3_Init	56	static
+../Core/Src/main.c:454:13:MX_GPIO_Init	40	static
+../Core/Src/main.c:502:6:HAL_GPIO_EXTI_Callback	24	static
+../Core/Src/main.c:523:6:Error_Handler	4	static,ignoring_inline_asm

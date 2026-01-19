@@ -1,0 +1,71 @@
+#include "stm32f4xx_hal.h"
+#include "sensor.h"
+#include "board_pin.h"
+#include "main.h"
+
+extern ADC_HandleTypeDef hadc1;
+
+///// 적외선센서 //////
+bool Sensor_IR_Detected(void)
+{
+  return (HAL_GPIO_ReadPin(IR_PORT, IR_PIN) == GPIO_PIN_SET);
+}
+
+
+///// 절대거리 감지센서 ////// (나중에 수정예정)
+typedef struct { float v; float cm; } VT;
+static const VT dms80_map[] = {
+  {2.45f, 10.0f},
+  {1.20f, 20.0f},
+  {0.80f, 30.0f},
+  {0.60f, 40.0f},
+  {0.48f, 50.0f},
+  {0.40f, 60.0f},
+  {0.35f, 70.0f},
+  {0.32f, 80.0f},
+};
+
+static uint16_t DMS80_ReadRaw(void)
+{
+  HAL_ADC_Start(&hadc1);
+  HAL_ADC_PollForConversion(&hadc1, 10);
+  uint16_t raw = (uint16_t)HAL_ADC_GetValue(&hadc1);
+  HAL_ADC_Stop(&hadc1);
+  return raw;
+}
+
+uint16_t Sensor_DMS80_ReadRawAvg(int n)
+{
+  if (n < 1) n = 1;
+  uint32_t sum = 0;
+  for (int i = 0; i < n; i++) sum += DMS80_ReadRaw();
+  return (uint16_t)(sum / (uint32_t)n);
+}
+
+float Sensor_DMS80_VoltageToCm(float v)
+{
+  const int N = (int)(sizeof(dms80_map)/sizeof(dms80_map[0]));
+
+  if (v >= dms80_map[0].v)   return dms80_map[0].cm;
+  if (v <= dms80_map[N-1].v) return dms80_map[N-1].cm;
+
+  for (int i = 0; i < N-1; i++)
+  {
+    float v1 = dms80_map[i].v,   c1 = dms80_map[i].cm;
+    float v2 = dms80_map[i+1].v, c2 = dms80_map[i+1].cm;
+
+    if (v <= v1 && v >= v2)
+    {
+      float t = (v - v1) / (v2 - v1);
+      return c1 + t * (c2 - c1);
+    }
+  }
+  return dms80_map[N-1].cm;
+}
+
+float Sensor_DMS80_ReadCmAvg(int n)
+{
+  uint16_t raw = Sensor_DMS80_ReadRawAvg(n);
+  float v = (3.3f * raw) / 4095.0f;
+  return Sensor_DMS80_VoltageToCm(v);
+}

@@ -1,0 +1,82 @@
+#include "sensor.h"
+
+typedef struct { float v; float cm; } VT;
+
+static const VT dms80_map[] = {
+  {2.45f, 10.0f},
+  {1.20f, 20.0f},
+  {0.80f, 30.0f},
+  {0.60f, 40.0f},
+  {0.48f, 50.0f},
+  {0.40f, 60.0f},
+  {0.35f, 70.0f},
+  {0.32f, 80.0f},
+};
+
+static ADC_HandleTypeDef *s_hadc = NULL;
+
+static GPIO_TypeDef *s_ir_port = NULL;
+static uint16_t s_ir_pin = 0;
+static bool s_ir_active_high = true;
+
+void Sensor_Init(ADC_HandleTypeDef *hadc,
+                 GPIO_TypeDef *ir_port, uint16_t ir_pin,
+                 bool ir_active_high)
+{
+  s_hadc = hadc;
+  s_ir_port = ir_port;
+  s_ir_pin = ir_pin;
+  s_ir_active_high = ir_active_high;
+}
+
+bool Sensor_IR_Detected(void)
+{
+  GPIO_PinState ps = HAL_GPIO_ReadPin(s_ir_port, s_ir_pin);
+  if (s_ir_active_high) return (ps == GPIO_PIN_SET);
+  else                  return (ps == GPIO_PIN_RESET);
+}
+
+static uint16_t DMS80_ReadRaw(void)
+{
+  HAL_ADC_Start(s_hadc);
+  HAL_ADC_PollForConversion(s_hadc, 10);
+  uint16_t raw = (uint16_t)HAL_ADC_GetValue(s_hadc);
+  HAL_ADC_Stop(s_hadc);
+  return raw;
+}
+
+uint16_t Sensor_DMS80_ReadRawAvg(int n)
+{
+  uint32_t sum = 0;
+  if (n < 1) n = 1;
+  for (int i = 0; i < n; i++) sum += DMS80_ReadRaw();
+  return (uint16_t)(sum / (uint32_t)n);
+}
+
+float Sensor_DMS80_VoltageToCm(float v)
+{
+  const int N = (int)(sizeof(dms80_map)/sizeof(dms80_map[0]));
+
+  if (v >= dms80_map[0].v)     return dms80_map[0].cm;
+  if (v <= dms80_map[N-1].v)   return dms80_map[N-1].cm;
+
+  for (int i = 0; i < N-1; i++)
+  {
+    float v1 = dms80_map[i].v,   c1 = dms80_map[i].cm;
+    float v2 = dms80_map[i+1].v, c2 = dms80_map[i+1].cm;
+
+    if (v <= v1 && v >= v2)
+    {
+      float t = (v - v1) / (v2 - v1);
+      return c1 + t * (c2 - c1);
+    }
+  }
+  return dms80_map[N-1].cm;
+}
+
+float Sensor_DMS80_ReadCmAvg(int n)
+{
+  uint16_t raw = Sensor_DMS80_ReadRawAvg(n);
+  float v = (3.3f * raw) / 4095.0f;
+  return Sensor_DMS80_VoltageToCm(v);
+}

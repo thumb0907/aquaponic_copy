@@ -1,0 +1,24 @@
+#ifndef FIRST_CONVEY_H
+#define FIRST_CONVEY_H
+
+#include <stdint.h>
+#include <stdbool.h>
+#include "stm32f4xx_hal.h"
+
+typedef enum {
+  CONVEYOR_RUN = 0,
+  CONVEYOR_STOP
+} ConveyorState;
+
+void FirstConvey_Init(TIM_HandleTypeDef *htim_step, uint32_t tim_ch,
+                      GPIO_TypeDef *dir_port, uint16_t dir_pin,
+                      GPIO_TypeDef *en_port,  uint16_t en_pin,
+                      UART_HandleTypeDef *huart);
+
+void FirstConvey_Task(void);
+
+// 필요하면 외부에서 상태 강제 변경
+void          FirstConvey_SetState(ConveyorState s);
+ConveyorState FirstConvey_GetState(void);
+
+#endif

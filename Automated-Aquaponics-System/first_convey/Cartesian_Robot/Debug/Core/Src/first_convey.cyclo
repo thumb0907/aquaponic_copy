@@ -1,0 +1,9 @@
+../Core/Src/first_convey.c:16:17:TIM3_GetClockHz	2
+../Core/Src/first_convey.c:22:13:StepPWM_SetHz	3
+../Core/Src/first_convey.c:36:13:Motor_SetDir	1
+../Core/Src/first_convey.c:40:13:Motor_Enable	1
+../Core/Src/first_convey.c:44:13:Motor_Start	1
+../Core/Src/first_convey.c:49:13:Motor_Stop	1
+../Core/Src/first_convey.c:54:13:Conveyor_Run	3
+../Core/Src/first_convey.c:73:13:Conveyor_Stop	1
+../Core/Src/first_convey.c:91:6:FirstConvey_Task	2

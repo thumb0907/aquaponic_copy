@@ -3,7 +3,12 @@
 
 #include <Arduino.h>
 
-#define wl A0                                // 수위센서 핀 번호
+extern const int wl_pin[2];
+extern const uint8_t buz_pin;
+extern int rawval1; 
+extern int rawval2; 
+extern float wl_mm1;
+extern float wl_mm2;
 
 void lev_pin();                              // 수위센서 핀 설정
 void lev();                                  // 수위센서 구동함수
