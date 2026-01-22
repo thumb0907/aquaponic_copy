@@ -35,17 +35,17 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY, DEBUGGING, OCTETS
  15 .debug_rnglists 00000b2c  00000000  00000000  00019618  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 16 .debug_macro  000238a5  00000000  00000000  0001a144  2**0
+ 16 .debug_macro  000238b1  00000000  00000000  0001a144  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 17 .debug_line   00011bf5  00000000  00000000  0003d9e9  2**0
+ 17 .debug_line   00011bf5  00000000  00000000  0003d9f5  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 18 .debug_str    000ddba2  00000000  00000000  0004f5de  2**0
+ 18 .debug_str    000ddbce  00000000  00000000  0004f5ea  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 19 .comment      00000043  00000000  00000000  0012d180  2**0
+ 19 .comment      00000043  00000000  00000000  0012d1b8  2**0
                   CONTENTS, READONLY
- 20 .debug_frame  0000410c  00000000  00000000  0012d1c4  2**2
+ 20 .debug_frame  0000410c  00000000  00000000  0012d1fc  2**2
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 21 .debug_line_str 00000089  00000000  00000000  001312d0  2**0
+ 21 .debug_line_str 00000089  00000000  00000000  00131308  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
 
 Disassembly of section .text:
@@ -524,6 +524,7 @@ static void StepPWM_SetHz(uint32_t hz)      	// PWM 주파수 설정
 
 08000670 <Motor_SetDir>:
 
+//////////////////////////////////////////////// 컨베이어
 static void Motor_SetDir(bool dir) // dir
 {
  8000670:	b580      	push	{r7, lr}
@@ -531,7 +532,7 @@ static void Motor_SetDir(bool dir) // dir
  8000674:	af00      	add	r7, sp, #0
  8000676:	4603      	mov	r3, r0
  8000678:	71fb      	strb	r3, [r7, #7]
-  HAL_GPIO_WritePin(DIR_PORT, DIR_PIN, dir ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(CON_DIR_PORT, CON_DIR_PIN, dir ? GPIO_PIN_SET : GPIO_PIN_RESET);
  800067a:	79fb      	ldrb	r3, [r7, #7]
  800067c:	461a      	mov	r2, r3
  800067e:	f44f 7100 	mov.w	r1, #512	@ 0x200
@@ -552,7 +553,7 @@ static void Motor_Enable(bool en) // en
  8000698:	af00      	add	r7, sp, #0
  800069a:	4603      	mov	r3, r0
  800069c:	71fb      	strb	r3, [r7, #7]
-  HAL_GPIO_WritePin(EN_PORT, EN_PIN, en ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(CON_EN_PORT, CON_EN_PIN, en ? GPIO_PIN_SET : GPIO_PIN_RESET);
  800069e:	79fb      	ldrb	r3, [r7, #7]
  80006a0:	461a      	mov	r2, r3
  80006a2:	f44f 7180 	mov.w	r1, #256	@ 0x100
@@ -630,7 +631,7 @@ static void Conveyor_Run(void) // 컨베이어 구동
  800071a:	701a      	strb	r2, [r3, #0]
   }
 
-  if (Sensor_IR_Detected())
+  if (Sensor_IR_Detected()) // 컨베이어 정지
  800071c:	f000 fa52 	bl	8000bc4 <Sensor_IR_Detected>
  8000720:	4603      	mov	r3, r0
  8000722:	2b00      	cmp	r3, #0
