@@ -55,16 +55,16 @@ Eigen::Vector3d readTCP()
   return tcp;
 }
 
-void moveHome(double t)
+void moveHome(double t )
 {
   runManipulator(0.15);
 
   // 오프셋 보정(rad 단위)
   std::vector<double> home_pos = {
-    0.0,
-    -4.8 * M_PI / 180.0,
-    -4.8 * M_PI / 180.0,
-    0.0 * M_PI / 180.0
+    90.0 * M_PI / 180.0,
+    -71.8 * M_PI / 180.0,
+    34.8 * M_PI / 180.0,
+    75 * M_PI / 180.0
   };
   omx.makeJointTrajectory(home_pos, t);
 
