@@ -3,6 +3,9 @@
 
 #include <Arduino.h>
 
+extern float L1_mm;
+extern float L2_mm;
+
 struct Pose2D {
   float x_mm;
   float y_mm;
