@@ -1,71 +1,112 @@
-#include "stm32f4xx_hal.h"
-#include "sensor.h"
-#include "board_pin.h"
-#include "main.h"
+	// sensor.c
+	#include "stm32f4xx_hal.h"
+	#include "sensor.h"
+	#include "board_pin.h"
+	#include "main.h"
+	#include <math.h>
 
-extern ADC_HandleTypeDef hadc1;
+	extern ADC_HandleTypeDef hadc1;
 
-///// 적외선센서 //////
-bool Sensor_IR_Detected(void)
-{
-  return (HAL_GPIO_ReadPin(IR_PORT, IR_PIN) == GPIO_PIN_SET);
-}
+	//////////////// 적외선센서
+	bool Sensor_IR_Detected(void)
+	{
+	  return (HAL_GPIO_ReadPin(IR_PORT, IR_PIN) == GPIO_PIN_RESET); // LOW면 감지
+	}
+
+	//////////////////////////  거리감지센서
+	uint16_t Sensor_Distance_ReadRawOnce(void)
+	{
+	  HAL_ADC_Start(&hadc1);
+	  if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK) {
+		uint16_t v = (uint16_t)HAL_ADC_GetValue(&hadc1);
+		HAL_ADC_Stop(&hadc1);
+		return v;
+	  }
+	  HAL_ADC_Stop(&hadc1);
+	  return 0;
+	}
+	uint16_t Sensor_Distance_ReadRawAvg(uint8_t n)
+	{
+	  if (n < 1) n = 1;
+
+	  uint32_t sum = 0;
+	  for (uint8_t i = 0; i < n; i++)
+	  {
+		sum += Sensor_Distance_ReadRawOnce();
+		HAL_Delay(2);
+	  }
+	  return (uint16_t)(sum / n);
+	}
+
+	float Sensor_Distance_RawToVoltage(uint16_t raw)
+	{
+	  return (3.3f * (float)raw) / 4095.0f;
+	}
+	/*
+	float Sensor_Distance_VoltageToCm(float v)
+	{
+	  if (v < 0.2f) return 999.0f; // 측정 불가
+	  float cm = 27.86f * powf(v, -1.15f);
+
+	  // 센서 유효 범위: 2cm ~ 15cm
+	  if (cm < 2.0f)  cm = 2.0f;
+	  if (cm > 15.0f) cm = 15.0f;
+
+	  return cm;
+	}*/
+
+	// sensor.c의 Sensor_Distance_VoltageToCm 함수를 이렇게 수정: 선형 보간
+	float Sensor_Distance_VoltageToCm(float v)
+	{
+	  if (v < 0.3f) return 15.0f;
+
+	  // 실측 데이터: {전압, 거리}
+	  typedef struct {
+		float voltage;
+		float distance;
+	  } CalibPoint;
+
+	  static const CalibPoint table[] = {
+		{1.89f,  2.0f},
+		{1.55f,  3.0f},
+		{1.24f,  4.0f},
+		{1.05f,  5.0f},
+		{0.86f,  6.0f},
+		{0.74f,  7.0f},
+		{0.71f,  8.0f},
+		{0.63f,  9.0f},
+		{0.56f, 10.0f},
+		{0.47f, 11.0f},
+		{0.43f, 12.0f},
+		{0.37f, 13.0f},
+		{0.33f, 14.0f}
+	  };
+
+	  const uint8_t table_size = sizeof(table) / sizeof(table[0]);
+
+	  // 범위 밖 처리
+	  if (v >= table[0].voltage) return table[0].distance;  // 2cm 이하
+	  if (v <= table[table_size-1].voltage) return 15.0f;   // 15cm 이상
+
+	  // 선형 보간
+	  for (uint8_t i = 0; i < table_size - 1; i++)
+	  {
+		if (v <= table[i].voltage && v >= table[i+1].voltage)
+		{
+		  float v1 = table[i].voltage;
+		  float v2 = table[i+1].voltage;
+		  float d1 = table[i].distance;
+		  float d2 = table[i+1].distance;
+
+		  // 선형 보간 공식: d = d1 + (v - v1) * (d2 - d1) / (v2 - v1)
+		  float distance = d1 + (v - v1) * (d2 - d1) / (v2 - v1);
+		  return distance;
+		}
+	  }
+
+	  return 15.0f;
+	}
 
 
-///// 절대거리 감지센서 ////// (나중에 수정예정)
-typedef struct { float v; float cm; } VT;
-static const VT dms80_map[] = {
-  {2.45f, 10.0f},
-  {1.20f, 20.0f},
-  {0.80f, 30.0f},
-  {0.60f, 40.0f},
-  {0.48f, 50.0f},
-  {0.40f, 60.0f},
-  {0.35f, 70.0f},
-  {0.32f, 80.0f},
-};
+	// 직교로봇 리밋스위치
 
-static uint16_t DMS80_ReadRaw(void)
-{
-  HAL_ADC_Start(&hadc1);
-  HAL_ADC_PollForConversion(&hadc1, 10);
-  uint16_t raw = (uint16_t)HAL_ADC_GetValue(&hadc1);
-  HAL_ADC_Stop(&hadc1);
-  return raw;
-}
-
-uint16_t Sensor_DMS80_ReadRawAvg(int n)
-{
-  if (n < 1) n = 1;
-  uint32_t sum = 0;
-  for (int i = 0; i < n; i++) sum += DMS80_ReadRaw();
-  return (uint16_t)(sum / (uint32_t)n);
-}
-
-float Sensor_DMS80_VoltageToCm(float v)
-{
-  const int N = (int)(sizeof(dms80_map)/sizeof(dms80_map[0]));
-
-  if (v >= dms80_map[0].v)   return dms80_map[0].cm;
-  if (v <= dms80_map[N-1].v) return dms80_map[N-1].cm;
-
-  for (int i = 0; i < N-1; i++)
-  {
-    float v1 = dms80_map[i].v,   c1 = dms80_map[i].cm;
-    float v2 = dms80_map[i+1].v, c2 = dms80_map[i+1].cm;
-
-    if (v <= v1 && v >= v2)
-    {
-      float t = (v - v1) / (v2 - v1);
-      return c1 + t * (c2 - c1);
-    }
-  }
-  return dms80_map[N-1].cm;
-}
-
-float Sensor_DMS80_ReadCmAvg(int n)
-{
-  uint16_t raw = Sensor_DMS80_ReadRawAvg(n);
-  float v = (3.3f * raw) / 4095.0f;
-  return Sensor_DMS80_VoltageToCm(v);
-}

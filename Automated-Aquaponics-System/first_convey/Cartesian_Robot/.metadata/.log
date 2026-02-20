@@ -1,0 +1,128 @@
+!SESSION 2026-01-30 18:03:37.171 -----------------------------------------------
+eclipse.buildId=Version 1.18.0
+java.version=21.0.3
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=ko_KR
+Framework arguments:  C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\first_convey\Cartesian_Robot\.project
+Command-line arguments:  -os win32 -ws win32 -arch x86_64 C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\first_convey\Cartesian_Robot\.project
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 4 4 2026-01-30 18:04:33.109
+!MESSAGE CubeMX plugin appears to be active, Log4j initialization might be too late.
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-01-30 18:04:33.109
+!MESSAGE Log4j2 initialized with config file C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\first_convey\Cartesian_Robot\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-01-30 18:04:40.057
+!MESSAGE Started RMI Server, listening on port 41337
+
+!ENTRY org.eclipse.core.jobs 2 2 2026-01-30 18:04:50.736
+!MESSAGE Job found still running after platform shutdown.  Jobs should be canceled by the plugin that scheduled them during shutdown: org.eclipse.ui.internal.Workbench$39 RUNNING
+	 at java.base/java.io.RandomAccessFile.writeBytes0(Native Method)
+	 at java.base/java.io.RandomAccessFile.writeBytes(RandomAccessFile.java:572)
+	 at java.base/java.io.RandomAccessFile.write(RandomAccessFile.java:602)
+	 at java.desktop/javax.imageio.stream.FileCacheImageInputStream.readUntil(FileCacheImageInputStream.java:151)
+	 at java.desktop/javax.imageio.stream.FileCacheImageInputStream.read(FileCacheImageInputStream.java:190)
+	 at java.desktop/com.sun.imageio.plugins.common.ReaderUtil.tryReadFully(ReaderUtil.java:277)
+	 at java.desktop/com.sun.imageio.plugins.gif.GIFImageReaderSpi.canDecodeInput(GIFImageReaderSpi.java:86)
+	 at java.desktop/javax.imageio.ImageIO$CanDecodeInputFilter.filter(ImageIO.java:571)
+	 at java.desktop/javax.imageio.spi.FilterIterator.advance(ServiceRegistry.java:868)
+	 at java.desktop/javax.imageio.spi.FilterIterator.<init>(ServiceRegistry.java:862)
+	 at java.desktop/javax.imageio.spi.ServiceRegistry.getServiceProviders(ServiceRegistry.java:515)
+	 at java.desktop/javax.imageio.ImageIO.getImageReaders(ImageIO.java:652)
+	 at java.desktop/javax.imageio.ImageIO.read(ImageIO.java:1456)
+	 at java.desktop/javax.imageio.ImageIO.read(ImageIO.java:1363)
+	 at com.st.microxplorer.plugins.power.gui.common.PowerIconsList.getImage(PowerIconsList.java:124)
+	 at com.st.microxplorer.plugins.power.gui.common.PowerIconsList.getImage(PowerIconsList.java:152)
+	 at com.st.microxplorer.plugins.power.gui.common.PowerIconsList.getIcon(PowerIconsList.java:163)
+	 at com.st.microxplorer.plugins.power.PowerPluginView.createPCCMenu(PowerPluginView.java:254)
+	 at com.st.microxplorer.plugins.power.PowerPluginView.getUI(PowerPluginView.java:243)
+	 at com.st.microxplorer.plugin.PluginManage.PluginDiscovery(PluginManage.java:84)
+	 at com.st.microxplorer.maingui.MainPanel.initialization(MainPanel.java:329)
+	 at com.st.microxplorer.maingui.AppletMainFrameCubeIde.init(AppletMainFrameCubeIde.java:242)
+	 at com.st.stm32cube.common.mx.core.CubeMxInstance.<init>(CubeMxInstance.java:117)
+	 at com.st.stm32cube.common.mx.core.CubeMxInstance.getInstance(CubeMxInstance.java:91)
+	 at com.st.stm32cube.common.mx.userauth.UserAuthAdapter.<init>(UserAuthAdapter.java:25)
+	 at com.st.stm32cube.common.mx.userauth.UserAuthProvider.getUserAuthAdapter(UserAuthProvider.java:16)
+	 at com.st.stm32cube.common.ecosystemintegration.ui.core.MCUEcoSystemIntegrationUiHelper.getUserAuth(MCUEcoSystemIntegrationUiHelper.java:100)
+	 at com.st.stm32cube.ide.mcu.userauth.UserAuthStartup.earlyStartup(UserAuthStartup.java:32)
+	 at org.eclipse.ui.internal.EarlyStartupRunnable.runEarlyStartup(EarlyStartupRunnable.java:79)
+	 at org.eclipse.ui.internal.EarlyStartupRunnable.run(EarlyStartupRunnable.java:55)
+	 at org.eclipse.core.runtime.SafeRunner.run(SafeRunner.java:47)
+	 at org.eclipse.ui.internal.Workbench$39.run(Workbench.java:2733)
+	 at org.eclipse.core.internal.jobs.Worker.run(Worker.java:63)
+!SESSION 2026-01-30 18:04:53.859 -----------------------------------------------
+eclipse.buildId=Version 1.18.0
+java.version=21.0.3
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=ko_KR
+Framework arguments:  C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\first_convey\Cartesian_Robot\.project
+Command-line arguments:  -os win32 -ws win32 -arch x86_64 C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\first_convey\Cartesian_Robot\.project
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 4 4 2026-01-30 18:05:12.437
+!MESSAGE CubeMX plugin appears to be active, Log4j initialization might be too late.
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-01-30 18:05:12.437
+!MESSAGE Log4j2 initialized with config file C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\first_convey\Cartesian_Robot\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-01-30 18:05:21.156
+!MESSAGE Started RMI Server, listening on port 41337
+!SESSION 2026-01-30 18:11:39.504 -----------------------------------------------
+eclipse.buildId=Version 1.18.0
+java.version=21.0.3
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=ko_KR
+Framework arguments:  C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\first_convey\Cartesian_Robot\.project
+Command-line arguments:  -os win32 -ws win32 -arch x86_64 C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\first_convey\Cartesian_Robot\.project
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 4 4 2026-01-30 18:11:47.996
+!MESSAGE CubeMX plugin appears to be active, Log4j initialization might be too late.
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-01-30 18:11:47.999
+!MESSAGE Log4j2 initialized with config file C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\first_convey\Cartesian_Robot\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-01-30 18:11:55.105
+!MESSAGE Started RMI Server, listening on port 41337
+
+!ENTRY org.eclipse.core.jobs 2 2 2026-01-30 18:13:01.477
+!MESSAGE Job found still running after platform shutdown.  Jobs should be canceled by the plugin that scheduled them during shutdown: org.eclipse.ui.internal.Workbench$39 RUNNING
+	 at java.base/java.lang.ClassLoader.defineClass1(Native Method)
+	 at java.base/java.lang.ClassLoader.defineClass(ClassLoader.java:1027)
+	 at org.eclipse.osgi.internal.loader.ModuleClassLoader.defineClass(ModuleClassLoader.java:293)
+	 at org.eclipse.osgi.internal.loader.classpath.ClasspathManager.defineClass(ClasspathManager.java:774)
+	 at org.eclipse.osgi.internal.loader.classpath.ClasspathManager.findClassImpl(ClasspathManager.java:691)
+	 at org.eclipse.osgi.internal.loader.classpath.ClasspathManager.findLocalClassImpl(ClasspathManager.java:657)
+	 at org.eclipse.osgi.internal.loader.classpath.ClasspathManager.findLocalClassImpl(ClasspathManager.java:637)
+	 at org.eclipse.osgi.internal.loader.classpath.ClasspathManager.findLocalClass(ClasspathManager.java:616)
+	 at org.eclipse.osgi.internal.loader.ModuleClassLoader.findLocalClass(ModuleClassLoader.java:348)
+	 at org.eclipse.osgi.internal.loader.BundleLoader.findLocalClass(BundleLoader.java:414)
+	 at org.eclipse.osgi.internal.loader.BundleLoader.findClass0(BundleLoader.java:520)
+	 at org.eclipse.osgi.internal.loader.BundleLoader.findClass(BundleLoader.java:434)
+	 at org.eclipse.osgi.internal.loader.ModuleClassLoader.loadClass(ModuleClassLoader.java:174)
+	 at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526)
+	 at org.apache.http.message.AbstractHttpMessage.getParams(AbstractHttpMessage.java:165)
+	 at org.apache.http.client.methods.HttpRequestBase.getProtocolVersion(HttpRequestBase.java:63)
+	 at org.apache.http.client.methods.HttpRequestBase.getRequestLine(HttpRequestBase.java:80)
+	 at org.apache.http.client.methods.HttpRequestWrapper.<init>(HttpRequestWrapper.java:65)
+	 at org.apache.http.client.methods.HttpRequestWrapper.wrap(HttpRequestWrapper.java:195)
+	 at org.apache.http.impl.client.InternalHttpClient.doExecute(InternalHttpClient.java:163)
+	 at org.apache.http.impl.client.CloseableHttpClient.execute(CloseableHttpClient.java:83)
+	 at org.apache.http.impl.client.CloseableHttpClient.execute(CloseableHttpClient.java:108)
+	 at com.st.microxplorer.plugins.updater.engine.CheckConnectionManager.openHttpConnexion(CheckConnectionManager.java:195)
+	 at com.st.microxplorer.plugins.updater.engine.CheckConnectionManager.getHttpFileSize(CheckConnectionManager.java:118)
+	 at com.st.microxplorer.plugins.updater.engine.LoadServerUpdatesThread.performUpdaterHttpAccessCheck(LoadServerUpdatesThread.java:592)
+	 at com.st.microxplorer.plugins.updater.engine.LoadServerUpdatesThread.performConnectionCheckNoThread(LoadServerUpdatesThread.java:263)
+	 at com.st.microxplorer.plugins.updater.engine.MainUpdater.performConnectionCheck(MainUpdater.java:2853)
+	 at com.st.microxplorer.plugins.updater.engine.MainUpdater.<init>(MainUpdater.java:285)
+	 at com.st.microxplorer.plugins.updater.Updater.initPhase2(Updater.java:1162)
+	 at com.st.microxplorer.plugins.updater.Updater.setUserPreferencesHandler(Updater.java:1216)
+	 at com.st.stm32cube.common.mx.core.CubeMxInstance.<init>(CubeMxInstance.java:141)
+	 at com.st.stm32cube.common.mx.core.CubeMxInstance.getInstance(CubeMxInstance.java:91)
+	 at com.st.stm32cube.common.mx.userauth.UserAuthAdapter.<init>(UserAuthAdapter.java:25)
+	 at com.st.stm32cube.common.mx.userauth.UserAuthProvider.getUserAuthAdapter(UserAuthProvider.java:16)
+	 at com.st.stm32cube.common.ecosystemintegration.ui.core.MCUEcoSystemIntegrationUiHelper.getUserAuth(MCUEcoSystemIntegrationUiHelper.java:100)
+	 at com.st.stm32cube.ide.mcu.userauth.UserAuthStartup.earlyStartup(UserAuthStartup.java:32)
+	 at org.eclipse.ui.internal.EarlyStartupRunnable.runEarlyStartup(EarlyStartupRunnable.java:79)
+	 at org.eclipse.ui.internal.EarlyStartupRunnable.run(EarlyStartupRunnable.java:55)
+	 at org.eclipse.core.runtime.SafeRunner.run(SafeRunner.java:47)
+	 at org.eclipse.ui.internal.Workbench$39.run(Workbench.java:2733)
+	 at org.eclipse.core.internal.jobs.Worker.run(Worker.java:63)

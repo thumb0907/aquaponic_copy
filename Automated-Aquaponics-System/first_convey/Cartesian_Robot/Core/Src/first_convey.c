@@ -1,3 +1,4 @@
+// first_convey.c
 #include "stm32f4xx_hal.h"
 #include "first_convey.h"
 #include "board_pin.h"
@@ -33,7 +34,7 @@ static void StepPWM_SetHz(uint32_t hz)      	// PWM 주파수 설정
   __HAL_TIM_SET_COUNTER(&htim3, 0);
 }
 
-//////////////////////////////////////////////// 컨베이어
+//////////////////////////////////////////////// 컨베이어동작
 static void Motor_SetDir(bool dir) // dir
 {
   HAL_GPIO_WritePin(CON_DIR_PORT, CON_DIR_PIN, dir ? GPIO_PIN_SET : GPIO_PIN_RESET);
@@ -58,7 +59,7 @@ static void Conveyor_Run(void) // 컨베이어 구동
   {
     Motor_SetDir(true);
     Motor_Enable(true);
-    Motor_Start(2000);
+    Motor_Start(3000);
     motor_running = true;
   }
 
@@ -70,23 +71,15 @@ static void Conveyor_Run(void) // 컨베이어 구동
     state = CONVEYOR_STOP;
   }
 }
-
-static void Conveyor_Stop(void) // 컨베이어 정지 -> 트레이 절대거리값 측정 후 출력
+void FirstConvey_Reset(void)
 {
-  uint16_t raw = Sensor_DMS80_ReadRawAvg(16);
-  uint32_t mv = (3300UL * raw) / 4095UL;
-
-  float v  = (3.3f * raw) / 4095.0f;
-  float cm = Sensor_DMS80_VoltageToCm(v);
-
-  char buf[80];
-  int cm10 = (int)(cm * 10.0f);
-  int len = snprintf(buf, sizeof(buf),
-                     "raw=%u, %lumV, cm=%d.%d\r\n",
-                     raw, mv, cm10/10, cm10%10);
-
-  HAL_UART_Transmit(&huart2, (uint8_t*)buf, len, 100);
-  HAL_Delay(500);
+    state = CONVEYOR_RUN;
+    motor_running = false;
+    Motor_Stop();
+    Motor_Enable(false);
+}
+static void Conveyor_Stop(void) // 컨베이어 정지
+{
 }
 
 void FirstConvey_Task(void) // 컨베이어 구동/정지 함수 (main에서 호출)
@@ -95,4 +88,7 @@ void FirstConvey_Task(void) // 컨베이어 구동/정지 함수 (main에서 호
   else                        Conveyor_Stop();
 }
 
-//////////////////////////////////////////////////////// 직교로봇
+bool FirstConvey_IsStopped(void)
+{
+  return (state == CONVEYOR_STOP);
+}

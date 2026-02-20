@@ -1,5 +1,5 @@
-../Core/Src/sensor.c:9:6:Sensor_IR_Detected	8	static
-../Core/Src/sensor.c:28:17:DMS80_ReadRaw	16	static
-../Core/Src/sensor.c:37:10:Sensor_DMS80_ReadRawAvg	24	static
-../Core/Src/sensor.c:45:7:Sensor_DMS80_VoltageToCm	48	static
-../Core/Src/sensor.c:66:7:Sensor_DMS80_ReadCmAvg	24	static
+../Core/Src/sensor.c:11:7:Sensor_IR_Detected	8	static
+../Core/Src/sensor.c:17:11:Sensor_Distance_ReadRawOnce	16	static
+../Core/Src/sensor.c:28:11:Sensor_Distance_ReadRawAvg	24	static
+../Core/Src/sensor.c:41:8:Sensor_Distance_RawToVoltage	16	static
+../Core/Src/sensor.c:59:8:Sensor_Distance_VoltageToCm	40	static
