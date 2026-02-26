@@ -1,0 +1,5 @@
+../Core/Src/comm.c:10:6:Comm_Init	1
+../Core/Src/comm.c:15:6:Comm_RxCallback	2
+../Core/Src/comm.c:25:6:Comm_IsStartFlagSet	1
+../Core/Src/comm.c:30:6:Comm_ClearStartFlag	1
+../Core/Src/comm.c:35:6:Comm_SendDone	1

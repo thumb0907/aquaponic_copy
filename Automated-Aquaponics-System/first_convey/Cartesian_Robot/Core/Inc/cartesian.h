@@ -11,7 +11,7 @@ void Cartesian_SetXStepsPerMM(float steps_per_mm);
 void Cartesian_SetXRefCm(float ref_cm);
 
 void Cartesian_OnTimPeriodElapsed(TIM_HandleTypeDef *htim);
-void Cartesian_OnTimOcCallback(TIM_HandleTypeDef *htim);
+//void Cartesian_OnTimOcCallback(TIM_HandleTypeDef *htim);
 bool Cartesian_IsBusy(void);
 
 void Cartesian_HomingTask(void);
@@ -20,4 +20,6 @@ bool Cartesian_IsHomingDone(void);
 void Cartesian_limit(uint16_t GPIO_Pin);
 
 void Cartesian_ResetSequence(void);
+bool Cartesian_IsCycleDone(void);
+
 #endif

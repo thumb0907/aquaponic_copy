@@ -26,6 +26,7 @@
 #include "sensor.h"
 #include "board_pin.h"
 #include <string.h>
+#include "comm.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -107,7 +108,9 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
-  //	HAL_TIM_Base_Start(&htim3);
+  Cartesian_StartHoming(); // 초기 1회만, 홈동작
+  Comm_Init();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -115,21 +118,33 @@ int main(void)
   while (1)
   {
 	  static uint8_t afterHomeInit = 0;
-	  if (!Cartesian_IsHomingDone()) {
-	          Cartesian_HomingTask();
-	          afterHomeInit = 0;  // 홈 다시 도는 동안은 초기화 플래그 리셋
-	      }
-	      else {
-	          if (!afterHomeInit) {
-	              FirstConvey_Reset();       // 컨베이어도 초기화(추가하신 함수)
-	              Cartesian_ResetSequence(); // cartesian 시퀀스 초기화
-	              Cartesian_StartHoming();
-	              afterHomeInit = 1;
-	          }
 
-	          Cartesian_Task();
+	  if (!Cartesian_IsHomingDone())
+	  {
+	      Cartesian_HomingTask();
+	      afterHomeInit = 0;
+	  }
+	  else
+	  {
+		  if (!afterHomeInit)
+		  {
+			  FirstConvey_Reset();
+	          Cartesian_ResetSequence();
+	          afterHomeInit = 1;
 	      }
-	      HAL_Delay(10);
+	      if (Comm_IsStartFlagSet())
+	      {
+	          Cartesian_Task();
+	          if (Cartesian_IsCycleDone())
+	          {
+	              Comm_ClearStartFlag();
+	              Comm_SendDone();
+	              Cartesian_ResetSequence();
+	              FirstConvey_Reset();
+	          }
+	      }
+	  }
+	  HAL_Delay(10);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -492,14 +507,22 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    Cartesian_OnTimOcCallback(htim);
+    Cartesian_OnTimPeriodElapsed(htim);
+    FirstConvey_OnTimPeriodElapsed(htim);  // ← 추가
 }
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   Cartesian_limit(GPIO_Pin);
 }
+// HAL_UART_RxCpltCallback
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart->Instance == USART2)
+        Comm_RxCallback();
+}
+
 /* USER CODE END 4 */
 
 /**

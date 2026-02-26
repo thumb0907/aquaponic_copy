@@ -1,4 +1,5 @@
 "./Core/Src/cartesian.o"
+"./Core/Src/comm.o"
 "./Core/Src/first_convey.o"
 "./Core/Src/main.o"
 "./Core/Src/sensor.o"
