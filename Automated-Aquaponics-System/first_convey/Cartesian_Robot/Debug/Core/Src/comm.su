@@ -1,5 +1,12 @@
-../Core/Src/comm.c:10:6:Comm_Init	8	static
-../Core/Src/comm.c:15:6:Comm_RxCallback	8	static
-../Core/Src/comm.c:25:6:Comm_IsStartFlagSet	4	static
-../Core/Src/comm.c:30:6:Comm_ClearStartFlag	4	static
-../Core/Src/comm.c:35:6:Comm_SendDone	16	static
+../Core/Src/comm.c:25:13:Parse_Rasp	24	static
+../Core/Src/comm.c:38:13:Parse_Arduino	24	static
+../Core/Src/comm.c:51:6:Comm_Init	8	static
+../Core/Src/comm.c:58:6:Comm_Rasp_RxCallback	8	static
+../Core/Src/comm.c:72:6:Comm_Arduino_RxCallback	8	static
+../Core/Src/comm.c:87:6:Comm_IsStartFlagSet	4	static
+../Core/Src/comm.c:88:6:Comm_ClearStartFlag	4	static
+../Core/Src/comm.c:90:6:Comm_IsResetFlagSet	4	static
+../Core/Src/comm.c:91:6:Comm_ClearResetFlag	4	static
+../Core/Src/comm.c:94:6:Comm_SendDone	16	static
+../Core/Src/comm.c:100:6:Comm_SendScara	16	static
+../Core/Src/comm.c:107:6:Comm_SetStartFlag	4	static

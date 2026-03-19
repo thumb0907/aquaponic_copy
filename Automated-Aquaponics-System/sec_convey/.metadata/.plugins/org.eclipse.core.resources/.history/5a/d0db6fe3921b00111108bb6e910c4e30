@@ -1,0 +1,36 @@
+// comm.h
+#ifndef COMM_H
+#define COMM_H
+
+#include "stm32f4xx_hal.h"
+#include "pin.h"
+#include <stdbool.h>
+
+/* ───────────────────────────────────────────
+ * 수신 커맨드 (1바이트)
+ *   'S' (0x53) : 컨베이어 시작
+ *   'H' (0x48) : 수확 완료 → Z올리고 재대기
+ *   'E' (0x45) : 긴급 정지
+ *
+ * 송신 문자열
+ *   "READY\r\n" : Z 고정 완료 (수확 시작 알림)
+ *   "DONE\r\n"  : Z 상승 완료 (사이클 종료)
+ *   "ERR\r\n"   : 오류
+ * ─────────────────────────────────────────── */
+
+void Comm_Init(void);
+void Comm_RxCallback(void);   // HAL_UART_RxCpltCallback 안에서 호출
+
+bool Comm_IsStartFlagSet(void);
+bool Comm_IsHarvestDoneFlagSet(void);
+bool Comm_IsEstopFlagSet(void);
+
+void Comm_ClearStartFlag(void);
+void Comm_ClearHarvestDoneFlag(void);
+void Comm_ClearEstopFlag(void);
+
+void Comm_SendReady(void);
+void Comm_SendDone(void);
+void Comm_SendErr(void);
+
+#endif

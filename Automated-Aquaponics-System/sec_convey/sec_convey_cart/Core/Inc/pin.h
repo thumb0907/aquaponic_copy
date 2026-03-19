@@ -16,9 +16,12 @@
 #define CART_EN_PIN	  	GPIO_PIN_11
 #define CART_PORT	  	GPIOA
 
-
 // 적외선센서
 #define IR_PIN		GPIO_PIN_3
 #define IR_PORT		GPIOC
+
+// 직교로봇 리밋스위치
+#define Z_LIM_PIN		GPIO_PIN_2
+#define Z_LIM_PORT	GPIOC
 
 #endif

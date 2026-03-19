@@ -1,0 +1,6 @@
+../Core/Src/sec_convey.c:5:17:TIM_APB1_GetTimerClockHz	16	static
+../Core/Src/sec_convey.c:12:13:TIM3_SetStepHz	32	static
+../Core/Src/sec_convey.c:32:6:Conveyor_Enable	16	static
+../Core/Src/sec_convey.c:39:6:Conveyor_SetDir	16	static
+../Core/Src/sec_convey.c:45:6:Conveyor_StartHz	16	static
+../Core/Src/sec_convey.c:51:6:Conveyor_Stop	8	static

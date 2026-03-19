@@ -1,1 +1,2 @@
-../Core/Src/sensor.c:4:9:IR_Detected	1
+../Core/Src/sensor.c:5:9:IR_Detected	1
+../Core/Src/sensor.c:11:9:Z_LimitHit	1

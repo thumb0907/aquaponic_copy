@@ -1,0 +1,68 @@
+2026-03-09 02:49:34,012 [INFO] WebApp:194 - Connection lost
+2026-03-09 03:24:33,327 [INFO] WebApp:191 - Connection restablished
+2026-03-09 06:42:05,049 [INFO] WebApp:194 - Connection lost
+2026-03-09 06:42:05,283 [INFO] WebApp:191 - Connection restablished
+2026-03-09 06:42:06,758 [INFO] WebApp:194 - Connection lost
+2026-03-09 06:42:06,986 [INFO] WebApp:191 - Connection restablished
+2026-03-09 16:03:38,702 [INFO] WebApp:194 - Connection lost
+2026-03-09 16:03:39,017 [INFO] WebApp:191 - Connection restablished
+2026-03-09 17:20:46,630 [INFO] WebApp:194 - Connection lost
+2026-03-09 17:20:46,822 [INFO] WebApp:191 - Connection restablished
+2026-03-09 17:20:50,657 [INFO] WebApp:194 - Connection lost
+2026-03-09 17:20:50,837 [INFO] WebApp:191 - Connection restablished
+2026-03-09 17:21:10,648 [INFO] WebApp:194 - Connection lost
+2026-03-09 17:21:13,265 [INFO] WebApp:191 - Connection restablished
+2026-03-09 17:21:16,660 [INFO] WebApp:194 - Connection lost
+2026-03-09 17:21:16,820 [INFO] WebApp:191 - Connection restablished
+2026-03-09 17:22:46,297 [INFO] NvicIntPanel:101 - NVIC parent = com.st.microxplorer.plugins.ip.nvic.MultiNvicIntPanel[,0,0,450x252,layout=javax.swing.BoxLayout,alignmentX=0.0,alignmentY=0.0,border=,flags=9,maximumSize=,minimumSize=,preferredSize=]
+2026-03-09 17:22:47,783 [INFO] NvicIntPanel:101 - NVIC parent = com.st.microxplorer.plugins.ip.nvic.MultiNvicIntPanel[,0,0,0x0,invalid,layout=javax.swing.BoxLayout,alignmentX=0.0,alignmentY=0.0,border=,flags=9,maximumSize=,minimumSize=,preferredSize=]
+2026-03-09 17:22:51,906 [INFO] NvicIntPanel:101 - NVIC parent = com.st.microxplorer.plugins.ip.nvic.MultiNvicIntPanel[,0,0,0x0,invalid,layout=javax.swing.BoxLayout,alignmentX=0.0,alignmentY=0.0,border=,flags=9,maximumSize=,minimumSize=,preferredSize=]
+2026-03-09 17:22:53,723 [INFO] NvicIntPanel:101 - NVIC parent = com.st.microxplorer.plugins.ip.nvic.MultiNvicIntPanel[,0,0,0x0,invalid,layout=javax.swing.BoxLayout,alignmentX=0.0,alignmentY=0.0,border=,flags=9,maximumSize=,minimumSize=,preferredSize=]
+2026-03-09 17:22:59,023 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 751502816 Bytes (1073741824)
+2026-03-09 17:23:03,484 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 905007624 Bytes (1073741824)
+2026-03-09 17:23:05,144 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: TIM1_8
+2026-03-09 17:23:05,144 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: TIM1_8
+2026-03-09 17:23:05,145 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: SYS
+2026-03-09 17:23:05,145 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: RCC
+2026-03-09 17:23:05,146 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: NVIC
+2026-03-09 17:23:05,147 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: USART
+2026-03-09 17:23:05,147 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: USART
+2026-03-09 17:23:05,147 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: USART
+2026-03-09 17:23:05,150 [INFO] BlockDiagram:2775 - set Specific Code input for plugin: GPIO
+2026-03-09 17:23:05,154 [INFO] CodeGenerator:882 - code generatio: config db path: C:\ST\STM32CubeIDE_1.18.0\STM32CubeIDE\plugins\com.st.stm32cube.common.mx_6.14.0.202502271554\\db\
+2026-03-09 17:23:05,708 [INFO] CodeEngine:263 - oldGeneratedFile, C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\MXTmpFiles\license.tmp_save
+2026-03-09 17:23:06,554 [INFO] CodeEngine:287 - Generated code: C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\MXTmpFiles\license.tmp
+2026-03-09 17:23:06,889 [INFO] CodeEngine:263 - oldGeneratedFile, C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\MXTmpFiles\gpio.tmp_save
+2026-03-09 17:23:07,307 [INFO] CodeEngine:287 - Generated code: C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\MXTmpFiles\gpio.tmp
+2026-03-09 17:23:08,204 [INFO] CodeEngine:263 - oldGeneratedFile, C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Src\stm32f4xx_it.c_save
+2026-03-09 17:23:08,815 [INFO] CodeEngine:287 - Generated code: C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Src\stm32f4xx_it.c
+2026-03-09 17:23:08,884 [INFO] CodeEngine:263 - oldGeneratedFile, C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Inc\stm32f4xx_it.h_save
+2026-03-09 17:23:09,133 [INFO] CodeEngine:287 - Generated code: C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Inc\stm32f4xx_it.h
+2026-03-09 17:23:09,237 [INFO] CodeEngine:263 - oldGeneratedFile, C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Src\stm32f4xx_hal_msp.c_save
+2026-03-09 17:23:09,610 [INFO] CodeEngine:287 - Generated code: C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Src\stm32f4xx_hal_msp.c
+2026-03-09 17:23:09,651 [INFO] CodeEngine:263 - oldGeneratedFile, C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\MXTmpFiles\system.tmp_save
+2026-03-09 17:23:09,812 [INFO] CodeEngine:287 - Generated code: C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\MXTmpFiles\system.tmp
+2026-03-09 17:23:09,883 [INFO] CodeEngine:319 - oldGeneratedFile, C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Inc\stm32f4xx_hal_conf.h_save
+2026-03-09 17:23:10,096 [INFO] CodeEngine:343 - Generated code: C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Inc\stm32f4xx_hal_conf.h
+2026-03-09 17:23:10,160 [WARN] IPConfigManager:3174 - Warning: the RefConfig PLL2P_FOR_MCO is not available in your config.xml file
+2026-03-09 17:23:10,192 [INFO] ApiDbMcu:508 - Load IP Config File for TIM3
+2026-03-09 17:23:10,221 [INFO] ApiDbMcu:508 - Load IP Config File for TIM5
+2026-03-09 17:23:10,230 [INFO] ApiDbMcu:508 - Load IP Config File for USART1
+2026-03-09 17:23:10,242 [INFO] ApiDbMcu:508 - Load IP Config File for USART2
+2026-03-09 17:23:10,251 [INFO] ApiDbMcu:508 - Load IP Config File for USART6
+2026-03-09 17:23:10,262 [INFO] ApiDbMcu:508 - Load IP Config File for RCC
+2026-03-09 17:23:10,268 [WARN] IPConfigManager:3747 - IP not found : TIM
+2026-03-09 17:23:10,280 [WARN] CodeGenerator:4198 - IP not found : null
+2026-03-09 17:23:10,356 [INFO] CodeEngine:263 - oldGeneratedFile, C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Inc\main.h_save
+2026-03-09 17:23:10,677 [INFO] CodeEngine:287 - Generated code: C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Inc\main.h
+2026-03-09 17:23:10,752 [INFO] CodeEngine:263 - oldGeneratedFile, C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Src\main.c_save
+2026-03-09 17:23:11,420 [INFO] CodeEngine:287 - Generated code: C:\Users\lthst\Desktop\aquaponics\Automated-Aquaponics-System\sec_convey\sec_convey_cart\Core\Src\main.c
+2026-03-09 17:23:12,835 [INFO] ProjectBuilder:3324 - Time for Copy HAL[1] : 505mS.
+2026-03-09 17:23:12,872 [INFO] ProjectBuilder:4912 - Project Generator version: 4.6.0-B36
+2026-03-09 17:23:13,119 [INFO] ConfigFileManager:1590 - The Die is : DIE421
+2026-03-09 17:23:13,168 [INFO] ApiDbMcu:508 - Load IP Config File for FATFS
+2026-03-09 17:23:13,207 [INFO] ApiDbMcu:508 - Load IP Config File for FREERTOS
+2026-03-09 17:23:13,241 [INFO] ApiDbMcu:508 - Load IP Config File for LIBJPEG
+2026-03-09 17:23:13,295 [INFO] ApiDbMcu:508 - Load IP Config File for MBEDTLS
+2026-03-09 17:23:13,359 [INFO] ApiDbMcu:508 - Load IP Config File for USB_DEVICE
+2026-03-09 17:23:13,405 [INFO] ApiDbMcu:508 - Load IP Config File for USB_HOST

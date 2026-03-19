@@ -1,0 +1,142 @@
+// sequence.c
+// 동작관련
+// 트레이 물털고 컨베이어에 올려놓음 -> (uart수신받음) -> 두번째 컨베이어 구동 -> ir감지되면 정지 후 직교로봇 z축 내려서 트레이 고정
+// -> (uart송신함) -> 수확 다 되면 -> (uart수신받음) -> z축 올리고 컨베이어 다시 구동
+
+// 두번째 컨베이어 + Z축 전체 동작 흐름
+// ─────────────────────────────────────────────
+// 흐름:
+//   ST_WAIT_START   : 'S' 수신 대기
+//   ST_CONVEY_RUN   : 컨베이어 구동 → IR 감지 대기
+//   ST_CONVEY_STOP  : 컨베이어 정지 + 딜레이
+//   ST_Z_DOWN       : Z 하강 완료 대기
+//   ST_SEND_READY   : "READY\r\n" 송신 (수확 시작 알림)
+//   ST_WAIT_HARVEST : 'H' 수신 대기 (수확 진행 중)
+//   ST_Z_UP         : Z 상승 완료 대기
+//   ST_SEND_DONE    : "DONE\r\n" 송신 → 다음 사이클
+//   ST_ESTOP        : 긴급 정지 유지
+// ─────────────────────────────────────────────
+
+#include "sequence.h"
+#include "sec_convey.h"
+#include "stepper.h"
+#include "sensor.h"
+#include "comm.h"
+#include "stm32f4xx_hal.h"
+
+// 파라미터 (실측 후 수정)
+#define CONVEY_HZ       3000    // 컨베이어 속도 (step/s)
+#define STOP_SETTLE_MS   200    // IR 감지 후 정착 딜레이 (ms)
+#define Z_STEPS_DOWN    8000    // Z 하강 스텝
+#define Z_STEPS_UP     -8000    // Z 상승 스텝 (음수)
+#define Z_SPEED_HZ      4000    // Z 속도 (step/s)
+
+
+// 상태 정의
+typedef enum {
+    ST_WAIT_START,
+    ST_CONVEY_RUN,
+    ST_CONVEY_STOP,
+    ST_Z_DOWN,
+    ST_SEND_READY,
+    ST_WAIT_HARVEST,
+    ST_Z_UP,
+    ST_SEND_DONE,
+    ST_ESTOP,
+} SeqState;
+
+static SeqState g_state = ST_WAIT_START;
+
+
+// 초기화 (main.c USER CODE BEGIN 2에서 호출)
+void Sequence_Init(void)
+{
+    Comm_Init();
+    g_state = ST_WAIT_START;
+}
+
+// App_Run: while(1)에서 매 루프 호출
+void App_Run(void)
+{
+    // 긴급 정지 우선 처리
+    if (Comm_IsEstopFlagSet()) {
+        Comm_ClearEstopFlag();
+        Conveyor_Stop();
+        Conveyor_Enable(false);
+        Z_Stop();
+        g_state = ST_ESTOP;
+    }
+
+    switch (g_state)
+    {
+        // 'S' 수신 대기
+        case ST_WAIT_START:
+            if (Comm_IsStartFlagSet()) {
+                Comm_ClearStartFlag();
+                Conveyor_Enable(true);
+                Conveyor_SetDir(true);
+                Conveyor_StartHz(CONVEY_HZ);
+                g_state = ST_CONVEY_RUN;
+            }
+            break;
+
+        // IR 감지될 때까지 구동
+        case ST_CONVEY_RUN:
+            if (IR_Detected()) {
+                Conveyor_Stop();
+                Conveyor_Enable(false);
+                g_state = ST_CONVEY_STOP;
+            }
+            break;
+
+        // 정착 딜레이 후 Z 하강 시작
+        case ST_CONVEY_STOP:
+            HAL_Delay(STOP_SETTLE_MS);
+            Z_MoveSteps(Z_STEPS_DOWN, Z_SPEED_HZ);
+            g_state = ST_Z_DOWN;
+            break;
+
+        // Z 하강 완료 대기
+        case ST_Z_DOWN:
+            if (!Z_IsBusy()) {
+                g_state = ST_SEND_READY;
+            }
+            break;
+
+        // "READY\r\n" 송신
+        case ST_SEND_READY:
+            Comm_SendReady();
+            g_state = ST_WAIT_HARVEST;
+            break;
+
+        // 'H' 수신 대기 (수확 중)
+        case ST_WAIT_HARVEST:
+            if (Comm_IsHarvestDoneFlagSet()) {
+                Comm_ClearHarvestDoneFlag();
+                Z_MoveSteps(Z_STEPS_UP, Z_SPEED_HZ);
+                g_state = ST_Z_UP;
+            }
+            break;
+
+        // Z 상승 완료 대기
+        case ST_Z_UP:
+            if (!Z_IsBusy()) {
+                g_state = ST_SEND_DONE;
+            }
+            break;
+
+        // "DONE\r\n" 송신 → 다음 사이클
+        case ST_SEND_DONE:
+            Comm_SendDone();
+            g_state = ST_WAIT_START;
+            break;
+
+        // 긴급 정지 유지
+        case ST_ESTOP:
+            break;
+
+        default:
+            g_state = ST_WAIT_START;
+            break;
+    }
+}

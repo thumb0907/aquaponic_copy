@@ -21,5 +21,11 @@ void Cartesian_limit(uint16_t GPIO_Pin);
 
 void Cartesian_ResetSequence(void);
 bool Cartesian_IsCycleDone(void);
+bool Cartesian_IsHomingStarted(void);
+// 테스트할때 사용
+void Cartesian_TestMoveX(int32_t steps, uint32_t hz);
+void Cartesian_TestMoveZ(int32_t steps, uint32_t hz);
+void Cartesian_TestStopX(void);
+void Cartesian_TestStopZ(void);
 
 #endif

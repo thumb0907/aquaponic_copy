@@ -7,7 +7,6 @@
 	#include <stdio.h>
 
 	extern TIM_HandleTypeDef  htim3; // htim3, huart2는 main.c에 실제로 생성(정의) 되어 있고, 여기서는 “그걸 가져다 쓰겠다”는 선언만 한 것(extern).
-	extern UART_HandleTypeDef huart2; // 라파랑 통신
 
 	// 파종관련파라미터
 	static volatile int32_t convey_remain = 0;
@@ -15,7 +14,7 @@
 	// 컨베이어 steps/mm (실측 후 조정)
 	// 1600pulse / 20mm(한바퀴 거리) = 80
 	static float g_con_steps_per_mm = 80.0f;
-	static uint32_t g_con_run_hz = 5000;
+	static uint32_t g_con_run_hz = 4500;
 
 	typedef enum { CONVEYOR_RUN = 0, CONVEYOR_STOP } ConveyorState;
 	static ConveyorState state = CONVEYOR_RUN; 	// 현재 상태: 컨베이어 구동중

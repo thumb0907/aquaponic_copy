@@ -1,0 +1,23 @@
+// pin.h
+#ifndef PIN_H
+#define PIN_H
+
+#include "stm32f4xx_hal.h"
+
+// 컨베이어 pul- pa6 (tim3_ch1)
+// 두번째 컨베이어
+#define CON_DIR_PIN	  GPIO_PIN_9
+#define CON_EN_PIN	  GPIO_PIN_8
+#define CON_PORT	  GPIOC
+
+// 직교로봇
+// 직교로봇 pul- pa0 (tim5_ch1)
+#define CART_DIR_PIN	GPIO_PIN_12
+#define CART_EN_PIN	  	GPIO_PIN_11
+#define CART_PORT	  	GPIOA
+
+// 적외선센서
+#define IR_PIN		GPIO_PIN_3
+#define IR_PORT		GPIOC
+
+#endif

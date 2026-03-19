@@ -31,7 +31,7 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h \
  ../Core/Inc/first_convey.h ../Core/Inc/cartesian.h ../Core/Inc/sensor.h \
- ../Core/Inc/board_pin.h ../Core/Inc/comm.h
+ ../Core/Inc/board_pin.h ../Core/Inc/comm.h ../Core/Inc/test1.h
 ../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
 ../Core/Inc/stm32f4xx_hal_conf.h:
@@ -69,3 +69,4 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../Core/Inc/sensor.h:
 ../Core/Inc/board_pin.h:
 ../Core/Inc/comm.h:
+../Core/Inc/test1.h:

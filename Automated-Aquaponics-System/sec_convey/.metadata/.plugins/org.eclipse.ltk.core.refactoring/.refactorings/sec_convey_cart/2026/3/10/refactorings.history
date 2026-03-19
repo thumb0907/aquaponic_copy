@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">&#x0A;<refactoring comment="Rename resource &apos;sec_convey_cart/Core/Inc/first_convey.h&apos; to &apos;sec_convey.h&apos;" description="Rename resource &apos;first_convey.h&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="Core/Inc/first_convey.h" name="sec_convey.h" stamp="1772442814561" updateReferences="true"/>&#x0A;<refactoring comment="Rename resource &apos;sec_convey_cart/Core/Src/first_convey.c&apos; to &apos;sec_convey.c&apos;" description="Rename resource &apos;first_convey.c&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="Core/Src/first_convey.c" name="sec_convey.c" stamp="1772442822469" updateReferences="true"/>
+</session>

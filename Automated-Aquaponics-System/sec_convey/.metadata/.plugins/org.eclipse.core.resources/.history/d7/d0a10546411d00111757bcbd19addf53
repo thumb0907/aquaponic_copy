@@ -1,0 +1,161 @@
+// comm.c 통신
+#include "comm.h"
+#include "main.h"
+#include <string.h>
+
+extern UART_HandleTypeDef huart1;  // 스카라
+extern UART_HandleTypeDef huart2;  // 라즈베리파이
+extern UART_HandleTypeDef huart6;  // 매니퓰레이터
+
+#define RX_BUF_SIZE 8
+
+// ── 스카라 ────────────────────────────────────
+static uint8_t scara_rx_byte = 0;
+static uint8_t scara_buf[RX_BUF_SIZE] = {0};
+static uint8_t scara_buf_idx = 0;
+static volatile bool flag_start      = false;
+static volatile bool flag_scara_done = false;
+
+// ── 라즈베리파이 ──────────────────────────────
+static uint8_t rasp_rx_byte = 0;
+static uint8_t rasp_buf[RX_BUF_SIZE] = {0};
+static uint8_t rasp_buf_idx = 0;
+
+// ── 매니퓰레이터 ──────────────────────────────
+static uint8_t manip_rx_byte = 0;
+static uint8_t manip_buf[RX_BUF_SIZE] = {0};
+static uint8_t manip_buf_idx = 0;
+static volatile bool flag_manip_done = false;
+
+// ── 긴급정지 공통 ─────────────────────────────
+static volatile bool flag_estop = false;
+
+// ── 파싱 ─────────────────────────────────────
+static void Parse_Scara(uint8_t *buf)
+{
+    if (buf[0] < 'A' || buf[0] > 'Z') return;
+    if (buf[1] < '0' || buf[1] > '9') return;
+    uint8_t cmd = buf[0];
+    uint8_t val = buf[1] - '0';
+
+    if      (cmd == 'S' && val == 1) flag_start      = true;
+    else if (cmd == 'R' && val == 1) flag_scara_done = true;
+    else if (cmd == 'E' && val == 1) flag_estop      = true;
+}
+
+static void Parse_Rasp(uint8_t *buf)
+{
+    if (buf[0] < 'A' || buf[0] > 'Z') return;
+    if (buf[1] < '0' || buf[1] > '9') return;
+    uint8_t cmd = buf[0];
+    uint8_t val = buf[1] - '0';
+
+    if (cmd == 'E' && val == 1) flag_estop = true;
+    else if (cmd == ' S ' && val == '1') flag_start = true;
+    // 확장: S1 = 라파에서 직접 시작 트리거 등 추가 가능
+}
+
+static void Parse_Manip(uint8_t *buf)
+{
+    if (buf[0] < 'A' || buf[0] > 'Z') return;
+    if (buf[1] < '0' || buf[1] > '9') return;
+    uint8_t cmd = buf[0];
+    uint8_t val = buf[1] - '0';
+
+    if      (cmd == 'R' && val == 1) flag_manip_done = true;
+    else if (cmd == 'E' && val == 1) flag_estop      = true;
+}
+
+// ── 초기화 ───────────────────────────────────
+void Comm_Init(void)
+{
+    HAL_UART_Receive_IT(&huart1, &scara_rx_byte, 1);
+    HAL_UART_Receive_IT(&huart2, &rasp_rx_byte,  1);
+    HAL_UART_Receive_IT(&huart6, &manip_rx_byte, 1);
+}
+
+// ── 콜백 ─────────────────────────────────────
+void Comm_Scara_RxCallback(void)
+{
+    if (scara_rx_byte == '\n') {
+        scara_buf[scara_buf_idx] = '\0';
+        Parse_Scara(scara_buf);
+        scara_buf_idx = 0;
+    } else if (scara_buf_idx < RX_BUF_SIZE - 1) {
+        scara_buf[scara_buf_idx++] = scara_rx_byte;
+    } else {
+        scara_buf_idx = 0;  // 버퍼 오버플로 리셋
+    }
+    HAL_UART_Receive_IT(&huart1, &scara_rx_byte, 1);
+}
+
+void Comm_Rasp_RxCallback(void)
+{
+    if (rasp_rx_byte == '\n') {
+        rasp_buf[rasp_buf_idx] = '\0';
+        Parse_Rasp(rasp_buf);
+        rasp_buf_idx = 0;
+    } else if (rasp_buf_idx < RX_BUF_SIZE - 1) {
+        rasp_buf[rasp_buf_idx++] = rasp_rx_byte;
+    } else {
+        rasp_buf_idx = 0;
+    }
+    HAL_UART_Receive_IT(&huart2, &rasp_rx_byte, 1);
+}
+
+void Comm_Manip_RxCallback(void)
+{
+    if (manip_rx_byte == '\n') {
+        manip_buf[manip_buf_idx] = '\0';
+        Parse_Manip(manip_buf);
+        manip_buf_idx = 0;
+    } else if (manip_buf_idx < RX_BUF_SIZE - 1) {
+        manip_buf[manip_buf_idx++] = manip_rx_byte;
+    } else {
+        manip_buf_idx = 0;
+    }
+    HAL_UART_Receive_IT(&huart6, &manip_rx_byte, 1);
+}
+
+// ── 플래그 ────────────────────────────────────
+bool Comm_IsStartFlagSet(void)      { return flag_start; }
+void Comm_ClearStartFlag(void)      { flag_start      = false; }
+
+bool Comm_IsScaraDoneFlagSet(void)  { return flag_scara_done; }
+void Comm_ClearScaraDoneFlag(void)  { flag_scara_done = false; }
+
+bool Comm_IsManipDoneFlagSet(void)  { return flag_manip_done; }
+void Comm_ClearManipDoneFlag(void)  { flag_manip_done = false; }
+
+bool Comm_IsEstopFlagSet(void)      { return flag_estop; }
+void Comm_ClearEstopFlag(void)      { flag_estop      = false; }
+
+// ── 송신 ─────────────────────────────────────
+void Comm_SendHarvest(void)
+{
+    uint8_t msg[] = "H1\n";
+    HAL_UART_Transmit(&huart1, msg, sizeof(msg) - 1, 100);  // 스카라
+    HAL_UART_Transmit(&huart6, msg, sizeof(msg) - 1, 100);  // 매니퓰레이터
+    Comm_LogToRasp("H1");                                    // 라파 로그
+}
+
+void Comm_SendDone(void)
+{
+    uint8_t msg[] = "D1\n";
+    HAL_UART_Transmit(&huart2, msg, sizeof(msg) - 1, 100);
+}
+
+void Comm_SendErr(void)
+{
+    uint8_t msg[] = "E1\n";
+    HAL_UART_Transmit(&huart1, msg, sizeof(msg) - 1, 100);
+    HAL_UART_Transmit(&huart2, msg, sizeof(msg) - 1, 100);
+    HAL_UART_Transmit(&huart6, msg, sizeof(msg) - 1, 100);
+}
+
+// 라파 모니터링 로그 (상태 변화마다 호출)
+void Comm_LogToRasp(const char *msg)
+{
+    HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), 100);
+    HAL_UART_Transmit(&huart2, (uint8_t *)"\n", 1, 100);
+}

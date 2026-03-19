@@ -27,6 +27,7 @@
 #include "board_pin.h"
 #include <string.h>
 #include "comm.h"
+#include "test1.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,6 +51,7 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim5;
 
+UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -64,6 +66,7 @@ static void MX_ADC1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM5_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -107,43 +110,77 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM2_Init();
   MX_TIM5_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  Cartesian_StartHoming(); // 초기 1회만, 홈동작
+  //Cartesian_StartHoming(); // 초기 1회만, 홈동작
   Comm_Init();
-
+  Test_Init();   // TEST_MODE, FULL_SEQ_TEST 모두 허큘러스 수신 필요
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  static uint8_t afterHomeInit = 0;
+	  Test_Run();   // 항상 실행: 허큘러스 커맨드 처리 + 개별동작(TEST_MODE=1일때)
 
-	  if (!Cartesian_IsHomingDone())
-	  {
-	      Cartesian_HomingTask();
-	      afterHomeInit = 0;
-	  }
-	  else
-	  {
-		  if (!afterHomeInit)
-		  {
-			  FirstConvey_Reset();
-	          Cartesian_ResetSequence();
-	          afterHomeInit = 1;
-	      }
-	      if (Comm_IsStartFlagSet())
-	      {
-	          Cartesian_Task();
-	          if (Cartesian_IsCycleDone())
-	          {
-	              Comm_ClearStartFlag();
-	              Comm_SendDone();
-	              Cartesian_ResetSequence();
-	              FirstConvey_Reset();
-	          }
-	      }
-	  }
+#if !TEST_MODE
+    // 전체 시퀀스 (FULL_SEQ_TEST=1 or 0 모두 동일 코드)
+    static uint8_t state_sys = 0;
+
+    if (state_sys == 0) {
+        if (Comm_IsStartFlagSet()) {
+            Comm_ClearStartFlag();
+            Cartesian_ResetSequence();
+            FirstConvey_Reset();
+            Cartesian_StartHoming();
+            uint8_t msg[] = "HOMING...\r\n";
+            HAL_UART_Transmit(&huart2, msg, sizeof(msg)-1, 100);
+            state_sys = 1;
+        }
+    }
+    else if (state_sys == 1) {
+        if (Comm_IsStartFlagSet()) Comm_ClearStartFlag();
+        if (!Cartesian_IsHomingDone()) {
+            Cartesian_HomingTask();
+        } else {
+            Cartesian_ResetSequence();
+            FirstConvey_Reset();
+            uint8_t msg[] = "HOMING DONE. RUNNING...\r\n";
+            HAL_UART_Transmit(&huart2, msg, sizeof(msg)-1, 100);
+            state_sys = 2;
+        }
+    }
+    else if (state_sys == 2) {
+        if (Comm_IsStartFlagSet()) Comm_ClearStartFlag();
+        Cartesian_Task();
+        if (Cartesian_IsCycleDone()) {
+#if FULL_SEQ_TEST
+            // 아두이노 없음 → 허큘러스에 완료 출력 후 바로 초기화
+            uint8_t msg[] = "CYCLE DONE. Send S1 to restart.\r\n";
+            HAL_UART_Transmit(&huart2, msg, sizeof(msg)-1, 100);
+            Cartesian_ResetSequence();
+            FirstConvey_Reset();
+            state_sys = 0;
+#else
+            // 정상 통신: 라즈베리파이 + 아두이노에 완료 전송
+            Comm_SendDone();
+            Comm_SendScara();
+            state_sys = 3;
+#endif
+        }
+    }
+    else if (state_sys == 3) {
+        // 아두이노 R1 대기 (FULL_SEQ_TEST=0 일때만 도달)
+        if (Comm_IsResetFlagSet()) {
+            Comm_ClearResetFlag();
+            Cartesian_ResetSequence();
+            FirstConvey_Reset();
+            Comm_ClearStartFlag();
+            state_sys = 0;
+        }
+    }
+#endif
+
 	  HAL_Delay(10);
     /* USER CODE END WHILE */
 
@@ -413,6 +450,39 @@ static void MX_TIM5_Init(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -512,17 +582,41 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     Cartesian_OnTimPeriodElapsed(htim);
     FirstConvey_OnTimPeriodElapsed(htim);  // ← 추가
 }
+/*
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   Cartesian_limit(GPIO_Pin);
+}*/
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    static uint32_t last_x = 0, last_z = 0;
+    uint32_t now = HAL_GetTick();
+
+    if (GPIO_Pin == X_LIM_PIN) {
+        if (now - last_x < 50) return;
+        last_x = now;
+        Cartesian_limit(GPIO_Pin);
+        return;
+    }
+    if (GPIO_Pin == Z_LIM_PIN) {
+        if (now - last_z < 50) return;
+        last_z = now;
+        Cartesian_limit(GPIO_Pin);
+        return;
+    }
 }
 // HAL_UART_RxCpltCallback
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-    if (huart->Instance == USART2)
-        Comm_RxCallback();
+#if TEST_MODE
+    // TEST_MODE=1: 허큘러스(디버그용 PC)가 USART2에 연결
+    if (huart->Instance == USART2) Test_RxCallback();
+#else
+    // TEST_MODE=0: 라즈베리파이가 USART2에 연결
+    if (huart->Instance == USART2) Comm_Rasp_RxCallback();
+    if (huart->Instance == USART1) Comm_Arduino_RxCallback();
+#endif
 }
-
 /* USER CODE END 4 */
 
 /**

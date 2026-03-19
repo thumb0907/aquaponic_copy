@@ -1,0 +1,54 @@
+// comm.c 통신
+#include "comm.h"
+#include "main.h"
+
+extern UART_HandleTypeDef huart2;
+
+static uint8_t rx_byte = 0;
+
+static volatile bool flag_start        = false;
+static volatile bool flag_harvest_done = false;
+static volatile bool flag_estop        = false;
+
+void Comm_Init(void)
+{
+    HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+}
+
+void Comm_RxCallback(void)
+{
+    switch (rx_byte)
+    {
+        case 'S': flag_start        = true; break;
+        case 'H': flag_harvest_done = true; break;
+        case 'E': flag_estop        = true; break;
+        default:  break;
+    }
+    HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+}
+
+bool Comm_IsStartFlagSet(void)       { return flag_start; }
+bool Comm_IsHarvestDoneFlagSet(void) { return flag_harvest_done; }
+bool Comm_IsEstopFlagSet(void)       { return flag_estop; }
+
+void Comm_ClearStartFlag(void)       { flag_start        = false; }
+void Comm_ClearHarvestDoneFlag(void) { flag_harvest_done = false; }
+void Comm_ClearEstopFlag(void)       { flag_estop        = false; }
+
+void Comm_SendReady(void)
+{
+    static const uint8_t msg[] = "READY\r\n";
+    HAL_UART_Transmit(&huart2, (uint8_t *)msg, sizeof(msg) - 1, 100);
+}
+
+void Comm_SendDone(void)
+{
+    static const uint8_t msg[] = "DONE\r\n";
+    HAL_UART_Transmit(&huart2, (uint8_t *)msg, sizeof(msg) - 1, 100);
+}
+
+void Comm_SendErr(void)
+{
+    static const uint8_t msg[] = "ERR\r\n";
+    HAL_UART_Transmit(&huart2, (uint8_t *)msg, sizeof(msg) - 1, 100);
+}

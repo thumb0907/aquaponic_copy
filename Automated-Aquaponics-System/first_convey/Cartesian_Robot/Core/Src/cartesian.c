@@ -4,6 +4,7 @@
 #include "sensor.h"
 #include "board_pin.h"
 #include <math.h>
+#include <stdbool.h>
 
 extern TIM_HandleTypeDef  htim2;   //  직교로봇 x축 PWM: TIM2 CH1
 extern TIM_HandleTypeDef htim5;   // 직교로봇 Z축 PWM
@@ -14,59 +15,56 @@ extern TIM_HandleTypeDef htim5;   // 직교로봇 Z축 PWM
 #define X_PULLEY_TEETH      20      // 풀리 이빨 수
 #define X_MOTOR_STEPS       200     // 모터 1회전당 스텝 (1.8도 모터)
 #define X_MICROSTEPS        4      // 마이크로스테핑 (드라이버 설정), 800
-
 static float g_x_steps_per_mm = (X_MOTOR_STEPS * X_MICROSTEPS) / (X_BELT_PITCH_MM * X_PULLEY_TEETH); // X츅 펄스당이동 타이밍벨트 계산
 static float g_x_ref_cm = 12.0f; // x축 위치보정 값, 이 거리까지 조정한다.
 static uint32_t g_x_move_hz = 1000; // X축 이동 속도
 static float g_deadband_mm = 1.0f; // 거리(x축)허용 오차 범위
-
 #define X_DIR_INVERT   1   // 방향
 #define X_EN_ACTIVE    0   // EN
 
 // Z축
 #define Z_LEAD_MM 8.0f
 #define Z_MOTOR_STEPS 200
-#define Z_MICROSTEPS 4 // 800
+#define Z_MICROSTEPS 8 // 1600
 static float g_z_steps_per_mm = (Z_MOTOR_STEPS * Z_MICROSTEPS) / Z_LEAD_MM;
-static float g_z_ref_cm = 12.0f;
-static uint32_t g_z_move_hz = 4000; // z축 속도
-
+//static uint32_t g_z_move_hz = 4000; // z축 속도
 #define Z_DIR_INVERT   1	// 방향
-#define Z_EN_ACTIVE    0	// EN
+#define Z_EN_ACTIVE    0	// EN - tb6600 : 0(+gpio low), a4988: 1 (+gpio high)
 
 // Z축 가감속 파라미터
-static uint32_t g_z_start_hz  = 500;   // 시작(최저) 속도
-static uint32_t g_z_max_hz    = 5500;  // 최고 속도
-static uint32_t g_z_accel_steps = 200; // 가속에 걸리는 스텝 수
-
-// Z축 가감속 상태
+//static uint32_t g_z_start_hz  = 800;   // 시작(최저) 속도
+//static uint32_t g_z_max_hz    = 5000;  // 최고 속도
 static uint32_t z_total_steps   = 0;
 static uint32_t z_stepped        = 0;   // 지금까지 한 스텝 수
-
+static uint32_t g_z_accel_steps = 400; // 가속에 걸리는 스텝 수
+static uint32_t z_prof_start_hz = 3500;   // 이동 시작속도
+static uint32_t z_prof_max_hz   = 8000;  // 이동 최고속도
 // 직교로봇 홈(homing) 파라미터
 static int32_t x_home_steps = 0;
 static int32_t z_home_steps = 0;
-static uint32_t g_x_homing_speed_hz   = 2000;  // X(벨트) SEEK 속도
-static uint32_t g_z_homing_speed_hz   = 3000;   // Z(리드스크류) SEEK 속도
-static float g_x_home_offset = 140.0f;   // 홈 140mm
-static float g_z_home_offset = 60.0f;   // 홈 60mm
+static uint32_t g_x_homing_speed_hz   = 1000;  // X(벨트) SEEK 속도
+static uint32_t g_z_homing_speed_hz   = 3500;   // Z(리드스크류) SEEK 속도
+static float g_x_home_offset = 138.0f;   // 홈 140mm
+static float g_z_home_offset = 58.0f;   // 홈 60mm
+// 백오프 파라미터
+static float g_x_backoff_mm = 2.0f;
+static float g_z_backoff_mm = 2.0f;
+static int32_t x_backoff_steps = 0;
+static int32_t z_backoff_steps = 0;
 
 // 파종
-#define SOW_COLS 5
 #define SOW_ROWS 8
-static float g_sow_x_pitch_mm = 40.0f;  // X칸 간격 (실측 후 조정)
 static float g_sow_z_down_mm  = 30.0f;  // Z 하강 거리 (실측 후 조정)
 
 static const float sow_row_feed_mm[SOW_ROWS - 1] = {
     40.0f,
     40.0f,
     40.0f,
-    140.0f,  // 트레이 사이 거리
+    130.0f,  // 트레이와 트레이 사이 거리
     40.0f,
     40.0f,
     40.0f,
 };
-static uint8_t sow_col = 0;
 static uint8_t sow_row = 0;
 
 // 홈 포지션 상태
@@ -105,12 +103,6 @@ typedef enum {
     ST_SOW_WAIT_Z_DOWN,
     ST_SOW_Z_UP,          // Z 상승
     ST_SOW_WAIT_Z_UP,
-
-    ST_SOW_NEXT_X,        // 다음 X칸
-    ST_SOW_WAIT_X,
-
-    ST_SOW_RETURN_X,      // X 원점 복귀
-    ST_SOW_WAIT_RETURN_X,
 
     ST_SOW_NEXT_ROW,      // 컨베이어 다음 행
     ST_SOW_WAIT_ROW,
@@ -244,7 +236,6 @@ static void X_StartMoveSteps(int32_t steps, uint32_t step_hz)
   x_remain = n;
   x_moving = true;
 
-
   X_StepPWM_SetHz(step_hz);  // 고정 속도!
 
   __HAL_TIM_CLEAR_FLAG(&htim2, TIM_FLAG_UPDATE);
@@ -254,10 +245,10 @@ static void X_StartMoveSteps(int32_t steps, uint32_t step_hz)
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 }
 
-static void Z_StartMoveSteps(int32_t steps, uint32_t step_hz)
+/*static void Z_StartMoveSteps(int32_t steps, uint32_t step_hz)
 {
 	// 그냥 이동
-	/*{
+	*{
 	if (steps == 0) return;
 
     bool dir = (steps >= 0);
@@ -277,7 +268,7 @@ static void Z_StartMoveSteps(int32_t steps, uint32_t step_hz)
 
     __HAL_TIM_SET_COUNTER(&htim5, 0);
     HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_1);
-	}*/
+	}*
 
 	// 가감속
 	if (steps == 0) return;
@@ -300,7 +291,86 @@ static void Z_StartMoveSteps(int32_t steps, uint32_t step_hz)
 	    __HAL_TIM_ENABLE_IT(&htim5, TIM_IT_UPDATE);
 	    __HAL_TIM_SET_COUNTER(&htim5, 0);
 	    HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_1);
+}*/
+/*static void Z_StartMoveSteps_Fixed(int32_t steps, uint32_t step_hz) // 백오프용
+{
+    if (steps == 0) return;
+
+    bool dir = (steps >= 0);
+    uint32_t n = (uint32_t)(dir ? steps : -steps);
+
+    Z_SetDir(dir);
+    Z_Enable(true);
+
+    // 고정속도 모드 표시: z_total_steps=0으로 두면 ISR에서 가감속 계산을 안 하게 만들 수 있음
+    z_total_steps = 0;
+    z_stepped     = 0;
+
+    z_remain = n;
+    z_moving = true;
+
+    Z_StepPWM_SetHz(step_hz);
+
+    __HAL_TIM_CLEAR_FLAG(&htim5, TIM_FLAG_UPDATE);
+    __HAL_TIM_ENABLE_IT(&htim5, TIM_IT_UPDATE);
+    __HAL_TIM_SET_COUNTER(&htim5, 0);
+    HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_1);
+}*/
+static void Z_MoveFixed(int32_t steps, uint32_t hz)   // z축 SEEK / BACKOFF용
+{
+    if (steps == 0) return;
+
+    bool dir = (steps >= 0);
+    uint32_t n = (uint32_t)(dir ? steps : -steps);
+
+    Z_SetDir(dir);
+    Z_Enable(true);
+
+    z_total_steps = 0;      // 고정속도 모드
+    z_stepped     = 0;
+
+    z_prof_start_hz = hz;   // 의미상 저장(디버그 편의)
+    z_prof_max_hz   = hz;
+
+    z_remain = n;
+    z_moving = true;
+
+    Z_StepPWM_SetHz(hz);
+
+    __HAL_TIM_CLEAR_FLAG(&htim5, TIM_FLAG_UPDATE);
+    __HAL_TIM_ENABLE_IT(&htim5, TIM_IT_UPDATE);
+    __HAL_TIM_SET_COUNTER(&htim5, 0);
+    HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_1);
 }
+static void Z_MoveProfile(int32_t steps, uint32_t start_hz, uint32_t max_hz) // z축 가감속용
+{
+    if (steps == 0) return;
+    if (start_hz < 1) start_hz = 1;
+    if (max_hz < start_hz) max_hz = start_hz;
+
+    bool dir = (steps >= 0);
+    uint32_t n = (uint32_t)(dir ? steps : -steps);
+
+    Z_SetDir(dir);
+    Z_Enable(true);
+
+    z_total_steps = n;       // 가감속 모드
+    z_stepped     = 0;
+
+    z_prof_start_hz = start_hz; // ★ “백오프 속도에서 이어서 가속”이 여기서 결정됨
+    z_prof_max_hz   = max_hz;
+
+    z_remain = n;
+    z_moving = true;
+
+    Z_StepPWM_SetHz(z_prof_start_hz);
+
+    __HAL_TIM_CLEAR_FLAG(&htim5, TIM_FLAG_UPDATE);
+    __HAL_TIM_ENABLE_IT(&htim5, TIM_IT_UPDATE);
+    __HAL_TIM_SET_COUNTER(&htim5, 0);
+    HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_1);
+}
+
 void Cartesian_ResetSequence(void)
 {
     // 혹시 남아있는 PWM/IT를 확실히 끊어줌 (중요)
@@ -311,7 +381,6 @@ void Cartesian_ResetSequence(void)
     state = ST_RUN_CONVEY;
     ir_latched = false;
     busy = false;
-    sow_col    = 0;
     sow_row    = 0;
     // 리밋 관련 플래그 정리
     x_limit_hit = false;
@@ -320,22 +389,32 @@ void Cartesian_ResetSequence(void)
 // 리밋 눌림 감지
 void Cartesian_limit(uint16_t GPIO_Pin)
 {
-  if (GPIO_Pin == X_LIM_PIN) {
-    if (!x_limit_hit) {
-      x_limit_hit = true;
-      X_Stop();
-      //if (x_home == AXIS_SEEK) x_home = AXIS_BACKOFF;  //  X만 백오프 예약
-      if (x_home == AXIS_SEEK) x_home = AXIS_MOVE_TO_POS;
+    // 눌림(LOW)인 경우만 인정 (노이즈 방지)
+    if (GPIO_Pin == X_LIM_PIN) {
+        if (HAL_GPIO_ReadPin(X_LIM_PORT, X_LIM_PIN) != GPIO_PIN_RESET) return;
+
+        // SEEK 중이 아닐 때는 무시 (BACKOFF/이후 단계에서 들어오는 EXTI 차단)
+        if (x_home != AXIS_SEEK) return;
+
+        // SEEK 중일 때만 처리
+        if (x_home == AXIS_SEEK && !x_limit_hit) {
+            x_limit_hit = true;
+            X_Stop();
+            x_home = AXIS_BACKOFF;
+        }
+        return;
     }
-  }
-  else if (GPIO_Pin == Z_LIM_PIN) {
-    if (!z_limit_hit) {
-      z_limit_hit = true;
-      Z_Stop();
-      //if (z_home == AXIS_SEEK) z_home = AXIS_BACKOFF;  // Z만 백오프 예약
-      if (z_home == AXIS_SEEK) z_home = AXIS_MOVE_TO_POS;
+
+    if (GPIO_Pin == Z_LIM_PIN) {
+        if (HAL_GPIO_ReadPin(Z_LIM_PORT, Z_LIM_PIN) != GPIO_PIN_RESET) return;
+
+        if (z_home == AXIS_SEEK && !z_limit_hit) {
+            z_limit_hit = true;
+            Z_Stop();
+            z_home = AXIS_BACKOFF;
+        }
+        return;
     }
-  }
 }
 // 홈 찾기 시작
 void Cartesian_StartHoming(void)
@@ -348,8 +427,8 @@ void Cartesian_StartHoming(void)
   z_home = AXIS_SEEK;
 
   // 백오프 스텝 미리 계산
-  //x_backoff_steps = (int32_t)(g_x_backoff_mm * g_x_steps_per_mm);
-  //z_backoff_steps = (int32_t)(g_z_backoff_mm * g_z_steps_per_mm);
+  x_backoff_steps = (int32_t)(g_x_backoff_mm * g_x_steps_per_mm);
+  z_backoff_steps = (int32_t)(g_z_backoff_mm * g_z_steps_per_mm);
 
   // 홈 오프셋 스텝 계산
   x_home_steps = (int32_t)(g_x_home_offset * g_x_steps_per_mm);
@@ -359,14 +438,14 @@ void Cartesian_StartHoming(void)
   if (HAL_GPIO_ReadPin(X_LIM_PORT, X_LIM_PIN) == GPIO_PIN_RESET) {
     x_limit_hit = true;
     X_Stop();
-    //x_home = AXIS_BACKOFF; // 바로 백오프 단계로
-    x_home = AXIS_MOVE_TO_POS;
+    x_home = AXIS_BACKOFF; // 바로 백오프 단계로
+    //x_home = AXIS_MOVE_TO_POS;
   }
   if (HAL_GPIO_ReadPin(Z_LIM_PORT, Z_LIM_PIN) == GPIO_PIN_RESET) {
     z_limit_hit = true;
     Z_Stop();
-    //z_home = AXIS_BACKOFF;
-    z_home = AXIS_MOVE_TO_POS;
+    z_home = AXIS_BACKOFF;
+    //z_home = AXIS_MOVE_TO_POS;
   }
 
   homing_start_time = HAL_GetTick();
@@ -384,17 +463,17 @@ void Cartesian_HomingTask(void)
     }
     // x_limit_hit는 EXTI에서 true로 바뀜
   }
-  /*else if (x_home == AXIS_BACKOFF) {
-    if (!x_moving) {
-      X_StartMoveSteps(+x_backoff_steps, g_x_homing_speed_hz); // 반대방향 백오프
-      x_home = AXIS_WAIT_BACKOFF;
-    }
+  else if (x_home == AXIS_BACKOFF) {
+      if (!x_moving) {
+          X_StartMoveSteps(+x_backoff_steps, g_x_homing_speed_hz);
+          x_home = AXIS_WAIT_BACKOFF;  // 무조건 백오프 이동
+      }
   }
   else if (x_home == AXIS_WAIT_BACKOFF) {
     if (!x_moving) {
       x_home = AXIS_MOVE_TO_POS;
     }
-  }*/
+  }
   else if (x_home == AXIS_MOVE_TO_POS) {
     if (!x_moving) {
       // 백오프 후 +방향으로 홈 오프셋 이동 (방향은 기구에 맞게 +/- 바꿔야 함)
@@ -411,12 +490,14 @@ void Cartesian_HomingTask(void)
   //  Z축
   if (z_home == AXIS_SEEK) {
     if (!z_moving && !z_limit_hit) {
-      Z_StartMoveSteps(-1000000, g_z_homing_speed_hz);
+    	Z_MoveFixed(-1000000, g_z_homing_speed_hz); // 2500 고정
+      //Z_StartMoveSteps(-1000000, g_z_homing_speed_hz);
     }
   }
-  /*else if (z_home == AXIS_BACKOFF) {
+  else if (z_home == AXIS_BACKOFF) {
     if (!z_moving) {
-      Z_StartMoveSteps(+z_backoff_steps, g_z_homing_speed_hz);
+    	Z_MoveFixed(+z_backoff_steps, 1600); // 백오프는 800 고정
+      //Z_StartMoveSteps(+z_backoff_steps, g_z_homing_speed_hz);
       z_home = AXIS_WAIT_BACKOFF;
     }
   }
@@ -424,10 +505,10 @@ void Cartesian_HomingTask(void)
     if (!z_moving) {
       z_home = AXIS_MOVE_TO_POS;
     }
-  }*/
+  }
   else if (z_home == AXIS_MOVE_TO_POS) {
     if (!z_moving) {
-      Z_StartMoveSteps(+z_home_steps, g_z_homing_speed_hz);
+    	Z_MoveProfile(+z_home_steps, 1000, 5000); // 800에서 시작해서 2500까지 가속
       z_home = AXIS_WAIT_MOVE;
     }
   }
@@ -456,9 +537,12 @@ void Cartesian_HomingTask(void)
 
 bool Cartesian_IsHomingDone(void)
 {
-    return (homing_state == HOMING_DONE);
+	return (homing_state == HOMING_DONE || homing_state == HOMING_IDLE);
 }
-
+bool Cartesian_IsHomingStarted(void)
+{
+    return (homing_state != HOMING_IDLE);
+}
 //void Cartesian_OnTimOcCallback(TIM_HandleTypeDef *htim) // cc인터럽트
 //{
 //    // X축
@@ -498,47 +582,46 @@ void Cartesian_OnTimPeriodElapsed(TIM_HandleTypeDef *htim)
         }
     }*/
 	else if (htim->Instance == TIM5 && z_moving) {
-	        if (z_remain > 0) {
-	            z_stepped++;
-	            z_remain--;
+	    if (z_remain > 0) {
 
-	            // 가감속 Hz 계산
+	        // 1스텝 진행
+	        z_remain--;
+
+	        // 가감속 모드일 때만(= z_total_steps > 0) Hz를 계속 바꿈
+	        if (z_total_steps > 0) {
+	            z_stepped++;
+
 	            uint32_t accel = g_z_accel_steps;
+	            if (accel > z_total_steps) accel = z_total_steps;  // 이동이 짧으면 accel도 줄임
 	            uint32_t new_hz;
 
-	            uint32_t decel_start = (z_total_steps > accel)
-	                                    ? (z_total_steps - accel) : 0;
+	            uint32_t decel_start = (z_total_steps > accel) ? (z_total_steps - accel) : 0;
 
 	            if (z_stepped < accel) {
-	                // 가속 구간: 선형 보간
-	                new_hz = g_z_start_hz
-	                       + (g_z_max_hz - g_z_start_hz) * z_stepped / accel;
+	            	new_hz = z_prof_start_hz
+	            	       + (z_prof_max_hz - z_prof_start_hz) * z_stepped / accel;
 	            }
 	            else if (z_stepped >= decel_start) {
-	                // 감속 구간: 선형 보간
-	                uint32_t steps_left = z_remain; // 남은 스텝
+	                uint32_t steps_left = z_remain;
 	                if (steps_left < accel) {
-	                    new_hz = g_z_start_hz
-	                           + (g_z_max_hz - g_z_start_hz) * steps_left / accel;
+	                	new_hz = z_prof_start_hz
+	                	       + (z_prof_max_hz - z_prof_start_hz) * steps_left / accel;
 	                } else {
-	                    new_hz = g_z_max_hz;
+	                	new_hz = z_prof_max_hz;
 	                }
 	            }
 	            else {
-	                // 정속 구간
-	                new_hz = g_z_max_hz;
+	            	new_hz = z_prof_max_hz;
 	            }
 
-	            // 최저속 보장
-	            if (new_hz < g_z_start_hz) new_hz = g_z_start_hz;
-
+	            if (new_hz < z_prof_start_hz) new_hz = z_prof_start_hz;
 	            Z_StepPWM_SetHz(new_hz);
-
-	            if (z_remain == 0) Z_Stop();
 	        }
-	    }
-}
 
+	        if (z_remain == 0) Z_Stop();
+	    }
+	}
+}
 //	 거리 측정 후 X 이동
 static void MeasureAndMoveX(void)
 {
@@ -556,7 +639,7 @@ static void MeasureAndMoveX(void)
 
   // 오차가 작으면 X축 이동 안 함, 후에 파종 시작
   if (fabsf(err_mm) <= g_deadband_mm) {
-    state = ST_SOW_Z_DOWN;;
+    state = ST_SOW_Z_DOWN;
     return;
   }
 
@@ -593,63 +676,44 @@ void Cartesian_Task(void)
         	    }
             // 타이머 콜백에서 ST_DONE으로 변경
             break;
-
         case ST_SOW_Z_DOWN:
-            Z_StartMoveSteps(-(int32_t)(g_sow_z_down_mm * g_z_steps_per_mm), g_z_move_hz);
+            Z_MoveProfile((int32_t)(g_sow_z_down_mm * g_z_steps_per_mm), 1000, 5000);
             state = ST_SOW_WAIT_Z_DOWN;
             break;
         case ST_SOW_WAIT_Z_DOWN:
             if (!z_moving) state = ST_SOW_Z_UP;
             break;
-
         case ST_SOW_Z_UP:
-            Z_StartMoveSteps(+(int32_t)(g_sow_z_down_mm * g_z_steps_per_mm), g_z_move_hz);
+            Z_MoveProfile(-(int32_t)(g_sow_z_down_mm * g_z_steps_per_mm), 1000, 5000);
             state = ST_SOW_WAIT_Z_UP;
             break;
-
         case ST_SOW_WAIT_Z_UP:
             if (!z_moving) {
-                sow_col++;
-                if (sow_col < SOW_COLS) {
-                    state = ST_SOW_NEXT_X;
+                sow_row++;
+                if (sow_row < SOW_ROWS) {
+                    // 다음 행으로 컨베이어 이동
+                    FirstConvey_MoveDistance(sow_row_feed_mm[sow_row - 1]);
+                    state = ST_SOW_WAIT_ROW;
                 } else {
-                    sow_col = 0;
-                    sow_row++;
-                    if (sow_row < SOW_ROWS)
-                        state = ST_SOW_RETURN_X;
-                    else
-                        state = ST_EXIT_CONVEY;
+                    // 모든 행 완료 → 배출
+                    state = ST_EXIT_CONVEY;
                 }
             }
-            break;
-        case ST_SOW_NEXT_X:
-            X_StartMoveSteps(+(int32_t)(g_sow_x_pitch_mm * g_x_steps_per_mm), g_x_move_hz);
-            state = ST_SOW_WAIT_X;
-            break;
-        case ST_SOW_WAIT_X:
-            if (!x_moving) state = ST_SOW_Z_DOWN;
-            break;
-        case ST_SOW_RETURN_X:
-            X_StartMoveSteps(-(int32_t)(g_sow_x_pitch_mm * (SOW_COLS-1) * g_x_steps_per_mm), g_x_move_hz);
-            state = ST_SOW_WAIT_RETURN_X;
-            break;
-        case ST_SOW_WAIT_RETURN_X:
-            if (!x_moving) state = ST_SOW_NEXT_ROW;
-            break;
-        case ST_SOW_NEXT_ROW:
-            FirstConvey_MoveDistance(sow_row_feed_mm[sow_row - 1]);
-            state = ST_SOW_WAIT_ROW;
             break;
         case ST_SOW_WAIT_ROW:
             if (FirstConvey_IsMoveDone()) state = ST_SOW_Z_DOWN;
             break;
-
         case ST_EXIT_CONVEY:
+            // IR이 더 이상 감지 안 되면 → 트레이가 완전히 빠져나감
             if (!Sensor_IR_Detected()) {
                 FirstConvey_ForceStop();
                 state = ST_DONE;
-            } else if (FirstConvey_IsMoveDone()) {
-                FirstConvey_MoveDistance(10.0f);  // 10mm씩 계속 전진
+            }
+            // IR 아직 감지 중 → 컨베이어가 멈춰있으면 10mm씩 계속 전진
+            else {
+                if (FirstConvey_IsMoveDone()) {
+                    FirstConvey_MoveDistance(10.0f);
+                }
             }
             break;
         case ST_DONE:
@@ -670,13 +734,34 @@ void Cartesian_SetXStepsPerMM(float steps_per_mm)
 {
   if (steps_per_mm > 0.1f) g_x_steps_per_mm = steps_per_mm;
 }
-
 void Cartesian_SetXRefCm(float ref_cm)
 {
   if (ref_cm > 0.1f) g_x_ref_cm = ref_cm;
 }
-
 bool Cartesian_IsBusy(void)
 {
   return busy;
+}
+
+
+// 테스트용 코드
+void Cartesian_TestMoveX(int32_t steps, uint32_t hz)
+{
+    X_StartMoveSteps(steps, hz);
+}
+
+void Cartesian_TestMoveZ(int32_t steps, uint32_t hz)
+{
+    // Z_MoveFixed(steps, hz);  // 기존: 가속 없음
+    Z_MoveProfile(steps, 500, hz);  // 변경: 500Hz에서 hz까지 가속
+}
+
+void Cartesian_TestStopX(void)
+{
+    X_Stop();
+}
+
+void Cartesian_TestStopZ(void)
+{
+    Z_Stop();
 }
