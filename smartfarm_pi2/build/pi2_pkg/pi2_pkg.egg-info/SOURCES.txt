@@ -1,0 +1,13 @@
+package.xml
+setup.cfg
+setup.py
+../../build/pi2_pkg/pi2_pkg.egg-info/PKG-INFO
+../../build/pi2_pkg/pi2_pkg.egg-info/SOURCES.txt
+../../build/pi2_pkg/pi2_pkg.egg-info/dependency_links.txt
+../../build/pi2_pkg/pi2_pkg.egg-info/entry_points.txt
+../../build/pi2_pkg/pi2_pkg.egg-info/requires.txt
+../../build/pi2_pkg/pi2_pkg.egg-info/top_level.txt
+../../build/pi2_pkg/pi2_pkg.egg-info/zip-safe
+pi2_pkg/__init__.py
+pi2_pkg/pi2_node.py
+resource/pi2_pkg

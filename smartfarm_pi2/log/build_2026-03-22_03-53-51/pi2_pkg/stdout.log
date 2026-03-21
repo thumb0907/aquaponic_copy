@@ -1,0 +1,31 @@
+running egg_info
+creating ../../build/pi2_pkg/pi2_pkg.egg-info
+writing ../../build/pi2_pkg/pi2_pkg.egg-info/PKG-INFO
+writing dependency_links to ../../build/pi2_pkg/pi2_pkg.egg-info/dependency_links.txt
+writing entry points to ../../build/pi2_pkg/pi2_pkg.egg-info/entry_points.txt
+writing requirements to ../../build/pi2_pkg/pi2_pkg.egg-info/requires.txt
+writing top-level names to ../../build/pi2_pkg/pi2_pkg.egg-info/top_level.txt
+writing manifest file '../../build/pi2_pkg/pi2_pkg.egg-info/SOURCES.txt'
+reading manifest file '../../build/pi2_pkg/pi2_pkg.egg-info/SOURCES.txt'
+writing manifest file '../../build/pi2_pkg/pi2_pkg.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/lth/smartfarm_pi2/build/pi2_pkg/build
+creating /home/lth/smartfarm_pi2/build/pi2_pkg/build/lib
+creating /home/lth/smartfarm_pi2/build/pi2_pkg/build/lib/pi2_pkg
+copying pi2_pkg/__init__.py -> /home/lth/smartfarm_pi2/build/pi2_pkg/build/lib/pi2_pkg
+copying pi2_pkg/pi2_node.py -> /home/lth/smartfarm_pi2/build/pi2_pkg/build/lib/pi2_pkg
+running install
+running install_lib
+creating /home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages/pi2_pkg
+copying /home/lth/smartfarm_pi2/build/pi2_pkg/build/lib/pi2_pkg/__init__.py -> /home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages/pi2_pkg
+copying /home/lth/smartfarm_pi2/build/pi2_pkg/build/lib/pi2_pkg/pi2_node.py -> /home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages/pi2_pkg
+byte-compiling /home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages/pi2_pkg/__init__.py to __init__.cpython-312.pyc
+byte-compiling /home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages/pi2_pkg/pi2_node.py to pi2_node.cpython-312.pyc
+running install_data
+creating /home/lth/smartfarm_pi2/install/pi2_pkg/share
+creating /home/lth/smartfarm_pi2/install/pi2_pkg/share/ament_index
+creating /home/lth/smartfarm_pi2/install/pi2_pkg/share/ament_index/resource_index
+creating /home/lth/smartfarm_pi2/install/pi2_pkg/share/ament_index/resource_index/packages
+copying resource/pi2_pkg -> /home/lth/smartfarm_pi2/install/pi2_pkg/share/ament_index/resource_index/packages
+creating /home/lth/smartfarm_pi2/install/pi2_pkg/share/pi2_pkg
