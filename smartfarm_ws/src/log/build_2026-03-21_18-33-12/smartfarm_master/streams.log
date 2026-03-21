@@ -1,0 +1,41 @@
+[0.872s] Invoking command in '/home/thumb/smartfarm_ws/src/smartfarm_master': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/thumb/smartfarm_ws/src/build/smartfarm_master/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/smartfarm_master build --build-base /home/thumb/smartfarm_ws/src/build/smartfarm_master/build install --record /home/thumb/smartfarm_ws/src/build/smartfarm_master/install.log --single-version-externally-managed install_data
+[1.125s] running egg_info
+[1.125s] creating ../build/smartfarm_master/smartfarm_master.egg-info
+[1.146s] writing ../build/smartfarm_master/smartfarm_master.egg-info/PKG-INFO
+[1.146s] writing dependency_links to ../build/smartfarm_master/smartfarm_master.egg-info/dependency_links.txt
+[1.147s] writing entry points to ../build/smartfarm_master/smartfarm_master.egg-info/entry_points.txt
+[1.147s] writing requirements to ../build/smartfarm_master/smartfarm_master.egg-info/requires.txt
+[1.147s] writing top-level names to ../build/smartfarm_master/smartfarm_master.egg-info/top_level.txt
+[1.147s] writing manifest file '../build/smartfarm_master/smartfarm_master.egg-info/SOURCES.txt'
+[1.189s] reading manifest file '../build/smartfarm_master/smartfarm_master.egg-info/SOURCES.txt'
+[1.189s] writing manifest file '../build/smartfarm_master/smartfarm_master.egg-info/SOURCES.txt'
+[1.190s] running build
+[1.190s] running build_py
+[1.190s] creating /home/thumb/smartfarm_ws/src/build/smartfarm_master/build
+[1.190s] creating /home/thumb/smartfarm_ws/src/build/smartfarm_master/build/lib
+[1.190s] creating /home/thumb/smartfarm_ws/src/build/smartfarm_master/build/lib/smartfarm_master
+[1.190s] copying smartfarm_master/__init__.py -> /home/thumb/smartfarm_ws/src/build/smartfarm_master/build/lib/smartfarm_master
+[1.190s] copying smartfarm_master/monitor_node.py -> /home/thumb/smartfarm_ws/src/build/smartfarm_master/build/lib/smartfarm_master
+[1.190s] copying smartfarm_master/master_node.py -> /home/thumb/smartfarm_ws/src/build/smartfarm_master/build/lib/smartfarm_master
+[1.190s] running install
+[1.195s] running install_lib
+[1.217s] creating /home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master
+[1.217s] copying /home/thumb/smartfarm_ws/src/build/smartfarm_master/build/lib/smartfarm_master/__init__.py -> /home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master
+[1.218s] copying /home/thumb/smartfarm_ws/src/build/smartfarm_master/build/lib/smartfarm_master/monitor_node.py -> /home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master
+[1.218s] copying /home/thumb/smartfarm_ws/src/build/smartfarm_master/build/lib/smartfarm_master/master_node.py -> /home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master
+[1.218s] byte-compiling /home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master/__init__.py to __init__.cpython-312.pyc
+[1.218s] byte-compiling /home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master/monitor_node.py to monitor_node.cpython-312.pyc
+[1.220s] byte-compiling /home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master/master_node.py to master_node.cpython-312.pyc
+[1.221s] running install_data
+[1.221s] creating /home/thumb/smartfarm_ws/src/install/smartfarm_master/share/ament_index
+[1.222s] creating /home/thumb/smartfarm_ws/src/install/smartfarm_master/share/ament_index/resource_index
+[1.222s] creating /home/thumb/smartfarm_ws/src/install/smartfarm_master/share/ament_index/resource_index/packages
+[1.222s] copying resource/smartfarm_master -> /home/thumb/smartfarm_ws/src/install/smartfarm_master/share/ament_index/resource_index/packages
+[1.222s] copying package.xml -> /home/thumb/smartfarm_ws/src/install/smartfarm_master/share/smartfarm_master
+[1.222s] running install_egg_info
+[1.244s] Copying ../build/smartfarm_master/smartfarm_master.egg-info to /home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master-0.0.0-py3.12.egg-info
+[1.245s] running install_scripts
+[1.375s] Installing master_node script to /home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/smartfarm_master
+[1.375s] Installing monitor_node script to /home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/smartfarm_master
+[1.375s] writing list of installed files to '/home/thumb/smartfarm_ws/src/build/smartfarm_master/install.log'
+[1.399s] Invoked command in '/home/thumb/smartfarm_ws/src/smartfarm_master' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/thumb/smartfarm_ws/src/build/smartfarm_master/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/thumb/smartfarm_ws/src/install/smartfarm_master/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/smartfarm_master build --build-base /home/thumb/smartfarm_ws/src/build/smartfarm_master/build install --record /home/thumb/smartfarm_ws/src/build/smartfarm_master/install.log --single-version-externally-managed install_data

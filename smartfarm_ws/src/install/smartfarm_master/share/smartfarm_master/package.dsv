@@ -1,0 +1,6 @@
+source;share/smartfarm_master/hook/pythonpath.ps1
+source;share/smartfarm_master/hook/pythonpath.dsv
+source;share/smartfarm_master/hook/pythonpath.sh
+source;share/smartfarm_master/hook/ament_prefix_path.ps1
+source;share/smartfarm_master/hook/ament_prefix_path.dsv
+source;share/smartfarm_master/hook/ament_prefix_path.sh
