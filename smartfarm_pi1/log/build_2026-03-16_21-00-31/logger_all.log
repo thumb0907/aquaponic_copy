@@ -1,0 +1,357 @@
+[1.049s] DEBUG:colcon:Command line arguments: ['/usr/bin/colcon', 'build', '--packages-select', 'smartfarm_pi1']
+[1.049s] DEBUG:colcon:Parsed command line arguments: Namespace(log_base=None, log_level=None, verb_name='build', build_base='build', install_base='install', merge_install=False, symlink_install=False, test_result_base=None, continue_on_error=False, executor='parallel', parallel_workers=4, event_handlers=None, ignore_user_meta=False, metas=['./colcon.meta'], base_paths=['.'], packages_ignore=None, packages_ignore_regex=None, paths=None, packages_up_to=None, packages_up_to_regex=None, packages_above=None, packages_above_and_dependencies=None, packages_above_depth=None, packages_select_by_dep=None, packages_skip_by_dep=None, packages_skip_up_to=None, packages_select_build_failed=False, packages_skip_build_finished=False, packages_select_test_failures=False, packages_skip_test_passed=False, packages_select=['smartfarm_pi1'], packages_skip=None, packages_select_regex=None, packages_skip_regex=None, packages_start=None, packages_end=None, allow_overriding=[], mixin_files=None, mixin=None, verb_parser=<colcon_mixin.mixin.mixin_argument.MixinArgumentDecorator object at 0xffffa0a283e0>, verb_extension=<colcon_core.verb.build.BuildVerb object at 0xffffa0bb7170>, main=<bound method BuildVerb.main of <colcon_core.verb.build.BuildVerb object at 0xffffa0bb7170>>, mixin_verb=('build',))
+[1.475s] ERROR:colcon.colcon_core.extension_point:Exception loading extension 'colcon_core.package_identification.cmake': [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 168, in load_extension_points
+    extension_type = load_extension_point(name, value, group)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 208, in load_extension_point
+    return EntryPoint(name, value, group).load()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 205, in load
+    module = import_module(match.group('module'))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1322, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1262, in _find_spec
+  File "<frozen importlib._bootstrap_external>", line 1528, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1502, in _get_spec
+  File "<frozen importlib._bootstrap_external>", line 1605, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1648, in _fill_cache
+OSError: [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+
+[1.504s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) check parameters
+[1.504s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) check parameters
+[1.504s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) check parameters
+[1.505s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) check parameters
+[1.505s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) discover
+[1.505s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) discover
+[1.505s] INFO:colcon.colcon_core.package_discovery:Crawling recursively for packages in '/home/lth/smartfarm_ws'
+[1.505s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ignore', 'ignore_ament_install']
+[1.505s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore'
+[1.505s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore_ament_install'
+[1.506s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_pkg']
+[1.506s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_pkg'
+[1.506s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_meta']
+[1.506s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_meta'
+[1.506s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ros']
+[1.506s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ros'
+[1.623s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['python']
+[1.623s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'python'
+[1.624s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['python_setup_py']
+[1.624s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'python_setup_py'
+[1.624s] Level 1:colcon.colcon_core.package_identification:_identify(build) by extensions ['ignore', 'ignore_ament_install']
+[1.624s] Level 1:colcon.colcon_core.package_identification:_identify(build) by extension 'ignore'
+[1.624s] Level 1:colcon.colcon_core.package_identification:_identify(build) ignored
+[1.624s] Level 1:colcon.colcon_core.package_identification:_identify(install) by extensions ['ignore', 'ignore_ament_install']
+[1.624s] Level 1:colcon.colcon_core.package_identification:_identify(install) by extension 'ignore'
+[1.624s] Level 1:colcon.colcon_core.package_identification:_identify(install) ignored
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(log) by extensions ['ignore', 'ignore_ament_install']
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(log) by extension 'ignore'
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(log) ignored
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['ignore', 'ignore_ament_install']
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'ignore'
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'ignore_ament_install'
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['colcon_pkg']
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'colcon_pkg'
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['colcon_meta']
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'colcon_meta'
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['ros']
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'ros'
+[1.625s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['python']
+[1.626s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'python'
+[1.626s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['python_setup_py']
+[1.626s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'python_setup_py'
+[1.626s] Level 1:colcon.colcon_core.package_identification:_identify(src/smartfarm_pi1) by extensions ['ignore', 'ignore_ament_install']
+[1.626s] Level 1:colcon.colcon_core.package_identification:_identify(src/smartfarm_pi1) by extension 'ignore'
+[1.626s] Level 1:colcon.colcon_core.package_identification:_identify(src/smartfarm_pi1) by extension 'ignore_ament_install'
+[1.626s] Level 1:colcon.colcon_core.package_identification:_identify(src/smartfarm_pi1) by extensions ['colcon_pkg']
+[1.626s] Level 1:colcon.colcon_core.package_identification:_identify(src/smartfarm_pi1) by extension 'colcon_pkg'
+[1.627s] Level 1:colcon.colcon_core.package_identification:_identify(src/smartfarm_pi1) by extensions ['colcon_meta']
+[1.627s] Level 1:colcon.colcon_core.package_identification:_identify(src/smartfarm_pi1) by extension 'colcon_meta'
+[1.627s] Level 1:colcon.colcon_core.package_identification:_identify(src/smartfarm_pi1) by extensions ['ros']
+[1.627s] Level 1:colcon.colcon_core.package_identification:_identify(src/smartfarm_pi1) by extension 'ros'
+[1.638s] DEBUG:colcon.colcon_core.package_identification:Package 'src/smartfarm_pi1' with type 'ros.ament_python' and name 'smartfarm_pi1'
+[1.638s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) using defaults
+[1.638s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) discover
+[1.638s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) using defaults
+[1.638s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) discover
+[1.639s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) using defaults
+[1.720s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) check parameters
+[1.720s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) discover
+[1.733s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 1 installed packages in /home/lth/smartfarm_ws/install
+[1.736s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 289 installed packages in /opt/ros/jazzy
+[1.739s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) using defaults
+[1.964s] ERROR:colcon.colcon_core.extension_point:Exception loading extension 'colcon_core.task.build.cmake': [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 168, in load_extension_points
+    extension_type = load_extension_point(name, value, group)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 208, in load_extension_point
+    return EntryPoint(name, value, group).load()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 205, in load
+    module = import_module(match.group('module'))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1322, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1262, in _find_spec
+  File "<frozen importlib._bootstrap_external>", line 1528, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1502, in _get_spec
+  File "<frozen importlib._bootstrap_external>", line 1605, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1648, in _fill_cache
+OSError: [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+
+[1.969s] ERROR:colcon.colcon_core.extension_point:Exception loading extension 'colcon_core.task.build.ros.ament_cmake': [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 168, in load_extension_points
+    extension_type = load_extension_point(name, value, group)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 208, in load_extension_point
+    return EntryPoint(name, value, group).load()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 205, in load
+    module = import_module(match.group('module'))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/usr/lib/python3/dist-packages/colcon_ros/task/ament_cmake/build.py", line 6, in <module>
+    from colcon_cmake.task.cmake import has_target
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1322, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1262, in _find_spec
+  File "<frozen importlib._bootstrap_external>", line 1528, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1502, in _get_spec
+  File "<frozen importlib._bootstrap_external>", line 1605, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1648, in _fill_cache
+OSError: [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+
+[1.972s] ERROR:colcon.colcon_core.extension_point:Exception loading extension 'colcon_core.task.build.ros.catkin': [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 168, in load_extension_points
+    extension_type = load_extension_point(name, value, group)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 208, in load_extension_point
+    return EntryPoint(name, value, group).load()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 205, in load
+    module = import_module(match.group('module'))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/usr/lib/python3/dist-packages/colcon_ros/task/catkin/__init__.py", line 4, in <module>
+    from colcon_cmake.task.cmake import get_variable_from_cmake_cache
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1322, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1262, in _find_spec
+  File "<frozen importlib._bootstrap_external>", line 1528, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1502, in _get_spec
+  File "<frozen importlib._bootstrap_external>", line 1605, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1648, in _fill_cache
+OSError: [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+
+[1.975s] ERROR:colcon.colcon_core.extension_point:Exception loading extension 'colcon_core.task.build.ros.cmake': [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 168, in load_extension_points
+    extension_type = load_extension_point(name, value, group)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 208, in load_extension_point
+    return EntryPoint(name, value, group).load()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 205, in load
+    module = import_module(match.group('module'))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/usr/lib/python3/dist-packages/colcon_ros/task/cmake/build.py", line 6, in <module>
+    from colcon_cmake.task.cmake import has_target
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1322, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1262, in _find_spec
+  File "<frozen importlib._bootstrap_external>", line 1528, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1502, in _get_spec
+  File "<frozen importlib._bootstrap_external>", line 1605, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1648, in _fill_cache
+OSError: [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+
+[1.976s] DEBUG:colcon.colcon_core.verb:Building package 'smartfarm_pi1' with the following arguments: {'build_base': '/home/lth/smartfarm_ws/build/smartfarm_pi1', 'install_base': '/home/lth/smartfarm_ws/install/smartfarm_pi1', 'merge_install': False, 'path': '/home/lth/smartfarm_ws/src/smartfarm_pi1', 'symlink_install': False, 'test_result_base': None}
+[1.976s] INFO:colcon.colcon_core.executor:Executing jobs using 'parallel' executor
+[1.978s] ERROR:colcon.colcon_core.extension_point:Exception loading extension 'colcon_core.event_handler.compile_commands': [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 168, in load_extension_points
+    extension_type = load_extension_point(name, value, group)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 208, in load_extension_point
+    return EntryPoint(name, value, group).load()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 205, in load
+    module = import_module(match.group('module'))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1322, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1262, in _find_spec
+  File "<frozen importlib._bootstrap_external>", line 1528, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1502, in _get_spec
+  File "<frozen importlib._bootstrap_external>", line 1605, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1648, in _fill_cache
+OSError: [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+
+[1.991s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete
+[1.995s] INFO:colcon.colcon_ros.task.ament_python.build:Building ROS package in '/home/lth/smartfarm_ws/src/smartfarm_pi1' with build type 'ament_python'
+[1.996s] Level 1:colcon.colcon_core.shell:create_environment_hook('smartfarm_pi1', 'ament_prefix_path')
+[2.056s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_core.shell.bat': Not used on non-Windows systems
+[2.057s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/hook/ament_prefix_path.ps1'
+[2.064s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/hook/ament_prefix_path.dsv'
+[2.067s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/hook/ament_prefix_path.sh'
+[2.069s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[2.070s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[2.697s] WARNING:colcon.colcon_ros.task.ament_python.build:Package 'smartfarm_pi1' doesn't explicitly install a marker in the package index (colcon-ros currently does it implicitly but that fallback will be removed in the future)
+[2.698s] WARNING:colcon.colcon_ros.task.ament_python.build:Package 'smartfarm_pi1' doesn't explicitly install the 'package.xml' file (colcon-ros currently does it implicitly but that fallback will be removed in the future)
+[2.699s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/home/lth/smartfarm_ws/src/smartfarm_pi1'
+[2.700s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[2.700s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[4.936s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/lth/smartfarm_ws/src/smartfarm_pi1': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/lth/smartfarm_ws/build/smartfarm_pi1/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/smartfarm_pi1 build --build-base /home/lth/smartfarm_ws/build/smartfarm_pi1/build install --record /home/lth/smartfarm_ws/build/smartfarm_pi1/install.log --single-version-externally-managed
+[6.040s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/lth/smartfarm_ws/src/smartfarm_pi1' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/lth/smartfarm_ws/build/smartfarm_pi1/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/smartfarm_pi1 build --build-base /home/lth/smartfarm_ws/build/smartfarm_pi1/build install --record /home/lth/smartfarm_ws/build/smartfarm_pi1/install.log --single-version-externally-managed
+[6.051s] ERROR:colcon.colcon_core.extension_point:Exception loading extension 'colcon_core.environment.cmake_module_path': [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 168, in load_extension_points
+    extension_type = load_extension_point(name, value, group)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 208, in load_extension_point
+    return EntryPoint(name, value, group).load()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 205, in load
+    module = import_module(match.group('module'))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1322, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1262, in _find_spec
+  File "<frozen importlib._bootstrap_external>", line 1528, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1502, in _get_spec
+  File "<frozen importlib._bootstrap_external>", line 1605, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1648, in _fill_cache
+OSError: [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+
+[6.052s] ERROR:colcon.colcon_core.extension_point:Exception loading extension 'colcon_core.environment.cmake_prefix_path': [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 168, in load_extension_points
+    extension_type = load_extension_point(name, value, group)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/colcon_core/extension_point.py", line 208, in load_extension_point
+    return EntryPoint(name, value, group).load()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/metadata/__init__.py", line 205, in load
+    module = import_module(match.group('module'))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1322, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 1262, in _find_spec
+  File "<frozen importlib._bootstrap_external>", line 1528, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1502, in _get_spec
+  File "<frozen importlib._bootstrap_external>", line 1605, in find_spec
+  File "<frozen importlib._bootstrap_external>", line 1648, in _fill_cache
+OSError: [Errno 74] Bad message: '/usr/lib/python3/dist-packages/colcon_cmake'
+
+[6.076s] Level 1:colcon.colcon_core.environment:checking '/home/lth/smartfarm_ws/install/smartfarm_pi1/lib'
+[6.077s] Level 1:colcon.colcon_core.environment:checking '/home/lth/smartfarm_ws/install/smartfarm_pi1/bin'
+[6.077s] Level 1:colcon.colcon_core.environment:checking '/home/lth/smartfarm_ws/install/smartfarm_pi1/lib/pkgconfig/smartfarm_pi1.pc'
+[6.077s] Level 1:colcon.colcon_core.environment:checking '/home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages'
+[6.078s] Level 1:colcon.colcon_core.shell:create_environment_hook('smartfarm_pi1', 'pythonpath')
+[6.078s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/hook/pythonpath.ps1'
+[6.079s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/hook/pythonpath.dsv'
+[6.080s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/hook/pythonpath.sh'
+[6.081s] Level 1:colcon.colcon_core.environment:checking '/home/lth/smartfarm_ws/install/smartfarm_pi1/bin'
+[6.081s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(smartfarm_pi1)
+[6.082s] INFO:colcon.colcon_core.shell:Creating package script '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/package.ps1'
+[6.105s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/package.dsv'
+[6.107s] INFO:colcon.colcon_core.shell:Creating package script '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/package.sh'
+[6.109s] INFO:colcon.colcon_core.shell:Creating package script '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/package.bash'
+[6.111s] INFO:colcon.colcon_core.shell:Creating package script '/home/lth/smartfarm_ws/install/smartfarm_pi1/share/smartfarm_pi1/package.zsh'
+[6.114s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/lth/smartfarm_ws/install/smartfarm_pi1/share/colcon-core/packages/smartfarm_pi1)
+[6.115s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:closing loop
+[6.115s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:loop closed
+[6.116s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete finished with '0'
+[6.116s] DEBUG:colcon.colcon_core.event_reactor:joining thread
+[6.139s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.terminal_notifier': Not used on non-Darwin systems
+[6.140s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.win32': Not used on non-Windows systems
+[6.140s] INFO:colcon.colcon_notification.desktop_notification:Sending desktop notification using 'notify2'
+[6.171s] DEBUG:colcon.colcon_core.event_reactor:joined thread
+[6.172s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/lth/smartfarm_ws/install/local_setup.ps1'
+[6.181s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/lth/smartfarm_ws/install/_local_setup_util_ps1.py'
+[6.187s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/lth/smartfarm_ws/install/setup.ps1'
+[6.189s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/lth/smartfarm_ws/install/local_setup.sh'
+[6.194s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/lth/smartfarm_ws/install/_local_setup_util_sh.py'
+[6.200s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/lth/smartfarm_ws/install/setup.sh'
+[6.205s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/lth/smartfarm_ws/install/local_setup.bash'
+[6.208s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/lth/smartfarm_ws/install/setup.bash'
+[6.211s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/lth/smartfarm_ws/install/local_setup.zsh'
+[6.214s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/lth/smartfarm_ws/install/setup.zsh'

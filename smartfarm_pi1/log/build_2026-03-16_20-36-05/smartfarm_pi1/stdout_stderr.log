@@ -1,0 +1,29 @@
+running egg_info
+creating ../../build/smartfarm_pi1/smartfarm_pi1.egg-info
+writing ../../build/smartfarm_pi1/smartfarm_pi1.egg-info/PKG-INFO
+writing dependency_links to ../../build/smartfarm_pi1/smartfarm_pi1.egg-info/dependency_links.txt
+writing entry points to ../../build/smartfarm_pi1/smartfarm_pi1.egg-info/entry_points.txt
+writing requirements to ../../build/smartfarm_pi1/smartfarm_pi1.egg-info/requires.txt
+writing top-level names to ../../build/smartfarm_pi1/smartfarm_pi1.egg-info/top_level.txt
+writing manifest file '../../build/smartfarm_pi1/smartfarm_pi1.egg-info/SOURCES.txt'
+reading manifest file '../../build/smartfarm_pi1/smartfarm_pi1.egg-info/SOURCES.txt'
+writing manifest file '../../build/smartfarm_pi1/smartfarm_pi1.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/lth/smartfarm_ws/build/smartfarm_pi1/build
+creating /home/lth/smartfarm_ws/build/smartfarm_pi1/build/lib
+creating /home/lth/smartfarm_ws/build/smartfarm_pi1/build/lib/smartfarm_pi1
+copying smartfarm_pi1/__init__.py -> /home/lth/smartfarm_ws/build/smartfarm_pi1/build/lib/smartfarm_pi1
+copying smartfarm_pi1/pi1_node.py -> /home/lth/smartfarm_ws/build/smartfarm_pi1/build/lib/smartfarm_pi1
+running install
+running install_lib
+creating /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages/smartfarm_pi1
+copying /home/lth/smartfarm_ws/build/smartfarm_pi1/build/lib/smartfarm_pi1/__init__.py -> /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages/smartfarm_pi1
+copying /home/lth/smartfarm_ws/build/smartfarm_pi1/build/lib/smartfarm_pi1/pi1_node.py -> /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages/smartfarm_pi1
+byte-compiling /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages/smartfarm_pi1/__init__.py to __init__.cpython-312.pyc
+byte-compiling /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages/smartfarm_pi1/pi1_node.py to pi1_node.cpython-312.pyc
+running install_egg_info
+Copying ../../build/smartfarm_pi1/smartfarm_pi1.egg-info to /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages/smartfarm_pi1-0.1.0-py3.12.egg-info
+running install_scripts
+Installing pi1_node script to /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/smartfarm_pi1
+writing list of installed files to '/home/lth/smartfarm_ws/build/smartfarm_pi1/install.log'

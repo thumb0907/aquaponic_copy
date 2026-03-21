@@ -1,0 +1,23 @@
+[2.853s] Invoking command in '/home/lth/smartfarm_ws/src/smartfarm_pi1': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/lth/smartfarm_ws/build/smartfarm_pi1/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/smartfarm_pi1 build --build-base /home/lth/smartfarm_ws/build/smartfarm_pi1/build install --record /home/lth/smartfarm_ws/build/smartfarm_pi1/install.log --single-version-externally-managed
+[3.413s] running egg_info
+[3.451s] writing ../../build/smartfarm_pi1/smartfarm_pi1.egg-info/PKG-INFO
+[3.452s] writing dependency_links to ../../build/smartfarm_pi1/smartfarm_pi1.egg-info/dependency_links.txt
+[3.458s] writing entry points to ../../build/smartfarm_pi1/smartfarm_pi1.egg-info/entry_points.txt
+[3.459s] writing requirements to ../../build/smartfarm_pi1/smartfarm_pi1.egg-info/requires.txt
+[3.459s] writing top-level names to ../../build/smartfarm_pi1/smartfarm_pi1.egg-info/top_level.txt
+[3.539s] reading manifest file '../../build/smartfarm_pi1/smartfarm_pi1.egg-info/SOURCES.txt'
+[3.547s] writing manifest file '../../build/smartfarm_pi1/smartfarm_pi1.egg-info/SOURCES.txt'
+[3.547s] running build
+[3.547s] running build_py
+[3.548s] copying smartfarm_pi1/pi1_node.py -> /home/lth/smartfarm_ws/build/smartfarm_pi1/build/lib/smartfarm_pi1
+[3.550s] running install
+[3.565s] running install_lib
+[3.599s] copying /home/lth/smartfarm_ws/build/smartfarm_pi1/build/lib/smartfarm_pi1/pi1_node.py -> /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages/smartfarm_pi1
+[3.607s] byte-compiling /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages/smartfarm_pi1/pi1_node.py to pi1_node.cpython-312.pyc
+[3.614s] running install_egg_info
+[3.651s] removing '/home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages/smartfarm_pi1-0.1.0-py3.12.egg-info' (and everything under it)
+[3.651s] Copying ../../build/smartfarm_pi1/smartfarm_pi1.egg-info to /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages/smartfarm_pi1-0.1.0-py3.12.egg-info
+[3.652s] running install_scripts
+[3.837s] Installing pi1_node script to /home/lth/smartfarm_ws/install/smartfarm_pi1/lib/smartfarm_pi1
+[3.837s] writing list of installed files to '/home/lth/smartfarm_ws/build/smartfarm_pi1/install.log'
+[3.987s] Invoked command in '/home/lth/smartfarm_ws/src/smartfarm_pi1' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/lth/smartfarm_ws/build/smartfarm_pi1/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/lth/smartfarm_ws/install/smartfarm_pi1/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/smartfarm_pi1 build --build-base /home/lth/smartfarm_ws/build/smartfarm_pi1/build install --record /home/lth/smartfarm_ws/build/smartfarm_pi1/install.log --single-version-externally-managed
