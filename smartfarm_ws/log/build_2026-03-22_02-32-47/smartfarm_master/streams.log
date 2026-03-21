@@ -1,0 +1,28 @@
+[0.829s] Invoking command in '/home/thumb/smartfarm_ws/src/smartfarm_master': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/thumb/smartfarm_ws/build/smartfarm_master/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/thumb/smartfarm_ws/install/smartfarm_master/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/smartfarm_master build --build-base /home/thumb/smartfarm_ws/build/smartfarm_master/build install --record /home/thumb/smartfarm_ws/build/smartfarm_master/install.log --single-version-externally-managed install_data
+[1.103s] running egg_info
+[1.126s] writing ../../build/smartfarm_master/smartfarm_master.egg-info/PKG-INFO
+[1.126s] writing dependency_links to ../../build/smartfarm_master/smartfarm_master.egg-info/dependency_links.txt
+[1.126s] writing entry points to ../../build/smartfarm_master/smartfarm_master.egg-info/entry_points.txt
+[1.126s] writing requirements to ../../build/smartfarm_master/smartfarm_master.egg-info/requires.txt
+[1.127s] writing top-level names to ../../build/smartfarm_master/smartfarm_master.egg-info/top_level.txt
+[1.172s] reading manifest file '../../build/smartfarm_master/smartfarm_master.egg-info/SOURCES.txt'
+[1.173s] writing manifest file '../../build/smartfarm_master/smartfarm_master.egg-info/SOURCES.txt'
+[1.173s] running build
+[1.173s] running build_py
+[1.173s] copying smartfarm_master/monitor_node.py -> /home/thumb/smartfarm_ws/build/smartfarm_master/build/lib/smartfarm_master
+[1.173s] copying smartfarm_master/master_node.py -> /home/thumb/smartfarm_ws/build/smartfarm_master/build/lib/smartfarm_master
+[1.173s] running install
+[1.178s] running install_lib
+[1.200s] copying /home/thumb/smartfarm_ws/build/smartfarm_master/build/lib/smartfarm_master/monitor_node.py -> /home/thumb/smartfarm_ws/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master
+[1.200s] copying /home/thumb/smartfarm_ws/build/smartfarm_master/build/lib/smartfarm_master/master_node.py -> /home/thumb/smartfarm_ws/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master
+[1.201s] byte-compiling /home/thumb/smartfarm_ws/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master/monitor_node.py to monitor_node.cpython-312.pyc
+[1.203s] byte-compiling /home/thumb/smartfarm_ws/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master/master_node.py to master_node.cpython-312.pyc
+[1.207s] running install_data
+[1.207s] running install_egg_info
+[1.231s] removing '/home/thumb/smartfarm_ws/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master-0.0.0-py3.12.egg-info' (and everything under it)
+[1.231s] Copying ../../build/smartfarm_master/smartfarm_master.egg-info to /home/thumb/smartfarm_ws/install/smartfarm_master/lib/python3.12/site-packages/smartfarm_master-0.0.0-py3.12.egg-info
+[1.232s] running install_scripts
+[1.364s] Installing master_node script to /home/thumb/smartfarm_ws/install/smartfarm_master/lib/smartfarm_master
+[1.364s] Installing monitor_node script to /home/thumb/smartfarm_ws/install/smartfarm_master/lib/smartfarm_master
+[1.365s] writing list of installed files to '/home/thumb/smartfarm_ws/build/smartfarm_master/install.log'
+[1.393s] Invoked command in '/home/thumb/smartfarm_ws/src/smartfarm_master' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/thumb/smartfarm_ws/build/smartfarm_master/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/thumb/smartfarm_ws/install/smartfarm_master/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/smartfarm_master build --build-base /home/thumb/smartfarm_ws/build/smartfarm_master/build install --record /home/thumb/smartfarm_ws/build/smartfarm_master/install.log --single-version-externally-managed install_data
