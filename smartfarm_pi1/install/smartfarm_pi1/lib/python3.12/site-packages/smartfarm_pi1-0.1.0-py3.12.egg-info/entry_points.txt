@@ -1,2 +1,0 @@
-[console_scripts]
-pi1_node = smartfarm_pi1.pi1_node:main

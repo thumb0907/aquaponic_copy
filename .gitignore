@@ -1,5 +1,10 @@
-smartfarm_ws/build/
-smartfarm_ws/install/
-smartfarm_ws/log/
+build/
+install/
+log/
+**/build/
+**/install/
+**/log/
 **/__pycache__/
-**/*.pyc
+*.pyc
+*.pyo
+*.egg-info/
