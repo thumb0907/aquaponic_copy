@@ -1,0 +1,5 @@
+smartfarm_ws/build/
+smartfarm_ws/install/
+smartfarm_ws/log/
+**/__pycache__/
+**/*.pyc

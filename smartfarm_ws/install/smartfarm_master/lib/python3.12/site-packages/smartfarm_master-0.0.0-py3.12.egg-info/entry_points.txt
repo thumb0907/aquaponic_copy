@@ -1,3 +1,0 @@
-[console_scripts]
-master_node = smartfarm_master.master_node:main
-monitor_node = smartfarm_master.monitor_node:main
