@@ -1,0 +1,24 @@
+[2.031s] Invoking command in '/home/lth/smartfarm_pi2/src/pi2_pkg': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/lth/smartfarm_pi2/build/pi2_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/pi2_pkg build --build-base /home/lth/smartfarm_pi2/build/pi2_pkg/build install --record /home/lth/smartfarm_pi2/build/pi2_pkg/install.log --single-version-externally-managed install_data
+[2.425s] running egg_info
+[2.452s] writing ../../build/pi2_pkg/pi2_pkg.egg-info/PKG-INFO
+[2.452s] writing dependency_links to ../../build/pi2_pkg/pi2_pkg.egg-info/dependency_links.txt
+[2.459s] writing entry points to ../../build/pi2_pkg/pi2_pkg.egg-info/entry_points.txt
+[2.460s] writing requirements to ../../build/pi2_pkg/pi2_pkg.egg-info/requires.txt
+[2.460s] writing top-level names to ../../build/pi2_pkg/pi2_pkg.egg-info/top_level.txt
+[2.519s] reading manifest file '../../build/pi2_pkg/pi2_pkg.egg-info/SOURCES.txt'
+[2.527s] writing manifest file '../../build/pi2_pkg/pi2_pkg.egg-info/SOURCES.txt'
+[2.527s] running build
+[2.527s] running build_py
+[2.528s] copying pi2_pkg/pi2_node.py -> /home/lth/smartfarm_pi2/build/pi2_pkg/build/lib/pi2_pkg
+[2.528s] running install
+[2.541s] running install_lib
+[2.569s] copying /home/lth/smartfarm_pi2/build/pi2_pkg/build/lib/pi2_pkg/pi2_node.py -> /home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages/pi2_pkg
+[2.570s] byte-compiling /home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages/pi2_pkg/pi2_node.py to pi2_node.cpython-312.pyc
+[2.573s] running install_data
+[2.573s] running install_egg_info
+[2.602s] removing '/home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages/pi2_pkg-0.1.0-py3.12.egg-info' (and everything under it)
+[2.603s] Copying ../../build/pi2_pkg/pi2_pkg.egg-info to /home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages/pi2_pkg-0.1.0-py3.12.egg-info
+[2.612s] running install_scripts
+[2.869s] Installing pi2_node script to /home/lth/smartfarm_pi2/install/pi2_pkg/lib/pi2_pkg
+[2.870s] writing list of installed files to '/home/lth/smartfarm_pi2/build/pi2_pkg/install.log'
+[3.026s] Invoked command in '/home/lth/smartfarm_pi2/src/pi2_pkg' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/lth/smartfarm_pi2/build/pi2_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/lth/smartfarm_pi2/install/pi2_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/pi2_pkg build --build-base /home/lth/smartfarm_pi2/build/pi2_pkg/build install --record /home/lth/smartfarm_pi2/build/pi2_pkg/install.log --single-version-externally-managed install_data

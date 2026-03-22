@@ -1,0 +1,2 @@
+[console_scripts]
+pi2_node = pi2_pkg.pi2_node:main
