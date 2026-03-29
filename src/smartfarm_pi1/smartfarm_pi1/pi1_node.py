@@ -14,7 +14,8 @@ from rclpy.node import Node
 from std_msgs.msg import String
 
 
-PC_IP       = '192.168.0.180'
+#PC_IP       = '192.168.0.183'
+PC_IP       = '172.20.10.3'
 STREAM_PORT = 5000
 SERIAL_PORT = '/dev/ttyACM0'
 BAUD        = 115200
@@ -49,9 +50,21 @@ class Pi1Node(Node):
         self.pub_uart = self.create_publisher(String, '/pi1/uart_response', 10)
         self.pub_hb   = self.create_publisher(String, '/system/heartbeat', 10)
 
+        self.pub_pi2 = self.create_publisher(String, '/interpi/pi1_to_pi2', 10)
+        self.pub_link   = self.create_publisher(String, '/pi1/interpi_rx', 10)
+
+
         self.create_subscription(
             String, '/pi1/uart_cmd',
             self._on_uart_cmd, 10
+        )
+        self.create_subscription(
+            String, '/pi1/interpi_send',
+            self._on_interpi_send, 10
+        )
+        self.create_subscription(
+            String, '/interpi/pi1_to_pi2',
+            self._on_from_pi2, 10
         )
 
         self.create_timer(1.0, self._heartbeat)
@@ -86,6 +99,28 @@ class Pi1Node(Node):
         self.pub_uart.publish(msg)
         self.get_logger().info(f'STM32→PC: "{line}"')
 
+    def _on_interpi_send(self, msg:String):
+        payload = msg.data.strip()
+        if not payload:
+            self.get_logger().warn('Pi1->Pi2 전송 무시: 빈 메시지')
+            return
+        
+        out = String()
+        out.data = payload
+        self.pub_pi2.publish(out)
+        self.get_logger().info(f'Pi1->Pi2: "{payload}') 
+    
+    def _on_from_pi2(self, msg:String):
+        payload = msg.data.strip()
+        if not payload:
+            return
+        
+        out = String()
+        out.data = payload
+        self.pub_link.publish(out)
+        self.get_logger().info(f'Pi2->Pi1 수신: "{payload}"') 
+
+
     def _heartbeat(self):
         msg = String()
         msg.data = 'pi1'
@@ -96,7 +131,7 @@ def uart_rx_loop(node: Pi1Node):
     buf = ''
     while rclpy.ok():
         if node.ser is None or not node.ser.is_open:
-            time.sleep(1.0)
+            time.sleep(0.5)
             node.ser = reconnect_serial()
             buf = ''
             continue

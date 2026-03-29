@@ -77,10 +77,22 @@ class Pi2Node(Node):
         # pi1_node와 동일한 토픽 구조
         self.pub_uart = self.create_publisher(String, '/pi2/uart_response', 10)
         self.pub_hb   = self.create_publisher(String, '/system/heartbeat',  10)
+        self.pub_pi1  = self.create_publisher(String, 'interpi/pi2_to_pi1', 10)
+        self.pub_link = self.create_publisher(String, 'pi2/interpi_rx', 10)
 
         self.create_subscription(
             String, '/pi2/uart_cmd',
             self._on_uart_cmd, 10
+        )
+        
+        self.create_subscription(
+            String, '/pi2/interpi_send',
+            self._on_interpi_send, 10
+        )
+
+        self.create_subscription(
+            String, '/interpi/pi1_to_pi2',
+            self._on_from_pi1, 10
         )
 
         self.create_timer(1.0, self._heartbeat)
@@ -125,7 +137,28 @@ class Pi2Node(Node):
         msg      = String()
         msg.data = 'pi2'
         self.pub_hb.publish(msg)
-
+    
+    def _on_interpi_send(self, msg:String):
+        payload = msg.data.strip()
+        if not payload:
+            self.get_logger().warn('Pi2->Pi1 전송 무시: 빈 메시지')
+            return
+        
+        out = String()
+        out.date = payload
+        self.pub_pi1.publish(out)
+        self.get_logger().info(f'Pi2->Pi1: "{payload}"')
+    
+    def _on_from_pi1(self, msg:String):
+        payload = msg.data.strip()
+        if not payload:
+            return
+        
+        out = String()
+        out.date = payload
+        self.pub_link.publish(out)
+        self.get_logger().info(f'Pi2->Pi1 수신: "{payload}"')
+    
 
 def uart_rx_loop(node: Pi2Node):
     """pi1_node.uart_rx_loop()과 동일."""
