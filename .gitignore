@@ -8,3 +8,4 @@ log/
 *.pyc
 *.pyo
 *.egg-info/
+*.pt
