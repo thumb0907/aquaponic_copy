@@ -51,6 +51,7 @@ class Pi1Node(Node):
         self.pub_hb   = self.create_publisher(String, '/system/heartbeat', 10)
 
         self.pub_pi2 = self.create_publisher(String, '/interpi/pi1_to_pi2', 10)
+        
         self.pub_link   = self.create_publisher(String, '/pi1/interpi_rx', 10)
 
 
@@ -63,7 +64,7 @@ class Pi1Node(Node):
             self._on_interpi_send, 10
         )
         self.create_subscription(
-            String, '/interpi/pi1_to_pi2',
+            String, '/interpi/pi2_to_pi1',
             self._on_from_pi2, 10
         )
 

@@ -77,7 +77,7 @@ class Pi2Node(Node):
         # pi1_node와 동일한 토픽 구조
         self.pub_uart = self.create_publisher(String, '/pi2/uart_response', 10)
         self.pub_hb   = self.create_publisher(String, '/system/heartbeat',  10)
-        self.pub_pi1  = self.create_publisher(String, 'interpi/pi2_to_pi1', 10)
+        self.pub_pi1  = self.create_publisher(String, '/interpi/pi2_to_pi1', 10)
         self.pub_link = self.create_publisher(String, 'pi2/interpi_rx', 10)
 
         self.create_subscription(
@@ -145,7 +145,7 @@ class Pi2Node(Node):
             return
         
         out = String()
-        out.date = payload
+        out.data = payload
         self.pub_pi1.publish(out)
         self.get_logger().info(f'Pi2->Pi1: "{payload}"')
     
@@ -155,7 +155,7 @@ class Pi2Node(Node):
             return
         
         out = String()
-        out.date = payload
+        out.data = payload
         self.pub_link.publish(out)
         self.get_logger().info(f'Pi2->Pi1 수신: "{payload}"')
     
