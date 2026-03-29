@@ -3,9 +3,9 @@
 monitor_node.py  ─  터미널 대시보드
 =========================================================
 실행 모드:
-  python monitor_node.py           # 전체 플래그 요약 (기본)
-  python monitor_node.py stm       # STM1 로그 화면 (기존)
-  python monitor_node.py stm2      # STM2 시퀀스 화면 (신규)
+  python monitor_node.py           # 전체 상태 요약 (기본)
+  python monitor_node.py stm       # STM1 로그 화면
+  python monitor_node.py stm2      # STM2 시퀀스 화면
 """
 
 from __future__ import annotations
@@ -37,19 +37,24 @@ class MonitorNode(Node):
         self.mode = sys.argv[1] if len(sys.argv) > 1 else 'flags'
 
         # ── 상태 ──────────────────────────────────────
-        self.stm_state  = 'idle'   # STM1
-        self.stm2_state = 'idle'   # STM2
+        self.stm_state  = 'idle'
+        self.stm2_state = 'idle'
         self.stm1_log   = []
         self.stm2_log   = []
 
         self.flags = {
             'start_flag': False,
-            'stm_state':  'idle',
+            'stm_state': 'idle',
             'stm2_state': 'idle',
-            'pi1_alive':  False,
-            'pi2_alive':  False,
-            'emergency':  False,
+            'pi1_alive': False,
+            'pi2_alive': False,
+            'emergency': False,
+            'cam1_connected': False,
+            'cam1_status': 'disconnected',
+            'cam1_detect_label': 'none',
+            'cam1_last_conf': '0.00',
         }
+
         self.pi1_last_hb = 0.0
         self.pi2_last_hb = 0.0
 
@@ -107,7 +112,8 @@ class MonitorNode(Node):
         for item in msg.data.split(','):
             if ':' in item:
                 k, v = item.split(':', 1)
-                k = k.strip(); v = v.strip()
+                k = k.strip()
+                v = v.strip()
                 if k in self.flags:
                     self.flags[k] = (v == 'True') if v in ('True', 'False') else v
 
@@ -124,53 +130,90 @@ class MonitorNode(Node):
         self.flags['pi1_alive'] = (now - self.pi1_last_hb) < 3.0
         self.flags['pi2_alive'] = (now - self.pi2_last_hb) < 3.0
 
-        if   self.mode == 'stm':  self._draw_stm1()
-        elif self.mode == 'stm2': self._draw_stm2()
-        else:                     self._draw_flags()
+        if self.mode == 'stm':
+            self._draw_stm1()
+        elif self.mode == 'stm2':
+            self._draw_stm2()
+        else:
+            self._draw_flags()
 
-    # ── 전체 플래그 요약 (기본) ───────────────────────
+    # ── 전체 상태 요약 (기본) ─────────────────────────
     def _draw_flags(self):
         os.system('clear')
-        f   = self.flags
-        p1  = f.get('pi1_alive', False)
-        p2  = f.get('pi2_alive', False)
+        f = self.flags
+
+        p1 = f.get('pi1_alive', False)
+        p2 = f.get('pi2_alive', False)
         emg = f.get('emergency', False)
-        sf  = f.get('start_flag', False)
-        s1  = f.get('stm_state',  'idle')
-        s2  = f.get('stm2_state', 'idle')
+        sf = f.get('start_flag', False)
+        s1 = f.get('stm_state', 'idle')
+        s2 = f.get('stm2_state', 'idle')
 
-        p1dot  = f'{C.GREEN}● 연결됨{C.RESET}' if p1  else f'{C.RED}● 끊김{C.RESET}'
-        p2dot  = f'{C.GREEN}● 연결됨{C.RESET}' if p2  else f'{C.RED}● 끊김{C.RESET}'
+        cam_conn = f.get('cam1_connected', False)
+        cam_stat = f.get('cam1_status', 'disconnected')
+        cam_det  = f.get('cam1_detect_label', 'none')
+        cam_conf = f.get('cam1_last_conf', '0.00')
+
+        p1dot = f'{C.GREEN}● 연결됨{C.RESET}' if p1 else f'{C.RED}● 미연결{C.RESET}'
+        p2dot = f'{C.GREEN}● 연결됨{C.RESET}' if p2 else f'{C.RED}● 미연결{C.RESET}'
         emgdot = f'{C.RED}{C.BOLD}● ON{C.RESET}' if emg else f'{C.GRAY}○ OFF{C.RESET}'
+        sf_dot = f'{C.GREEN}● True{C.RESET} ← CAM1 감지 완료' if sf else f'{C.GRAY}○ False{C.RESET}'
 
-        print(f'{C.BOLD}━━━ 스마트팜 상태 ━━━━━━━━━━━━━━━━━━━━━━━{C.RESET}')
-        print()
-        print(f'  Pi1 연결   :  {p1dot}')
-        print(f'  Pi2 연결   :  {p2dot}')
-        print(f'  긴급정지   :  {emgdot}')
-        print()
-
-        # STM1
-        print(f'{C.BOLD}  ── 첫번째 컨베이어 (STM1) ──{C.RESET}')
-        sf_dot = f'{C.GREEN}● True{C.RESET} ← CAM1 감지' if sf else f'{C.GRAY}○ False{C.RESET}'
-        s1col  = {'idle': C.GRAY, 'error': C.RED}.get(s1, C.YELLOW)
-        print(f'  start_flag :  {sf_dot}')
-        print(f'  stm_state  :  {s1col}{C.BOLD}{s1}{C.RESET}')
-        print()
-
-        # STM2
-        print(f'{C.BOLD}  ── 두번째 컨베이어 (STM2) ──{C.RESET}')
-        s2col = {
-            'idle': C.GRAY, 'error': C.RED,
-            'convey_run': C.GREEN, 'ir_detected': C.CYAN,
-            'z_fix': C.YELLOW, 'harvesting': C.BLUE,
+        s1col = {
+            'idle': C.GRAY,
+            'homing': C.YELLOW,
+            'running': C.GREEN,
+            'seeding': C.CYAN,
             'ejecting': C.BLUE,
-        }.get(s2, C.GREEN)
-        print(f'  stm2_state :  {s2col}{C.BOLD}{s2}{C.RESET}')
+            'waiting_scara': C.YELLOW,
+            'error': C.RED,
+        }.get(s1, C.YELLOW)
 
-        print(f'\n{C.GRAY}모드: stm(STM1 로그) / stm2(STM2 시퀀스) | 0.5초마다 갱신 | Ctrl+C 종료{C.RESET}')
+        s2col = {
+            'idle': C.GRAY,
+            'convey_run': C.GREEN,
+            'ir_detected': C.CYAN,
+            'z_fix': C.YELLOW,
+            'harvesting': C.BLUE,
+            'ejecting': C.BLUE,
+            'error': C.RED,
+        }.get(s2, C.YELLOW)
 
-    # ── STM1 로그 화면 (기존과 동일) ─────────────────
+        cam_conn_txt = f'{C.GREEN}● 연결됨{C.RESET}' if cam_conn else f'{C.RED}● 미연결{C.RESET}'
+
+        if cam_stat == 'normal':
+            cam_stat_txt = f'{C.GREEN}정상{C.RESET}'
+        elif cam_stat == 'delay':
+            cam_stat_txt = f'{C.YELLOW}지연{C.RESET}'
+        else:
+            cam_stat_txt = f'{C.RED}끊김{C.RESET}'
+
+        print(f'{C.BOLD}━━━ 상태표시 ━━━━━━━━━━━━━━━━━━━━━━━━━━━{C.RESET}')
+        print()
+
+        print(f'  Pi1 연결        : {p1dot}')
+        print(f'  Pi2 연결        : {p2dot}')
+        print(f'  긴급정지        : {emgdot}')
+        print()
+
+        print(f'{C.BOLD}  ── 첫번째 컨베이어 (STM1) ──{C.RESET}')
+        print(f'  start_flag      : {sf_dot}')
+        print(f'  STM1 상태       : {s1col}{C.BOLD}{s1}{C.RESET}')
+        print()
+
+        print(f'{C.BOLD}  ── 두번째 컨베이어 (STM2) ──{C.RESET}')
+        print(f'  STM2 상태       : {s2col}{C.BOLD}{s2}{C.RESET}')
+        print()
+
+        print(f'{C.BOLD}  ── 카메라 (CAM1) ──{C.RESET}')
+        print(f'  CAM1 장치       : {cam_conn_txt}')
+        print(f'  CAM1 프레임     : {cam_stat_txt}')
+        print(f'  마지막 검출     : {cam_det}')
+        print(f'  마지막 conf     : {cam_conf}')
+
+        print(f'\n{C.GRAY}모드: 기본(status) / stm / stm2 | 0.5초마다 갱신 | Ctrl+C 종료{C.RESET}')
+
+    # ── STM1 로그 화면 ───────────────────────────────
     def _draw_stm1(self):
         os.system('clear')
         stm = self.flags.get('stm_state', 'idle')
@@ -184,14 +227,18 @@ class MonitorNode(Node):
             ('seeding',       '④ 파종'),
             ('ejecting',      '⑤ 배출'),
             ('waiting_scara', '⑥ 스카라 대기'),
-            ('error',         '  에러/정지'),
+            ('error',         '에러/정지'),
         ]
         order = [s[0] for s in steps]
-        cur   = order.index(stm) if stm in order else 0
+        cur = order.index(stm) if stm in order else 0
+
         for i, (key, label) in enumerate(steps):
-            if i == cur:     print(f'  {C.GREEN}▶ {label}{C.RESET}')
-            elif i < cur:    print(f'  {C.GRAY}✓ {label}{C.RESET}')
-            else:            print(f'  {C.GRAY}  {label}{C.RESET}')
+            if i == cur:
+                print(f'  {C.GREEN}▶ {label}{C.RESET}')
+            elif i < cur:
+                print(f'  {C.GRAY}✓ {label}{C.RESET}')
+            else:
+                print(f'  {C.GRAY}  {label}{C.RESET}')
 
         print()
         print(f'{C.BOLD}━━━ STM32 #1 로그 ━━━━━━━━━━━━━━━━━━━━━━━{C.RESET}')
@@ -203,39 +250,41 @@ class MonitorNode(Node):
                 print(f'  {line}')
         print(f'\n{C.GRAY}0.5초마다 갱신 | Ctrl+C 종료{C.RESET}')
 
-    # ── STM2 시퀀스 화면 (신규) ──────────────────────
+    # ── STM2 시퀀스 화면 ─────────────────────────────
     def _draw_stm2(self):
         os.system('clear')
         stm2 = self.flags.get('stm2_state', 'idle')
-        p2   = self.flags.get('pi2_alive',  False)
-        emg  = self.flags.get('emergency',  False)
+        p2   = self.flags.get('pi2_alive', False)
+        emg  = self.flags.get('emergency', False)
 
-        p2dot  = f'{C.GREEN}● 연결됨{C.RESET}' if p2  else f'{C.RED}● 끊김{C.RESET}'
+        p2dot  = f'{C.GREEN}● 연결됨{C.RESET}' if p2 else f'{C.RED}● 미연결{C.RESET}'
         emgdot = f'{C.RED}{C.BOLD}⛔ ON{C.RESET}' if emg else f'{C.GRAY}○ OFF{C.RESET}'
 
-        print(f'{C.BOLD}━━━ STM32 #2 (두번째 컨베이어·수확) ━━━━━{C.RESET}')
+        print(f'{C.BOLD}━━━ STM32 #2 (두번째 컨베이어) ━━━━━━━━━━{C.RESET}')
         print()
-        print(f'  Pi2 연결   :  {p2dot}')
-        print(f'  긴급정지   :  {emgdot}')
+        print(f'  Pi2 연결   : {p2dot}')
+        print(f'  긴급정지   : {emgdot}')
         print()
 
-        steps2 = [
-            ('idle',         '① 대기   (S1 수신 전)'),
-            ('convey_run',   '② 컨베이어 구동'),
-            ('ir_detected',  '③ IR 감지'),
-            ('z_fix',        '④ Z축 고정'),
-            ('harvesting',   '⑤ 수확 중'),
-            ('harvest_done', '⑥ 수확 완료'),
-            ('ejecting',     '⑦ 트레이 배출'),
-            ('eject_done',   '⑧ 배출 완료'),
-            ('error',        '  에러/정지'),
+        steps = [
+            ('idle',        '① 대기'),
+            ('convey_run',  '② 컨베이어 구동'),
+            ('ir_detected', '③ IR 감지'),
+            ('z_fix',       '④ Z축 고정'),
+            ('harvesting',  '⑤ 수확'),
+            ('ejecting',    '⑥ 배출'),
+            ('error',       '에러/정지'),
         ]
-        order2 = [s[0] for s in steps2]
-        cur2   = order2.index(stm2) if stm2 in order2 else 0
-        for i, (key, label) in enumerate(steps2):
-            if i == cur2:    print(f'  {C.GREEN}▶ {label}{C.RESET}')
-            elif i < cur2:   print(f'  {C.GRAY}✓ {label}{C.RESET}')
-            else:            print(f'  {C.GRAY}  {label}{C.RESET}')
+        order = [s[0] for s in steps]
+        cur = order.index(stm2) if stm2 in order else 0
+
+        for i, (key, label) in enumerate(steps):
+            if i == cur:
+                print(f'  {C.GREEN}▶ {label}{C.RESET}')
+            elif i < cur:
+                print(f'  {C.GRAY}✓ {label}{C.RESET}')
+            else:
+                print(f'  {C.GRAY}  {label}{C.RESET}')
 
         print()
         print(f'{C.BOLD}━━━ STM32 #2 로그 ━━━━━━━━━━━━━━━━━━━━━━━{C.RESET}')
@@ -245,28 +294,19 @@ class MonitorNode(Node):
         else:
             for line in self.stm2_log:
                 print(f'  {line}')
-
-        print(f'\n{C.GRAY}커맨드: ros2 topic pub /system/command std_msgs/msg/String "data: \'START_2\'"{C.RESET}')
-        print(f'{C.GRAY}0.5초마다 갱신 | Ctrl+C 종료{C.RESET}')
+        print(f'\n{C.GRAY}0.5초마다 갱신 | Ctrl+C 종료{C.RESET}')
 
 
-def main():
-    rclpy.init()
+def main(args=None):
+    rclpy.init(args=args)
     node = MonitorNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
-        try:
-            node.destroy_node()
-        except Exception:
-            pass
-        try:
-            if rclpy.ok():
-                rclpy.shutdown()
-        except Exception:
-            pass
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':
