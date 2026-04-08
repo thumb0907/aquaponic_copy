@@ -158,18 +158,13 @@ class MasterNode(Node):
 
         # ── Publisher ─────────────────────────
         # Pi1 → STM1 명령 (바이너리)
-        self.pub_pi1      = self.create_publisher(
+        self.pub_pi1     = self.create_publisher(
             UInt8MultiArray, '/pi1/uart_cmd', 10)
-        # Pi2 → STM2 명령 (문자열, Pi2 준비되면 바이너리로 변경)
-        self.pub_pi2      = self.create_publisher(
-            String, '/pi2/uart_cmd', 10)
-        # Pi1 ↔ Pi2 중계
-        self.pub_pi1_link = self.create_publisher(
-            String, '/pi1/interpi_send', 10)
-        self.pub_pi2_link = self.create_publisher(
-            String, '/pi2/interpi_send', 10)
+        # Pi2 → STM2 명령 (바이너리) ← String에서 변경
+        self.pub_pi2     = self.create_publisher(
+            UInt8MultiArray, '/pi2/uart_cmd', 10)
         # 모니터 노드용
-        self.pub_monitor  = self.create_publisher(
+        self.pub_monitor = self.create_publisher(
             String, '/monitor/state', 10)
 
         # ── Subscriber ────────────────────────
@@ -180,17 +175,15 @@ class MasterNode(Node):
             String, '/pi2/uart_response',
             self._on_uart2, 10)
         self.create_subscription(
-            String, '/pi1/interpi_rx',
-            self._on_link_to_pi1, 10)
-        self.create_subscription(
-            String, '/pi2/interpi_rx',
-            self._on_link_to_pi2, 10)
+            String, '/pi2/flag_update',      # Pi2 플래그 업데이트
+            self._on_pi2_flag, 10)
         self.create_subscription(
             String, '/system/heartbeat',
             self._on_heartbeat, 10)
         self.create_subscription(
             String, '/system/command',
             self._on_command, 10)
+        
         # Pi2 플래그 업데이트
         self.create_subscription(
             String, '/pi2/flag_update',
@@ -224,11 +217,11 @@ class MasterNode(Node):
                 self.start_flag = False
                 self.get_logger().warn('[STM1] ESTOP')
             elif line == 'STM1:PC:DONE:CYCLE1':
-                # 파종 완료 → 스카라에 SSF=1, CRF=1 전달
-                self.stm_state  = 'waiting_scara'
-                self._relay_to_pi2('SSF:1')
-                self._relay_to_pi2('CRF:1')
-                self.get_logger().info('파종 완료 → Pi2로 SSF=1, CRF=1')
+            # 파종 완료 → PC가 직접 Pi2에 SSF=1, CRF=1 전송
+                self.stm_state = 'waiting_scara'
+                self._send_binary_pi2(make_flag_u8(PID_SSF, 1))
+                self._send_binary_pi2(make_flag_u8(PID_CRF, 1))
+                self.get_logger().info('파종 완료 → Pi2에 SSF=1, CRF=1 전송')
             elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
                 self.start_flag = False
@@ -365,8 +358,8 @@ class MasterNode(Node):
             with self.state_lock:
                 self.emergency  = True
                 self.start_flag = False
-            self._send_binary(make_estop())       # STM1 긴급정지
-            self._send_pi2('PC:STM2:CMD:ESTOP')  # STM2 긴급정지
+            self._send_binary(make_estop())      # STM1
+            self._send_binary_pi2(make_estop())  # STM2
             self.get_logger().warn('EMERGENCY!')
 
         elif cmd == 'RESET':
@@ -381,8 +374,8 @@ class MasterNode(Node):
                 self.cam1_last_conf    = 0.0
                 for k in self.flags:
                     self.flags[k] = 0
-            self._send_binary(make_reset())
-            self._send_pi2('PC:STM2:CMD:RESET')
+            self._send_binary(make_reset())      # STM1
+            self._send_binary_pi2(make_reset())  # STM2
             self.get_logger().info('RESET')
 
         elif cmd == 'START_2':
@@ -394,22 +387,9 @@ class MasterNode(Node):
                     self.get_logger().warn(
                         f'STM2 동작 중({self.stm2_state}) — 무시')
                     return
-            self._send_pi2('PI2:STM2:EVT:TRAY_PLACED')
-            self.get_logger().info('STM2 수동 시작')
-
-        elif cmd.startswith('PI1_TO_PI2:'):
-            payload = cmd.split(':', 1)[1].strip()
-            if payload:
-                self._relay_to_pi2(payload)
-                self.get_logger().info(
-                    f'InterPi Pi1→Pi2: {payload}')
-
-        elif cmd.startswith('PI2_TO_PI1:'):
-            payload = cmd.split(':', 1)[1].strip()
-            if payload:
-                self._relay_to_pi1(payload)
-                self.get_logger().info(
-                    f'InterPi Pi2→Pi1: {payload}')
+            # 트레이 올려놨다는 신호 → FF=1 바이너리 전송
+            self._send_binary_pi2(make_flag_u8(PID_FF, 1))
+            self.get_logger().info('STM2 시작 → FF=1 전송')
 
         else:
             self.get_logger().warn(f'알 수 없는 명령: {cmd}')
@@ -419,26 +399,15 @@ class MasterNode(Node):
     # ══════════════════════════════════════════
     def _send_binary(self, frame: list):
         """Pi1 → STM1 바이너리 전송"""
-        msg = UInt8MultiArray()
+        msg      = UInt8MultiArray()
         msg.data = frame
         self.pub_pi1.publish(msg)
 
-    def _send_pi2(self, text: str):
-        msg = String()
-        msg.data = text
+    def _send_binary_pi2(self, frame):
+        """Pi2 → STM2 바이너리 전송"""
+        msg      = UInt8MultiArray()
+        msg.data = list(frame)  # bytes도 list로 변환
         self.pub_pi2.publish(msg)
-
-    def _relay_to_pi2(self, payload: str):
-        """Pi1을 통해 Pi2로 전달"""
-        msg = String()
-        msg.data = payload
-        self.pub_pi1_link.publish(msg)
-
-    def _relay_to_pi1(self, payload: str):
-        """Pi2를 통해 Pi1으로 전달"""
-        msg = String()
-        msg.data = payload
-        self.pub_pi2_link.publish(msg)
 
     # ══════════════════════════════════════════
     # 모니터 상태 publish
