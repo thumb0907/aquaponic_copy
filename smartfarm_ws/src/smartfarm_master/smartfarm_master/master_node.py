@@ -1,33 +1,21 @@
 #!/usr/bin/env python3
 """
-master_node.py  ─  PC 마스터 노드
-=========================================================
-라파1(첫번째 컨베이어) + 라파2(두번째 컨베이어) 통합 관리.
-라파3(수경재배실)은 추후 추가 예정.
+master_node.py — PC 마스터 노드
 
-전체 흐름:
-  라파1(pi1_node) ──UART──  STM32 #1 (첫번째 컨베이어, 파종)
-  라파2(pi2_node) ──UART──  STM32 #2 (두번째 컨베이어, 수확)
-  마스터노드는 라파들과 ROS2 토픽으로 통신하며 전체 상태를 관리
-
-구독 토픽 (받는 것)
-  /pi1/uart_response   STM1이 라파1을 통해 보내는 상태 문자열
-  /pi2/uart_response   STM2가 라파2를 통해 보내는 상태 문자열
-  /system/heartbeat    각 라파가 1초마다 보내는 생존 신호 ('pi1' or 'pi2')
-  /system/command      외부에서 보내는 제어 명령 (EMERGENCY / RESET / START_2)
-
-발행 토픽 (보내는 것)
-  /pi1/uart_cmd        라파1 → STM1으로 전달할 명령
-  /pi2/uart_cmd        라파2 → STM2으로 전달할 명령
-  /monitor/state       모니터 노드에 전체 상태 요약 전송
+역할:
+  1. Pi1 카메라 영상 수신 → YOLO 추론 → 트레이 감지
+  2. 트레이 감지 시 SSF=1 바이너리 프레임 → Pi1 → STM1
+  3. STM1/STM2 상태 수신 → 플래그 관리
+  4. 전체 플래그를 모니터 노드에 publish
+  5. 긴급정지/리셋 명령 처리
 """
-
 from __future__ import annotations
 
 import time
 import threading
 import socket
 import struct
+import queue
 
 import cv2
 import numpy as np
@@ -35,94 +23,187 @@ from ultralytics import YOLO
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import String, UInt8MultiArray
 
-import queue
 frame_queue = queue.Queue(maxsize=2)
 
-# ── 설정값 ────────────────────────────────────────────────────
-#MODEL_PATH    = '/home/thumb/models/best.pt'  # YOLO 모델 경로
-#MODEL_PATH    = '/home/thumb/aquaponic_copy/tray2/best.pt'
-MODEL_PATH    = '/home/thumb/aquaponic_copy/tray2/test1/best.pt' 
-STREAM_PORT   = 5000                           # 라파1 카메라 스트림 수신 포트
-TRAY_CLASS_ID = 0                              # YOLO에서 트레이로 인식하는 클래스 번호
-MIN_CONF      = 0.90                           # 트레이로 판정하는 최소 신뢰도
-STABLE_FRAMES = 5                              # 연속 몇 프레임 감지돼야 진짜로 인정
-COOLDOWN_SEC  = 2.0                            # 한 번 전송 후 재전송 대기 시간(초)
-# 카메라 감지 영역
+# ── 설정 ──────────────────────────────────────
+MODEL_PATH    = '/home/thumb/aquaponic_copy/tray2/best.pt'
+STREAM_PORT   = 5000
+TRAY_CLASS_ID = 0
+MIN_CONF      = 0.90
+STABLE_FRAMES = 5
+COOLDOWN_SEC  = 2.0
+
+# ROI (트레이 감지 유효 영역)
 ROI_X_MIN = 0.37
 ROI_X_MAX = 0.73
 ROI_Y_MIN = 0.10
 ROI_Y_MAX = 0.90
-#캘리브레이션파일위치
+
+# 박스 최소 크기 (화면 대비 비율)
+MIN_BOX_RATIO = 0.25
+
+# 캘리브레이션 파일
 CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
+
+# ── 프로토콜 상수 (comm.h / Serial.h 와 동일) ──
+SOF = 0xAA
+
+PID_SSF   = 0x01
+PID_SMF   = 0x02
+PID_CRF   = 0x03
+PID_UV    = 0x04
+PID_ULF   = 0x05
+PID_URF   = 0x06
+PID_WCNT  = 0x07
+PID_WLF   = 0x08
+PID_WRF   = 0x09
+PID_FF    = 0x0A
+PID_UEF   = 0x0B
+PID_WEF   = 0x0C
+PID_HF    = 0x0D
+PID_C1F   = 0x0E
+PID_C2F   = 0x0F
+PID_ESTOP = 0x10
+PID_RESET = 0x11
+
+
+def make_frame(pid: int, data: bytes = b'') -> list:
+    """바이너리 프레임 생성 [SOF, ID, LEN, DATA..., CHK]"""
+    length = len(data)
+    chk = (pid + length + sum(data)) & 0xFF
+    return [SOF, pid, length] + list(data) + [chk]
+
+
+def make_flag_u8(pid: int, val: int) -> list:
+    """1바이트 플래그 프레임"""
+    return make_frame(pid, bytes([val & 0xFF]))
+
+
+def make_flag_u16(pid: int, val: int) -> list:
+    """2바이트 플래그 프레임 (UV용)"""
+    return make_frame(pid, bytes([(val >> 8) & 0xFF, val & 0xFF]))
+
+
+def make_estop() -> list:
+    """긴급정지 프레임"""
+    return make_frame(PID_ESTOP)
+
+
+def make_reset() -> list:
+    """리셋 프레임"""
+    return make_frame(PID_RESET)
+
 
 class MasterNode(Node):
 
     def __init__(self):
         super().__init__('master_node')
 
-        # 여러 스레드(ROS 콜백, 카메라 루프)가 동시에 변수를 건드리므로 락 사용
         self.state_lock = threading.Lock()
 
-        # ── 라파1 / STM32 #1 상태 ─────────────────────
-        self.start_flag  = False   # CAM1이 트레이를 감지해서 STM1에 명령 보낸 상태
-        self.stm_state   = 'idle'  # STM1 현재 동작 상태
-        self.stable_cnt  = 0       # 트레이가 연속으로 감지된 프레임 수
-        self.no_tray_cnt = 0       # 트레이가 연속으로 없었던 프레임 수
-        self.last_tx     = 0.0     # 마지막으로 STM1에 명령 보낸 시각
-        self.pi1_alive   = False   # 라파1 heartbeat 기반 연결 상태
-        self.pi1_last_hb = 0.0     # 라파1 마지막 heartbeat 수신 시각
+        # ── 공유 플래그 ───────────────────────
+        self.flags = {
+            'ssf':  0,
+            'smf':  0,
+            'crf':  0,
+            'uv':   0,
+            'ulf':  0,
+            'urf':  0,
+            'wcnt': 0,
+            'wlf':  0,
+            'wrf':  0,
+            'ff':   0,
+            'uef':  0,
+            'wef':  0,
+            'hf':   0,
+            'c1f':  0,
+            'c2f':  0,
+        }
 
-        # ── 라파2 / STM32 #2 상태 ─────────────────────
-        self.stm2_state  = 'idle'  # STM2 현재 동작 상태
-        self.pi2_alive   = False   # 라파2 연결 상태
-        self.pi2_last_hb = 0.0     # 라파2 마지막 heartbeat 수신 시각
+        # ── STM1 상태 ─────────────────────────
+        self.start_flag  = False
+        self.stm_state   = 'idle'
+        self.stable_cnt  = 0
+        self.no_tray_cnt = 0
+        self.last_tx     = 0.0
+        self.pi1_alive   = False
+        self.pi1_last_hb = 0.0
 
-        # ── 카메라(CAM1) 상태 ─────────────────────────
-        self.cam1_connected      = False   # 스트림 소켓 연결 여부
-        self.cam1_last_frame_ts  = 0.0     # 마지막 프레임 수신 시각
-        self.cam1_last_detect_ts = 0.0     # 마지막 검출 시각
-        self.cam1_last_conf      = 0.0     # 마지막 검출 confidence
-        self.cam1_status         = 'disconnected'  # normal / delay / disconnected
-        self.cam1_detect_label   = 'none'          # tray_detected / none
+        # ── STM2 상태 ─────────────────────────
+        self.stm2_state  = 'idle'
+        self.pi2_alive   = False
+        self.pi2_last_hb = 0.0
 
-        # ── 카메라 영상 ──────
-        self.cam1_last_bbox = None
-        self.cam1_last_bbox_ts = 0.0
+        # ── 카메라 상태 ───────────────────────
+        self.cam1_connected      = False
+        self.cam1_last_frame_ts  = 0.0
+        self.cam1_last_detect_ts = 0.0
+        self.cam1_last_conf      = 0.0
+        self.cam1_status         = 'disconnected'
+        self.cam1_detect_label   = 'none'
+        self.cam1_last_bbox      = None
+        self.cam1_last_bbox_ts   = 0.0
         self.cam1_overlay_hold_sec = 0.7
         self.cam1_last_conf_hold = 0.0
 
-        # ── 공통 ───────────────────────────────────────
-        self.emergency   = False   # 긴급정지 상태 (True면 모든 동작 차단)
+        # ── 공통 ──────────────────────────────
+        self.emergency = False
 
-        # ── YOLO 모델 ─────────────────────────────────
+        # ── YOLO 모델 ─────────────────────────
+        print('[YOLO] 모델 로딩 중...')
         self.model = YOLO(MODEL_PATH)
+        print('[YOLO] 로딩 완료')
 
-        # ── 발행 토픽 ─────────────────────────────────
-        self.pub_pi1     = self.create_publisher(String, '/pi1/uart_cmd',  10)
-        self.pub_pi2     = self.create_publisher(String, '/pi2/uart_cmd',  10)
-        self.pub_pi1_link= self.create_publisher(String, '/pi1/interpi_send', 10)
-        self.pub_pi2_link= self.create_publisher(String, '/pi2/interpi_send', 10)
-        self.pub_monitor = self.create_publisher(String, '/monitor/state', 10)
+        # ── Publisher ─────────────────────────
+        # Pi1 → STM1 명령 (바이너리)
+        self.pub_pi1      = self.create_publisher(
+            UInt8MultiArray, '/pi1/uart_cmd', 10)
+        # Pi2 → STM2 명령 (문자열, Pi2 준비되면 바이너리로 변경)
+        self.pub_pi2      = self.create_publisher(
+            String, '/pi2/uart_cmd', 10)
+        # Pi1 ↔ Pi2 중계
+        self.pub_pi1_link = self.create_publisher(
+            String, '/pi1/interpi_send', 10)
+        self.pub_pi2_link = self.create_publisher(
+            String, '/pi2/interpi_send', 10)
+        # 모니터 노드용
+        self.pub_monitor  = self.create_publisher(
+            String, '/monitor/state', 10)
 
-        # ── 구독 토픽 ─────────────────────────────────
-        self.create_subscription(String, '/pi1/uart_response', self._on_uart1,     10)
-        self.create_subscription(String, '/pi2/uart_response', self._on_uart2,     10)
-        self.create_subscription(String, '/pi1/interpi_rx', self._on_link_to_pi1,     10)
-        self.create_subscription(String, '/pi2/interpi_rx', self._on_link_to_pi2,     10)
-        self.create_subscription(String, '/system/heartbeat',  self._on_heartbeat, 10)
-        self.create_subscription(String, '/system/command',    self._on_command,   10)
+        # ── Subscriber ────────────────────────
+        self.create_subscription(
+            String, '/pi1/uart_response',
+            self._on_uart1, 10)
+        self.create_subscription(
+            String, '/pi2/uart_response',
+            self._on_uart2, 10)
+        self.create_subscription(
+            String, '/pi1/interpi_rx',
+            self._on_link_to_pi1, 10)
+        self.create_subscription(
+            String, '/pi2/interpi_rx',
+            self._on_link_to_pi2, 10)
+        self.create_subscription(
+            String, '/system/heartbeat',
+            self._on_heartbeat, 10)
+        self.create_subscription(
+            String, '/system/command',
+            self._on_command, 10)
+        # Pi2 플래그 업데이트
+        self.create_subscription(
+            String, '/pi2/flag_update',
+            self._on_pi2_flag, 10)
 
-        # ── 타이머 ────────────────────────────────────
         self.create_timer(1.0, self._check_heartbeat)
         self.create_timer(0.5, self._publish_monitor)
 
         self.get_logger().info('Master 노드 시작')
 
-    # ══════════════════════════════════════════════════════
-    # 라파1 / STM32 #1 상태 수신
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════
+    # STM1 상태 수신
+    # ══════════════════════════════════════════
     def _on_uart1(self, msg: String):
         line = msg.data.strip()
         self.get_logger().info(f'[STM1] {line}')
@@ -130,8 +211,6 @@ class MasterNode(Node):
         with self.state_lock:
             if line == 'STM1:PC:STATE:HOMING':
                 self.stm_state = 'homing'
-            elif line == 'STM1:PC:DONE:HOMING':
-                pass
             elif line == 'STM1:PC:STATE:RUN_CONVEYOR1':
                 self.stm_state = 'running'
             elif line == 'STM1:PC:STATE:SEEDING':
@@ -140,26 +219,37 @@ class MasterNode(Node):
                 self.stm_state = 'ejecting'
             elif line == 'STM1:PC:STATE:WAIT_SCARA_PICK':
                 self.stm_state = 'waiting_scara'
-            elif line == 'STM1:PC:STATE:SCARA_PICK_STARTED':
-                self.stm_state = 'waiting_scara'
             elif line == 'STM1:PC:STATE:ESTOP':
                 self.stm_state  = 'error'
                 self.start_flag = False
                 self.get_logger().warn('[STM1] ESTOP')
             elif line == 'STM1:PC:DONE:CYCLE1':
+                # 파종 완료 → 스카라에 SSF=1, CRF=1 전달
+                self.stm_state  = 'waiting_scara'
+                self._relay_to_pi2('SSF:1')
+                self._relay_to_pi2('CRF:1')
+                self.get_logger().info('파종 완료 → Pi2로 SSF=1, CRF=1')
+            elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
                 self.start_flag = False
-                self.get_logger().info('[STM1] 사이클 완료 → idle')
             elif line.startswith('STM1:PC:ERR:'):
                 self.stm_state  = 'error'
                 self.start_flag = False
                 self.get_logger().error(line)
+            elif line.startswith('STM1:PC:FLAG:'):
+                # STM1:PC:FLAG:SSF:1
+                parts = line.split(':')
+                if len(parts) == 5:
+                    k = parts[3].lower()
+                    v = int(parts[4])
+                    if k in self.flags:
+                        self.flags[k] = v
             elif line.startswith('STM1:PI1:ACK:'):
                 self.get_logger().info(f'ACK: {line}')
 
-    # ══════════════════════════════════════════════════════
-    # 라파2 / STM32 #2 상태 수신
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════
+    # STM2 상태 수신
+    # ══════════════════════════════════════════
     def _on_uart2(self, msg: String):
         line = msg.data.strip()
         self.get_logger().info(f'[STM2] {line}')
@@ -173,15 +263,11 @@ class MasterNode(Node):
                 self.stm2_state = 'z_fix'
             elif line == 'STM2:PC:STATE:HARVESTING':
                 self.stm2_state = 'harvesting'
-            elif line == 'STM2:PC:STATE:HARVEST_DONE':
-                self.stm2_state = 'harvesting'
             elif line == 'STM2:PC:STATE:EJECTING':
-                self.stm2_state = 'ejecting'
-            elif line == 'STM2:PC:STATE:EJECT_DONE':
                 self.stm2_state = 'ejecting'
             elif line == 'STM2:PC:DONE:CYCLE':
                 self.stm2_state = 'idle'
-                self.get_logger().info('[STM2] 사이클 완료 → idle')
+                self.get_logger().info('[STM2] 사이클 완료')
             elif line == 'STM2:PC:STATE:RESET_DONE':
                 self.stm2_state = 'idle'
             elif line == 'STM2:PC:STATE:ESTOP':
@@ -193,9 +279,52 @@ class MasterNode(Node):
             elif line.startswith('STM2:PI2:ACK:'):
                 self.get_logger().info(f'ACK: {line}')
 
-    # ══════════════════════════════════════════════════════
-    # heartbeat 수신
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════
+    # Pi2 플래그 업데이트
+    # ══════════════════════════════════════════
+    def _on_pi2_flag(self, msg: String):
+        """
+        Pi2에서 오는 플래그 업데이트
+        형식: FLAG:SMF:1
+        """
+        line  = msg.data.strip()
+        parts = line.split(':')
+
+        with self.state_lock:
+            if len(parts) == 3 and parts[0] == 'FLAG':
+                k = parts[1].lower()
+                v = int(parts[2])
+                if k in self.flags:
+                    self.flags[k] = v
+                    self.get_logger().info(
+                        f'Pi2 플래그: {k}={v}')
+
+                # 발아 완료 → Pi2에 이동 명령
+                if k in ('ulf', 'urf') and v == 1:
+                    self._relay_to_pi2(f'UV_DONE:{k.upper()}')
+
+                # 성장 완료 → Pi2에 이동 명령
+                if k in ('wlf', 'wrf') and v == 1:
+                    self._relay_to_pi2(f'WATER_DONE:{k.upper()}')
+
+    # ══════════════════════════════════════════
+    # Pi1 ↔ Pi2 중계 수신 확인
+    # ══════════════════════════════════════════
+    def _on_link_to_pi1(self, msg: String):
+        payload = msg.data.strip()
+        if payload:
+            self.get_logger().info(
+                f'[InterPi] Pi2→Pi1 확인: {payload}')
+
+    def _on_link_to_pi2(self, msg: String):
+        payload = msg.data.strip()
+        if payload:
+            self.get_logger().info(
+                f'[InterPi] Pi1→Pi2 확인: {payload}')
+
+    # ══════════════════════════════════════════
+    # Heartbeat + 카메라 상태 판정
+    # ══════════════════════════════════════════
     def _on_heartbeat(self, msg: String):
         now = time.time()
         with self.state_lock:
@@ -204,28 +333,13 @@ class MasterNode(Node):
             elif msg.data == 'pi2':
                 self.pi2_last_hb = now
 
-    # ══════════════════════════════════════════════════════
-    # 
-    # ══════════════════════════════════════════════════════
-    def _on_link_to_pi1(self, msg: String):
-        payload = msg.data.strip()
-        if payload:
-            self.get_logger().info(f'[InterPi] Pi2->Pi1 수신 확인: {payload}')
-
-    def _on_link_to_pi2(self, msg: String):
-        payload = msg.data.strip()
-        if payload:
-            self.get_logger().info(f'[InterPi] Pi1->Pi2 수신 확인: {payload}')
-
-    # ══════════════════════════════════════════════════════
-    # heartbeat + 카메라 상태 판정
-    # ══════════════════════════════════════════════════════
     def _check_heartbeat(self):
         now = time.time()
         with self.state_lock:
             self.pi1_alive = (now - self.pi1_last_hb) < 3.0
             self.pi2_alive = (now - self.pi2_last_hb) < 3.0
 
+            # 카메라 상태 판정
             if not self.cam1_connected:
                 self.cam1_status = 'disconnected'
             else:
@@ -237,12 +351,13 @@ class MasterNode(Node):
                 else:
                     self.cam1_status = 'disconnected'
 
+            # 감지 라벨 타임아웃
             if (now - self.cam1_last_detect_ts) > 3.0:
                 self.cam1_detect_label = 'none'
 
-    # ══════════════════════════════════════════════════════
-    # 외부 명령 처리
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════
+    # 외부 명령
+    # ══════════════════════════════════════════
     def _on_command(self, msg: String):
         cmd = msg.data.strip()
 
@@ -250,23 +365,25 @@ class MasterNode(Node):
             with self.state_lock:
                 self.emergency  = True
                 self.start_flag = False
-            self._send_pi1('PC:STM1:CMD:ESTOP')
-            self._send_pi2('PC:STM2:CMD:ESTOP')
-            self.get_logger().warn('EMERGENCY — Pi1·Pi2 전송')
+            self._send_binary(make_estop())       # STM1 긴급정지
+            self._send_pi2('PC:STM2:CMD:ESTOP')  # STM2 긴급정지
+            self.get_logger().warn('EMERGENCY!')
 
         elif cmd == 'RESET':
             with self.state_lock:
-                self.emergency   = False
-                self.start_flag  = False
-                self.stm_state   = 'idle'
-                self.stm2_state  = 'idle'
-                self.stable_cnt  = 0
-                self.no_tray_cnt = 0
+                self.emergency         = False
+                self.start_flag        = False
+                self.stm_state         = 'idle'
+                self.stm2_state        = 'idle'
+                self.stable_cnt        = 0
+                self.no_tray_cnt       = 0
                 self.cam1_detect_label = 'none'
-                self.cam1_last_conf = 0.0
-            self._send_pi1('PC:STM1:CMD:RESET')
+                self.cam1_last_conf    = 0.0
+                for k in self.flags:
+                    self.flags[k] = 0
+            self._send_binary(make_reset())
             self._send_pi2('PC:STM2:CMD:RESET')
-            self.get_logger().info('RESET — Pi1·Pi2 전송')
+            self.get_logger().info('RESET')
 
         elif cmd == 'START_2':
             with self.state_lock:
@@ -274,38 +391,36 @@ class MasterNode(Node):
                     self.get_logger().warn('긴급정지 중 — START_2 무시')
                     return
                 if self.stm2_state != 'idle':
-                    self.get_logger().warn(f'STM2 동작 중({self.stm2_state}) — START_2 무시')
+                    self.get_logger().warn(
+                        f'STM2 동작 중({self.stm2_state}) — 무시')
                     return
             self._send_pi2('PI2:STM2:EVT:TRAY_PLACED')
-            self.get_logger().info('STM2 수동 시작 — TRAY_PLACED 전송')
+            self.get_logger().info('STM2 수동 시작')
 
-        #라파1 -> 라파2 직접 통신 트리거 (PC에서 테스트/운영 가능)
         elif cmd.startswith('PI1_TO_PI2:'):
             payload = cmd.split(':', 1)[1].strip()
-            if not payload:
-                self.getlogger().warn('PI1_TO_PI2 전송 실패: payload 없음')
-                return
-            self._send_pi1_link(payload)
-            self.get_logger().info(f'InterPi 송신 요청: Pi1->Pi2 "{payload}"')
+            if payload:
+                self._relay_to_pi2(payload)
+                self.get_logger().info(
+                    f'InterPi Pi1→Pi2: {payload}')
 
-        #라파1 -> 라파2 직접 통신 트리거 (PC에서 테스트/운영 가능)
         elif cmd.startswith('PI2_TO_PI1:'):
             payload = cmd.split(':', 1)[1].strip()
-            if not payload:
-                self.getlogger().warn('PI2_TO_PI1 전송 실패: payload 없음')
-                return
-            self._send_pi2_link(payload)
-            self.get_logger().info(f'InterPi 송신 요청: Pi2->Pi1 "{payload}"') 
+            if payload:
+                self._relay_to_pi1(payload)
+                self.get_logger().info(
+                    f'InterPi Pi2→Pi1: {payload}')
 
         else:
-            self.get_logger().warn(f'알 수 없는 커맨드: {cmd}')
+            self.get_logger().warn(f'알 수 없는 명령: {cmd}')
 
-    # ══════════════════════════════════════════════════════
-    # UART 명령 송신
-    # ══════════════════════════════════════════════════════
-    def _send_pi1(self, text: str):
-        msg = String()
-        msg.data = text
+    # ══════════════════════════════════════════
+    # 송신
+    # ══════════════════════════════════════════
+    def _send_binary(self, frame: list):
+        """Pi1 → STM1 바이너리 전송"""
+        msg = UInt8MultiArray()
+        msg.data = frame
         self.pub_pi1.publish(msg)
 
     def _send_pi2(self, text: str):
@@ -313,24 +428,24 @@ class MasterNode(Node):
         msg.data = text
         self.pub_pi2.publish(msg)
 
-    def _send_pi1_link(self, payload: str):
+    def _relay_to_pi2(self, payload: str):
+        """Pi1을 통해 Pi2로 전달"""
         msg = String()
         msg.data = payload
         self.pub_pi1_link.publish(msg)
 
-    def _send_pi2_link(self, payload: str):
+    def _relay_to_pi1(self, payload: str):
+        """Pi2를 통해 Pi1으로 전달"""
         msg = String()
         msg.data = payload
         self.pub_pi2_link.publish(msg)
-    
 
-    # ══════════════════════════════════════════════════════
-    # 모니터 상태 발행
-    # ══════════════════════════════════════════════════════
+    # ══════════════════════════════════════════
+    # 모니터 상태 publish
+    # ══════════════════════════════════════════
     def _publish_monitor(self):
         with self.state_lock:
-            msg = String()
-            msg.data = (
+            status = (
                 f'start_flag:{self.start_flag},'
                 f'stm_state:{self.stm_state},'
                 f'stm2_state:{self.stm2_state},'
@@ -342,132 +457,139 @@ class MasterNode(Node):
                 f'cam1_detect_label:{self.cam1_detect_label},'
                 f'cam1_last_conf:{self.cam1_last_conf:.2f}'
             )
+            flags_str = ','.join(
+                f'{k}:{v}' for k, v in self.flags.items()
+            )
+        msg = String()
+        msg.data = status + ',' + flags_str
         self.pub_monitor.publish(msg)
 
 
-# ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════
 # YOLO 프레임 처리
-# ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════
 def process_frame(node: MasterNode, frame: np.ndarray):
-    #cv2.imwrite('/home/thumb/debug_frame.jpg', frame)  # 임시 저장
-    #print(f'[DEBUG] 프레임 수신: {frame.shape}')  # 이 줄 추가
     results = node.model(frame, verbose=False)[0]
 
     best = None
     for box in results.boxes:
         cls_id = int(box.cls[0].item())
-        conf = float(box.conf[0].item())
-
+        conf   = float(box.conf[0].item())
         if cls_id == TRAY_CLASS_ID:
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             if best is None or conf > best[4]:
                 best = (x1, y1, x2, y2, conf)
 
-    disp = frame.copy()
+    disp     = frame.copy()
     send_now = False
-    now = time.time()
-
-    with node.state_lock:
-        emergency = node.emergency
+    now      = time.time()
 
     if best is None:
         with node.state_lock:
-            node.stable_cnt = 0
+            node.stable_cnt   = 0
             node.no_tray_cnt += 1
             if node.no_tray_cnt >= 3:
                 node.cam1_detect_label = 'none'
-                node.cam1_last_conf = 0.0
-
+                node.cam1_last_conf    = 0.0
     else:
         x1, y1, x2, y2, conf = best
 
         if conf < MIN_CONF:
             with node.state_lock:
-                node.stable_cnt = 0
-                node.no_tray_cnt = 0
+                node.stable_cnt        = 0
+                node.no_tray_cnt       = 0
                 node.cam1_detect_label = 'none'
-                node.cam1_last_conf = conf
-        
+                node.cam1_last_conf    = conf
         else:
             h, w = frame.shape[:2]
             cx = (x1 + x2) / 2 / w
             cy = (y1 + y2) / 2 / h
-            in_roi = (ROI_X_MIN < cx < ROI_X_MAX) and (ROI_Y_MIN < cy < ROI_Y_MAX)
-            # in_roi 계산 아래에 추가
             box_w = x2 - x1
             box_h = y2 - y1
-            # 트레이가 화면의 최소 25% 이상 차지할 때만 감지
-            min_box_ratio = 0.25
-            in_roi = in_roi and (box_w / w > min_box_ratio) and (box_h / h > min_box_ratio)
 
+            # ROI + 박스 크기 조건
+            in_roi = (
+                ROI_X_MIN < cx < ROI_X_MAX
+                and ROI_Y_MIN < cy < ROI_Y_MAX
+                and box_w / w > MIN_BOX_RATIO
+                and box_h / h > MIN_BOX_RATIO
+            )
 
             with node.state_lock:
                 if in_roi:
                     node.cam1_last_detect_ts = now
-                    node.cam1_last_conf = conf
-                    node.cam1_detect_label = 'tray_detected'
-                    node.stable_cnt += 1
-                    node.no_tray_cnt = 0
-
-                    node.cam1_last_bbox = (x1, y1, x2, y2)
-                    node.cam1_last_bbox_ts = now
+                    node.cam1_last_conf      = conf
+                    node.cam1_detect_label   = 'tray_detected'
+                    node.stable_cnt         += 1
+                    node.no_tray_cnt         = 0
+                    node.cam1_last_bbox      = (x1, y1, x2, y2)
+                    node.cam1_last_bbox_ts   = now
                     node.cam1_last_conf_hold = conf
 
+                    # 조건 충족 시 SSF=1 전송
                     if (
-                        node.stable_cnt >= STABLE_FRAMES
+                        node.stable_cnt  >= STABLE_FRAMES
                         and not node.start_flag
                         and node.stm_state == 'idle'
                         and (now - node.last_tx) > COOLDOWN_SEC
                         and not node.emergency
+                        and node.pi1_alive
                     ):
-                        node.start_flag = True
-                        node.last_tx = now
-                        node.stable_cnt = 0
+                        node.start_flag  = True
+                        node.last_tx     = now
+                        node.stable_cnt  = 0
+                        node.flags['ssf'] = 1
                         send_now = True
                 else:
-                    node.stable_cnt = 0
+                    node.stable_cnt   = 0
                     node.no_tray_cnt += 1
 
     if send_now:
-        node._send_pi1('PI1:STM1:EVT:CAM1_TRAY_DETECTED')
-        node.get_logger().info('트레이 감지 → CAM1_TRAY_DETECTED')
+        # 바이너리 SSF=1 프레임 전송
+        msg = UInt8MultiArray()
+        msg.data = make_flag_u8(PID_SSF, 1)
+        node.pub_pi1.publish(msg)
+        node.get_logger().info('트레이 감지 → SSF=1 전송')
 
+    # ── 화면 오버레이 ─────────────────────────
     with node.state_lock:
-        start_flag = node.start_flag
-        stm_state = node.stm_state
-        stable_cnt = node.stable_cnt
-        last_bbox = node.cam1_last_bbox
-        last_bbox_ts = node.cam1_last_bbox_ts
-        hold_sec = node.cam1_overlay_hold_sec
-        last_conf_hold = node.cam1_last_conf_hold
-        emergency = node.emergency
+        start_flag       = node.start_flag
+        stm_state        = node.stm_state
+        stable_cnt       = node.stable_cnt
+        last_bbox        = node.cam1_last_bbox
+        last_bbox_ts     = node.cam1_last_bbox_ts
+        hold_sec         = node.cam1_overlay_hold_sec
+        last_conf_hold   = node.cam1_last_conf_hold
+        emergency        = node.emergency
+        pi1_ok           = node.pi1_alive
 
-    # ROI 박스 표시 
     h, w = disp.shape[:2]
-    cv2.rectangle(disp,
-                  (int(w * ROI_X_MIN), int(h * ROI_Y_MIN)),
-                  (int(w * ROI_X_MAX), int(h * ROI_Y_MAX)),
-                  (255, 255, 0), 2)
 
-    cv2.putText(disp, f"start_flag={int(start_flag)}", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2)
-    cv2.putText(disp, f"stm_state={stm_state}", (10, 65),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
-    cv2.putText(disp, f"stable={stable_cnt}", (10, 100),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+    # ROI 박스
+    cv2.rectangle(disp,
+        (int(w * ROI_X_MIN), int(h * ROI_Y_MIN)),
+        (int(w * ROI_X_MAX), int(h * ROI_Y_MAX)),
+        (255, 255, 0), 2)
+
+    cv2.putText(disp, f'start_flag={int(start_flag)}',
+        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,255), 2)
+    cv2.putText(disp, f'stm_state={stm_state}',
+        (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,0), 2)
+    cv2.putText(disp, f'stable={stable_cnt}  pi1={"OK" if pi1_ok else "NG"}',
+        (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,0), 2)
 
     if last_bbox is not None and (now - last_bbox_ts) < hold_sec:
         bx1, by1, bx2, by2 = last_bbox
-        cv2.rectangle(disp, (bx1, by1), (bx2, by2), (0, 255, 0), 2)
-        cv2.putText(disp, f"tray {last_conf_hold:.2f}", (bx1, by1 - 8),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.rectangle(disp, (bx1,by1), (bx2,by2), (0,255,0), 2)
+        cv2.putText(disp, f'tray {last_conf_hold:.2f}',
+            (bx1, by1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
     else:
-        cv2.putText(disp, "tray: none", (10, 135),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        cv2.putText(disp, 'tray: none',
+            (10, 135), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2)
 
     if emergency:
-        cv2.putText(disp, "EMERGENCY", (10, 170),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+        cv2.putText(disp, 'EMERGENCY',
+            (10, 170), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
 
     try:
         frame_queue.put_nowait(disp)
@@ -475,22 +597,20 @@ def process_frame(node: MasterNode, frame: np.ndarray):
         pass
 
 
-# ══════════════════════════════════════════════════════════
-# 라파1 카메라 스트림 수신 루프
-# ════════════════════════════════════════  ══════════════════
+# ══════════════════════════════════════════════
+# 카메라 스트림 수신
+# ══════════════════════════════════════════════
 def video_receive_loop(node: MasterNode):
     # 캘리브레이션 로드
     calib = np.load(CALIB_PATH)
-    K = calib['camera_matrix']
-    dist = calib['dist_coeffs']   
-    # 리맵 준비 (첫 프레임 받은 뒤 초기화)
+    K     = calib['camera_matrix']
+    dist  = calib['dist_coeffs']
     map1, map2 = None, None
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(('0.0.0.0', STREAM_PORT))
     server.listen(1)
-
     print(f'[Stream] Pi1 연결 대기 (port={STREAM_PORT})')
 
     while rclpy.ok():
@@ -502,46 +622,51 @@ def video_receive_loop(node: MasterNode):
             with node.state_lock:
                 node.cam1_connected = True
 
-            data = b''
+            data         = b''
             payload_size = struct.calcsize('>I')
 
             while rclpy.ok():
+                # 프레임 크기 수신
                 while len(data) < payload_size:
                     packet = conn.recv(4096)
                     if not packet:
-                        raise ConnectionError('Pi1 stream disconnected')
+                        raise ConnectionError('stream disconnected')
                     data += packet
 
-                packed_msg_size = data[:payload_size]
-                data = data[payload_size:]
-                msg_size = struct.unpack('>I', packed_msg_size)[0]
+                msg_size = struct.unpack('>I', data[:payload_size])[0]
+                data     = data[payload_size:]
 
+                # 프레임 데이터 수신
                 while len(data) < msg_size:
                     packet = conn.recv(4096)
                     if not packet:
-                        raise ConnectionError('Pi1 stream disconnected')
+                        raise ConnectionError('stream disconnected')
                     data += packet
 
                 frame_data = data[:msg_size]
-                data = data[msg_size:]
+                data       = data[msg_size:]
 
-                arr = np.frombuffer(frame_data, dtype=np.uint8)
-                frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                frame = cv2.imdecode(
+                    np.frombuffer(frame_data, dtype=np.uint8),
+                    cv2.IMREAD_COLOR)
                 if frame is None:
-                    continue          
+                    continue
 
                 # 캘리브레이션 맵 초기화 (최초 1회)
                 if map1 is None:
                     h, w = frame.shape[:2]
-                    newK, roi = cv2.getOptimalNewCameraMatrix(K, dist, (w, h), 0, (w, h))
-                    map1, map2 = cv2.initUndistortRectifyMap(K, dist, None, newK, (w, h), cv2.CV_16SC2)
+                    newK, _ = cv2.getOptimalNewCameraMatrix(
+                        K, dist, (w,h), 0, (w,h))
+                    map1, map2 = cv2.initUndistortRectifyMap(
+                        K, dist, None, newK, (w,h), cv2.CV_16SC2)
                     print('[Calib] 왜곡 보정 맵 초기화 완료')
-                # undistort 적용
+
+                # 왜곡 보정
                 frame = cv2.remap(frame, map1, map2, cv2.INTER_LINEAR)
+
                 with node.state_lock:
                     node.cam1_last_frame_ts = time.time()
 
-                #print(f'[DEBUG] 프레임 디코딩 성공: {frame.shape}')  # 이 줄 추가
                 process_frame(node, frame)
 
         except Exception as e:
@@ -552,7 +677,6 @@ def video_receive_loop(node: MasterNode):
                     conn.close()
                 except Exception:
                     pass
-
             with node.state_lock:
                 node.cam1_connected = False
 
@@ -561,15 +685,16 @@ def main(args=None):
     rclpy.init(args=args)
     node = MasterNode()
 
-    t = threading.Thread(target=video_receive_loop, args=(node,), daemon=True)
-    t.start()
+    threading.Thread(
+        target=video_receive_loop,
+        args=(node,), daemon=True).start()
 
     try:
         while rclpy.ok():
             rclpy.spin_once(node, timeout_sec=0.01)
             try:
                 frame = frame_queue.get_nowait()
-                cv2.imshow("Pi1 Camera", frame)
+                cv2.imshow('Pi1 Camera', frame)
                 cv2.waitKey(1)
             except queue.Empty:
                 pass
@@ -577,8 +702,15 @@ def main(args=None):
         pass
     finally:
         cv2.destroyAllWindows()
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':
