@@ -217,10 +217,10 @@ class MasterNode(Node):
                 self.start_flag = False
                 self.get_logger().warn('[STM1] ESTOP')
             elif line == 'STM1:PC:DONE:CYCLE1':
-            # 파종 완료 → PC가 직접 Pi2에 SSF=1, CRF=1 전송
+            # 스카라에 SSF=1 전송 (라파2를 통해 스카라로)
                 self.stm_state = 'waiting_scara'
-                self._send_binary_pi2(make_flag_u8(PID_SSF, 1))
-                self._send_binary_pi2(make_flag_u8(PID_CRF, 1))
+                self._send_scara(make_flag_u8(PID_SSF, 1))
+                self._send_scara(make_flag_u8(PID_CRF, 1))
                 self.get_logger().info('파종 완료 → Pi2에 SSF=1, CRF=1 전송')
             elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
@@ -246,6 +246,14 @@ class MasterNode(Node):
     def _on_uart2(self, msg: String):
         line = msg.data.strip()
         self.get_logger().info(f'[STM2] {line}')
+
+        # 스카라가 CRF=0 전송 → STM1 초기화 트리거
+        if line == 'SCARA:PC:FLAG:CRF:0':
+            self.get_logger().info('스카라 CRF=0 → STM1에 CRF=0 전달')
+            self._send_binary(make_flag_u8(PID_CRF, 0))  # 라파1 → STM1
+            with self.state_lock:
+                self.flags['crf'] = 0
+            return
 
         with self.state_lock:
             if line == 'STM2:PC:STATE:CONVEY_RUN':
@@ -407,6 +415,25 @@ class MasterNode(Node):
         """Pi2 → STM2 바이너리 전송"""
         msg      = UInt8MultiArray()
         msg.data = list(frame)  # bytes도 list로 변환
+        self.pub_pi2.publish(msg)
+
+    def _send_scara(self, frame):
+        """PC → 스카라 바이너리 전송
+        앞에 대상 식별자 0x01 붙임"""
+        msg      = UInt8MultiArray()
+        msg.data = [0x01] + list(frame)
+        self.pub_pi2.publish(msg)
+
+    def _send_manip(self, frame):
+        """PC → 매니퓰레이터 바이너리 전송"""
+        msg      = UInt8MultiArray()
+        msg.data = [0x02] + list(frame)
+        self.pub_pi2.publish(msg)
+
+    def _send_stm2(self, frame):
+        """PC → STM2 바이너리 전송"""
+        msg      = UInt8MultiArray()
+        msg.data = [0x03] + list(frame)
         self.pub_pi2.publish(msg)
 
     # ══════════════════════════════════════════
