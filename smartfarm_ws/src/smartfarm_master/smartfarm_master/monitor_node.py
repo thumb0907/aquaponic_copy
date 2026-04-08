@@ -66,6 +66,7 @@ class MonitorNode(Node):
         }
 
         self.pi1_last_hb = 0.0
+        self.pi2_last_hb = 0.0 
 
         self.create_subscription(
             String, '/pi1/uart_response',
@@ -131,10 +132,15 @@ class MonitorNode(Node):
     def _on_hb(self, msg: String):
         if msg.data == 'pi1':
             self.pi1_last_hb = time.time()
+        elif msg.data == 'pi2':          
+            self.pi2_last_hb = time.time()
 
     def _refresh(self):
         alive = (time.time() - self.pi1_last_hb) < 3.0
-        self.status['pi1_alive'] = alive
+        
+        self.status['pi1_alive'] = (time.time() - self.pi1_last_hb) < 3.0
+        self.status['pi2_alive'] = (time.time() - self.pi2_last_hb) < 3.0 
+        
 
         if self.mode == 'stm':
             self._draw_stm()
@@ -224,8 +230,8 @@ class MonitorNode(Node):
                  if alive else f'{C.RED}● 끊김{C.RESET}'        
         print(f'  Pi1 연결    :  {p1dot}')
 
-         # Pi2 연결 
-        p2dot = f'{C.GREEN}● 연결됨{C.RESET}' \
+        # Pi2 연결 
+        p2dot  = f'{C.GREEN}● 연결됨{C.RESET}' \
                  if alive2 else f'{C.RED}● 끊김{C.RESET}'
         print(f'  Pi2 연결    :  {p2dot}')
 

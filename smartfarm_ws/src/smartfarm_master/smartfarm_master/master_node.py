@@ -135,6 +135,7 @@ class MasterNode(Node):
         self.stm2_state  = 'idle'
         self.pi2_alive   = False
         self.pi2_last_hb = 0.0
+        
 
         # ── 카메라 상태 ───────────────────────
         self.cam1_connected      = False
@@ -182,12 +183,7 @@ class MasterNode(Node):
             self._on_heartbeat, 10)
         self.create_subscription(
             String, '/system/command',
-            self._on_command, 10)
-        
-        # Pi2 플래그 업데이트
-        self.create_subscription(
-            String, '/pi2/flag_update',
-            self._on_pi2_flag, 10)
+            self._on_command, 10)              
 
         self.create_timer(1.0, self._check_heartbeat)
         self.create_timer(0.5, self._publish_monitor)
@@ -300,28 +296,28 @@ class MasterNode(Node):
                     self.get_logger().info(
                         f'Pi2 플래그: {k}={v}')
 
-                # 발아 완료 → Pi2에 이동 명령
-                if k in ('ulf', 'urf') and v == 1:
-                    self._relay_to_pi2(f'UV_DONE:{k.upper()}')
+                # 발아 완료 → Pi2에 이동 명령 추후 구현
+                #if k in ('ulf', 'urf') and v == 1:
+                #    self._relay_to_pi2(f'UV_DONE:{k.upper()}')
 
-                # 성장 완료 → Pi2에 이동 명령
-                if k in ('wlf', 'wrf') and v == 1:
-                    self._relay_to_pi2(f'WATER_DONE:{k.upper()}')
+                # 성장 완료 → Pi2에 이동 명령 추후 구현
+                #if k in ('wlf', 'wrf') and v == 1:
+                #    self._relay_to_pi2(f'WATER_DONE:{k.upper()}')
 
     # ══════════════════════════════════════════
     # Pi1 ↔ Pi2 중계 수신 확인
     # ══════════════════════════════════════════
-    def _on_link_to_pi1(self, msg: String):
-        payload = msg.data.strip()
-        if payload:
-            self.get_logger().info(
-                f'[InterPi] Pi2→Pi1 확인: {payload}')
+    # def _on_link_to_pi1(self, msg: String):
+    #     payload = msg.data.strip()
+    #     if payload:
+    #         self.get_logger().info(
+    #             f'[InterPi] Pi2→Pi1 확인: {payload}')
 
-    def _on_link_to_pi2(self, msg: String):
-        payload = msg.data.strip()
-        if payload:
-            self.get_logger().info(
-                f'[InterPi] Pi1→Pi2 확인: {payload}')
+    # def _on_link_to_pi2(self, msg: String):
+    #     payload = msg.data.strip()
+    #     if payload:
+    #         self.get_logger().info(
+    #             f'[InterPi] Pi1→Pi2 확인: {payload}')
 
     # ══════════════════════════════════════════
     # Heartbeat + 카메라 상태 판정
