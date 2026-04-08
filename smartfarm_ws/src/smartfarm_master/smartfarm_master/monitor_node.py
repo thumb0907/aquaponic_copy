@@ -42,7 +42,9 @@ class MonitorNode(Node):
         self.status = {
             'start_flag': False,
             'stm_state':  'idle',
+            'stm2_state': 'idle',
             'pi1_alive':  False,
+            'pi2_alive':  False, 
             'emergency':  False,
         }
         self.flags = {
@@ -208,6 +210,7 @@ class MonitorNode(Node):
         os.system('clear')
 
         alive = self.status.get('pi1_alive', False)
+        alive2 = self.status.get('pi2_alive', False)
         emg   = self.status.get('emergency', False)
         sf    = self.status.get('start_flag', False)
         st    = self.status.get('stm_state', 'idle')
@@ -216,11 +219,18 @@ class MonitorNode(Node):
         print()
 
         # 연결 상태
+        # Pi1 연결 
         p1dot  = f'{C.GREEN}● 연결됨{C.RESET}' \
-                 if alive else f'{C.RED}● 끊김{C.RESET}'
+                 if alive else f'{C.RED}● 끊김{C.RESET}'        
+        print(f'  Pi1 연결    :  {p1dot}')
+
+         # Pi2 연결 
+        p2dot = f'{C.GREEN}● 연결됨{C.RESET}' \
+                 if alive2 else f'{C.RED}● 끊김{C.RESET}'
+        print(f'  Pi2 연결    :  {p2dot}')
+
         emgdot = f'{C.RED}{C.BOLD}● ON{C.RESET}' \
                  if emg else f'{C.GRAY}○ OFF{C.RESET}'
-        print(f'  Pi1 연결    :  {p1dot}')
         print(f'  긴급정지    :  {emgdot}')
         print()
 
