@@ -123,19 +123,20 @@ class MasterNode(Node):
         }
 
         # ── STM1 상태 ─────────────────────────
-        self.start_flag  = False
-        self.stm_state   = 'idle'
-        self.stable_cnt  = 0
-        self.no_tray_cnt = 0
-        self.last_tx     = 0.0
-        self.pi1_alive   = False
-        self.pi1_last_hb = 0.0
+        self.start_flag      = False
+        self.stm_state       = 'idle'
+        self.stable_cnt      = 0
+        self.no_tray_cnt     = 0
+        self.last_tx         = 0.0
+        self.pi1_alive       = False
+        self.pi1_last_hb     = 0.0
+        self.pi1_alive_prev  = False  # 연결/끊김 변화 감지용
 
         # ── STM2 상태 ─────────────────────────
-        self.stm2_state  = 'idle'
-        self.pi2_alive   = False
-        self.pi2_last_hb = 0.0
-        
+        self.stm2_state      = 'idle'
+        self.pi2_alive       = False
+        self.pi2_last_hb     = 0.0
+        self.pi2_alive_prev  = False  # 연결/끊김 변화 감지용
 
         # ── 카메라 상태 ───────────────────────
         self.cam1_connected      = False
@@ -161,7 +162,7 @@ class MasterNode(Node):
         # Pi1 → STM1 명령 (바이너리)
         self.pub_pi1     = self.create_publisher(
             UInt8MultiArray, '/pi1/uart_cmd', 10)
-        # Pi2 → STM2 명령 (바이너리) ← String에서 변경
+        # Pi2 → STM2 명령 (바이너리)
         self.pub_pi2     = self.create_publisher(
             UInt8MultiArray, '/pi2/uart_cmd', 10)
         # 모니터 노드용
@@ -176,14 +177,14 @@ class MasterNode(Node):
             String, '/pi2/uart_response',
             self._on_uart2, 10)
         self.create_subscription(
-            String, '/pi2/flag_update',      # Pi2 플래그 업데이트
+            String, '/pi2/flag_update',
             self._on_pi2_flag, 10)
         self.create_subscription(
             String, '/system/heartbeat',
             self._on_heartbeat, 10)
         self.create_subscription(
             String, '/system/command',
-            self._on_command, 10)              
+            self._on_command, 10)
 
         self.create_timer(1.0, self._check_heartbeat)
         self.create_timer(0.5, self._publish_monitor)
@@ -213,11 +214,12 @@ class MasterNode(Node):
                 self.start_flag = False
                 self.get_logger().warn('[STM1] ESTOP')
             elif line == 'STM1:PC:DONE:CYCLE1':
-            # 스카라에 SSF=1 전송 (라파2를 통해 스카라로)
-                self.stm_state = 'waiting_scara'
+                self.stm_state    = 'waiting_scara'
+                self.flags['ssf'] = 1  # ← PC 플래그 상태 동기화
+                self.flags['crf'] = 1  # ← PC 플래그 상태 동기화
                 self._send_scara(make_flag_u8(PID_SSF, 1))
                 self._send_scara(make_flag_u8(PID_CRF, 1))
-                self.get_logger().info('파종 완료 → Pi2에 SSF=1, CRF=1 전송')
+                self.get_logger().info('파종 완료 → 스카라에 SSF=1, CRF=1 전송')
             elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
                 self.start_flag = False
@@ -226,7 +228,6 @@ class MasterNode(Node):
                 self.start_flag = False
                 self.get_logger().error(line)
             elif line.startswith('STM1:PC:FLAG:'):
-                # STM1:PC:FLAG:SSF:1
                 parts = line.split(':')
                 if len(parts) == 5:
                     k = parts[3].lower()
@@ -246,7 +247,7 @@ class MasterNode(Node):
         # 스카라가 CRF=0 전송 → STM1 초기화 트리거
         if line == 'SCARA:PC:FLAG:CRF:0':
             self.get_logger().info('스카라 CRF=0 → STM1에 CRF=0 전달')
-            self._send_binary(make_flag_u8(PID_CRF, 0))  # 라파1 → STM1
+            self._send_binary(make_flag_u8(PID_CRF, 0))
             with self.state_lock:
                 self.flags['crf'] = 0
             return
@@ -262,7 +263,7 @@ class MasterNode(Node):
                 self.stm2_state = 'harvesting'
             elif line == 'STM2:PC:STATE:EJECTING':
                 self.stm2_state = 'ejecting'
-            elif line == 'STM2:PC:DONE:CYCLE':
+            elif line == 'STM2:PC:DONE:CYCLE2':          # 수정: CYCLE → CYCLE2
                 self.stm2_state = 'idle'
                 self.get_logger().info('[STM2] 사이클 완료')
             elif line == 'STM2:PC:STATE:RESET_DONE':
@@ -280,10 +281,7 @@ class MasterNode(Node):
     # Pi2 플래그 업데이트
     # ══════════════════════════════════════════
     def _on_pi2_flag(self, msg: String):
-        """
-        Pi2에서 오는 플래그 업데이트
-        형식: FLAG:SMF:1
-        """
+        """Pi2에서 오는 플래그 업데이트 — 형식: FLAG:SMF:1"""
         line  = msg.data.strip()
         parts = line.split(':')
 
@@ -293,31 +291,7 @@ class MasterNode(Node):
                 v = int(parts[2])
                 if k in self.flags:
                     self.flags[k] = v
-                    self.get_logger().info(
-                        f'Pi2 플래그: {k}={v}')
-
-                # 발아 완료 → Pi2에 이동 명령 추후 구현
-                #if k in ('ulf', 'urf') and v == 1:
-                #    self._relay_to_pi2(f'UV_DONE:{k.upper()}')
-
-                # 성장 완료 → Pi2에 이동 명령 추후 구현
-                #if k in ('wlf', 'wrf') and v == 1:
-                #    self._relay_to_pi2(f'WATER_DONE:{k.upper()}')
-
-    # ══════════════════════════════════════════
-    # Pi1 ↔ Pi2 중계 수신 확인
-    # ══════════════════════════════════════════
-    # def _on_link_to_pi1(self, msg: String):
-    #     payload = msg.data.strip()
-    #     if payload:
-    #         self.get_logger().info(
-    #             f'[InterPi] Pi2→Pi1 확인: {payload}')
-
-    # def _on_link_to_pi2(self, msg: String):
-    #     payload = msg.data.strip()
-    #     if payload:
-    #         self.get_logger().info(
-    #             f'[InterPi] Pi1→Pi2 확인: {payload}')
+                    self.get_logger().info(f'Pi2 플래그: {k}={v}')
 
     # ══════════════════════════════════════════
     # Heartbeat + 카메라 상태 판정
@@ -333,8 +307,25 @@ class MasterNode(Node):
     def _check_heartbeat(self):
         now = time.time()
         with self.state_lock:
-            self.pi1_alive = (now - self.pi1_last_hb) < 3.0
-            self.pi2_alive = (now - self.pi2_last_hb) < 3.0
+            pi1_now = (now - self.pi1_last_hb) < 3.0
+            pi2_now = (now - self.pi2_last_hb) < 3.0
+
+            # Pi1 연결 상태 변화 감지
+            if pi1_now and not self.pi1_alive_prev:
+                self.get_logger().info('[Pi1] 연결됨')
+            elif not pi1_now and self.pi1_alive_prev:
+                self.get_logger().warn('[Pi1] 연결 끊김')
+
+            # Pi2 연결 상태 변화 감지
+            if pi2_now and not self.pi2_alive_prev:
+                self.get_logger().info('[Pi2] 연결됨')
+            elif not pi2_now and self.pi2_alive_prev:
+                self.get_logger().warn('[Pi2] 연결 끊김')
+
+            self.pi1_alive      = pi1_now
+            self.pi2_alive      = pi2_now
+            self.pi1_alive_prev = pi1_now
+            self.pi2_alive_prev = pi2_now
 
             # 카메라 상태 판정
             if not self.cam1_connected:
@@ -391,7 +382,6 @@ class MasterNode(Node):
                     self.get_logger().warn(
                         f'STM2 동작 중({self.stm2_state}) — 무시')
                     return
-            # 트레이 올려놨다는 신호 → FF=1 바이너리 전송
             self._send_binary_pi2(make_flag_u8(PID_FF, 1))
             self.get_logger().info('STM2 시작 → FF=1 전송')
 
@@ -408,26 +398,25 @@ class MasterNode(Node):
         self.pub_pi1.publish(msg)
 
     def _send_binary_pi2(self, frame):
-        """Pi2 → STM2 바이너리 전송"""
+        """Pi2 → STM2 바이너리 전송 (식별자 없음 → STM2 fallback)"""
         msg      = UInt8MultiArray()
-        msg.data = list(frame)  # bytes도 list로 변환
+        msg.data = list(frame)
         self.pub_pi2.publish(msg)
 
     def _send_scara(self, frame):
-        """PC → 스카라 바이너리 전송
-        앞에 대상 식별자 0x01 붙임"""
+        """PC → 스카라 바이너리 전송 (식별자 0x01)"""
         msg      = UInt8MultiArray()
         msg.data = [0x01] + list(frame)
         self.pub_pi2.publish(msg)
 
     def _send_manip(self, frame):
-        """PC → 매니퓰레이터 바이너리 전송"""
+        """PC → 매니퓰레이터 바이너리 전송 (식별자 0x02)"""
         msg      = UInt8MultiArray()
         msg.data = [0x02] + list(frame)
         self.pub_pi2.publish(msg)
 
     def _send_stm2(self, frame):
-        """PC → STM2 바이너리 전송"""
+        """PC → STM2 바이너리 전송 (식별자 0x03)"""
         msg      = UInt8MultiArray()
         msg.data = [0x03] + list(frame)
         self.pub_pi2.publish(msg)
@@ -527,9 +516,9 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                         and not node.emergency
                         and node.pi1_alive
                     ):
-                        node.start_flag  = True
-                        node.last_tx     = now
-                        node.stable_cnt  = 0
+                        node.start_flag   = True
+                        node.last_tx      = now
+                        node.stable_cnt   = 0
                         node.flags['ssf'] = 1
                         send_now = True
                 else:
@@ -537,27 +526,25 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                     node.no_tray_cnt += 1
 
     if send_now:
-        # 바이너리 SSF=1 프레임 전송
-        msg = UInt8MultiArray()
+        msg      = UInt8MultiArray()
         msg.data = make_flag_u8(PID_SSF, 1)
         node.pub_pi1.publish(msg)
         node.get_logger().info('트레이 감지 → SSF=1 전송')
 
     # ── 화면 오버레이 ─────────────────────────
     with node.state_lock:
-        start_flag       = node.start_flag
-        stm_state        = node.stm_state
-        stable_cnt       = node.stable_cnt
-        last_bbox        = node.cam1_last_bbox
-        last_bbox_ts     = node.cam1_last_bbox_ts
-        hold_sec         = node.cam1_overlay_hold_sec
-        last_conf_hold   = node.cam1_last_conf_hold
-        emergency        = node.emergency
-        pi1_ok           = node.pi1_alive
+        start_flag     = node.start_flag
+        stm_state      = node.stm_state
+        stable_cnt     = node.stable_cnt
+        last_bbox      = node.cam1_last_bbox
+        last_bbox_ts   = node.cam1_last_bbox_ts
+        hold_sec       = node.cam1_overlay_hold_sec
+        last_conf_hold = node.cam1_last_conf_hold
+        emergency      = node.emergency
+        pi1_ok         = node.pi1_alive
 
     h, w = disp.shape[:2]
 
-    # ROI 박스
     cv2.rectangle(disp,
         (int(w * ROI_X_MIN), int(h * ROI_Y_MIN)),
         (int(w * ROI_X_MAX), int(h * ROI_Y_MAX)),
@@ -593,10 +580,9 @@ def process_frame(node: MasterNode, frame: np.ndarray):
 # 카메라 스트림 수신
 # ══════════════════════════════════════════════
 def video_receive_loop(node: MasterNode):
-    # 캘리브레이션 로드
-    calib = np.load(CALIB_PATH)
-    K     = calib['camera_matrix']
-    dist  = calib['dist_coeffs']
+    calib      = np.load(CALIB_PATH)
+    K          = calib['camera_matrix']
+    dist       = calib['dist_coeffs']
     map1, map2 = None, None
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -618,7 +604,6 @@ def video_receive_loop(node: MasterNode):
             payload_size = struct.calcsize('>I')
 
             while rclpy.ok():
-                # 프레임 크기 수신
                 while len(data) < payload_size:
                     packet = conn.recv(4096)
                     if not packet:
@@ -628,7 +613,6 @@ def video_receive_loop(node: MasterNode):
                 msg_size = struct.unpack('>I', data[:payload_size])[0]
                 data     = data[payload_size:]
 
-                # 프레임 데이터 수신
                 while len(data) < msg_size:
                     packet = conn.recv(4096)
                     if not packet:
@@ -644,7 +628,6 @@ def video_receive_loop(node: MasterNode):
                 if frame is None:
                     continue
 
-                # 캘리브레이션 맵 초기화 (최초 1회)
                 if map1 is None:
                     h, w = frame.shape[:2]
                     newK, _ = cv2.getOptimalNewCameraMatrix(
@@ -653,7 +636,6 @@ def video_receive_loop(node: MasterNode):
                         K, dist, None, newK, (w,h), cv2.CV_16SC2)
                     print('[Calib] 왜곡 보정 맵 초기화 완료')
 
-                # 왜곡 보정
                 frame = cv2.remap(frame, map1, map2, cv2.INTER_LINEAR)
 
                 with node.state_lock:
