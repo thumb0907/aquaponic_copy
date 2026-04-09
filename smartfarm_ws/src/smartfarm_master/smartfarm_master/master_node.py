@@ -280,6 +280,7 @@ class MasterNode(Node):
             elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
                 self.start_flag = False
+                self._set_flag('c1f', 0)   
             elif line.startswith('STM1:PC:ERR:'):
                 self.stm_state  = 'error'
                 self.start_flag = False
@@ -311,6 +312,17 @@ class MasterNode(Node):
                 self._set_flag('crf', 0)
             return
 
+        if line.startswith('SCARA:PC:FLAG:'):
+            parts = line.split(':')   # ['SCARA','PC','FLAG','UV','2']
+            if len(parts) == 5:
+                k = parts[3].lower()  # 'uv', 'smf' 등
+                v = int(parts[4])
+                with self.state_lock:
+                    if k in self.flags:
+                        self.flags[k] = v
+                        self.get_logger().info(f'스카라 플래그 동기화: {k}={v}')
+            return
+        
         with self.state_lock:
             # ── 스카라 작업 완료 이벤트 ─────────────────────
             if line == 'SCARA:PC:EVENT:PUT_TO_UV_DONE':
@@ -629,7 +641,7 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                         node.start_flag   = True
                         node.last_tx      = now
                         node.stable_cnt   = 0
-                        node._set_flag('ssf', 1)
+                        node._set_flag('c1f', 1)
                         send_now = True
                 else:
                     node.stable_cnt   = 0
@@ -637,7 +649,7 @@ def process_frame(node: MasterNode, frame: np.ndarray):
 
     if send_now:
         msg      = UInt8MultiArray()
-        msg.data = make_flag_u8(PID_SSF, 1)
+        msg.data = make_flag_u8(PID_C1F, 1)
         node.pub_pi1.publish(msg)
         node.get_logger().info('트레이 감지 → SSF=1 전송')
 

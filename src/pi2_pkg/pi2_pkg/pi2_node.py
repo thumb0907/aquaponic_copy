@@ -193,6 +193,22 @@ class Pi2Node(Node):
     def __init__(self):
         super().__init__('pi2_node')
 
+        # 스카라 플래그 이전값(이벤트 추론용)
+        self.scara_prev_flags = {
+            'ssf': 0,
+            'smf': 0,
+            'crf': 0,
+            'uv': 0,
+            'wcnt': 0,
+            'ulf': 0,
+            'urf': 0,
+            'wlf': 0,
+            'wrf': 0,
+            'uef': 0,
+            'wef': 0,
+            'ff': 0,
+        }
+
         # ── 장치별 시리얼 핸들 + 파서 ────────
         # 각 장치가 독립적인 포트와 파서를 가짐
         self.ser_stm2  = None
@@ -332,7 +348,11 @@ class Pi2Node(Node):
 
         elif pid in PID_NAME:
             name = PID_NAME[pid]
-            val  = data[0] if data else 0
+            # UV는 sendU16()으로 2바이트 전송됨
+            if pid == PID_UV and len(data) >= 2:
+                val = (data[0] << 8) | data[1]
+            else:
+                val = data[0] if data else 0
             msg.data = f'SCARA:PC:FLAG:{name}:{val}'
 
             # 플래그 변경 → PC 별도 알림
