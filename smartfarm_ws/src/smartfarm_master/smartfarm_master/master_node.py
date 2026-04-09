@@ -651,7 +651,7 @@ def process_frame(node: MasterNode, frame: np.ndarray):
         msg      = UInt8MultiArray()
         msg.data = make_flag_u8(PID_C1F, 1)
         node.pub_pi1.publish(msg)
-        node.get_logger().info('트레이 감지 → SSF=1 전송')
+        node.get_logger().info('트레이 감지 → C1F=1 전송')
 
     # ── 화면 오버레이 ─────────────────────────
     with node.state_lock:
