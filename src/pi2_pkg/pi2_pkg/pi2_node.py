@@ -299,8 +299,10 @@ class Pi2Node(Node):
         elif pid in PID_NAME:
             name = PID_NAME[pid]
             # UV 플래그는 2바이트
-            val = (data[0] << 8 | data[1]) if (pid == PID_UV and len(data) >= 2) \
-                  else (data[0] if data else 0)
+            if pid in (PID_UV, PID_WCNT) and len(data) >= 2:
+                val = (data[0] << 8) | data[1]
+            else:
+                val = data[0] if data else 0
             msg.data = f'STM2:PC:FLAG:{name}:{val}'
 
             # 플래그 변경 → PC 별도 알림

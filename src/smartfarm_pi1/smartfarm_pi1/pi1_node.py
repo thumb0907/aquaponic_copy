@@ -233,8 +233,10 @@ class Pi1Node(Node):
 
         elif pid in PID_NAME:
             name = PID_NAME[pid]
-            val  = (data[0] << 8 | data[1]) if pid == PID_UV and len(data) >= 2 \
-                   else (data[0] if data else 0)
+            if pid in (PID_UV, PID_WCNT) and len(data) >= 2:
+                val = (data[0] << 8) | data[1]
+            else:
+                val = data[0] if data else 0
             msg.data = f'STM1:PC:FLAG:{name}:{val}'
 
         else:
