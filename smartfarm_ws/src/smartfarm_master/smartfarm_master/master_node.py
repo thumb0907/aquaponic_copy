@@ -82,7 +82,7 @@ def make_flag_u8(pid: int, val: int) -> list:
 
 
 def make_flag_u16(pid: int, val: int) -> list:
-    """2바이트 플래그 프레임 (UV용)"""
+    """2바이트 플래그 프레임 (UV, WCNT용)"""
     return make_frame(pid, bytes([(val >> 8) & 0xFF, val & 0xFF]))
 
 
@@ -191,6 +191,51 @@ class MasterNode(Node):
 
         self.get_logger().info('Master 노드 시작')
 
+
+    # 플래그 조작 함수
+    def _set_flag(self, name: str, value: int):
+        if name in self.flags:
+            self.flags[name] = int(value)
+
+    def _inc_flag(self, name: str, delta: int, min_v: int = 0, max_v: int | None = None):
+        if name not in self.flags:
+            return
+
+        v = int(self.flags[name]) + int(delta)
+
+        if v < min_v:
+            v = min_v
+        if max_v is not None and v > max_v:
+            v = max_v
+
+        self.flags[name] = v
+    
+    # 플래그 공유 및 재배포
+    def _broadcast_flags_to_scara(self):
+        self._send_scara(make_flag_u8(PID_SSF, self.flags['ssf']))
+        self._send_scara(make_flag_u8(PID_SMF, self.flags['smf']))
+        self._send_scara(make_flag_u8(PID_CRF, self.flags['crf']))
+        self._send_scara(make_flag_u16(PID_UV, self.flags['uv']))
+        self._send_scara(make_flag_u16(PID_WCNT, self.flags['wcnt']))
+        self._send_scara(make_flag_u8(PID_ULF, self.flags['ulf']))
+        self._send_scara(make_flag_u8(PID_URF, self.flags['urf']))
+        self._send_scara(make_flag_u8(PID_WLF, self.flags['wlf']))
+        self._send_scara(make_flag_u8(PID_WRF, self.flags['wrf']))
+        self._send_scara(make_flag_u8(PID_UEF, self.flags['uef']))
+        self._send_scara(make_flag_u8(PID_WEF, self.flags['wef']))
+
+    def _broadcast_flags_to_stm2(self):
+        self._send_binary_pi2(make_flag_u8(PID_FF, self.flags['ff']))
+        self._send_binary_pi2(make_flag_u16(PID_WCNT, self.flags['wcnt']))
+        self._send_binary_pi2(make_flag_u8(PID_WLF, self.flags['wlf']))
+        self._send_binary_pi2(make_flag_u8(PID_WRF, self.flags['wrf']))
+        self._send_binary_pi2(make_flag_u8(PID_UEF, self.flags['uef']))
+        self._send_binary_pi2(make_flag_u8(PID_WEF, self.flags['wef']))
+
+    def _broadcast_all_flags(self):
+        self._broadcast_flags_to_scara()
+        self._broadcast_flags_to_stm2()
+
     # ══════════════════════════════════════════
     # STM1 상태 수신
     # ══════════════════════════════════════════
@@ -214,12 +259,24 @@ class MasterNode(Node):
                 self.start_flag = False
                 self.get_logger().warn('[STM1] ESTOP')
             elif line == 'STM1:PC:DONE:CYCLE1':
-                self.stm_state    = 'waiting_scara'
-                self.flags['ssf'] = 1  # ← PC 플래그 상태 동기화
-                self.flags['crf'] = 1  # ← PC 플래그 상태 동기화
-                self._send_scara(make_flag_u8(PID_SSF, 1))
-                self._send_scara(make_flag_u8(PID_CRF, 1))
-                self.get_logger().info('파종 완료 → 스카라에 SSF=1, CRF=1 전송')
+                self.stm_state = 'waiting_scara'
+
+                # 스카라 유휴 + UV실 자리가 있을 때만 시작 허용
+                if self.flags['smf'] == 0 and self.flags['uv'] < 2:
+                    self._set_flag('ssf', 1)
+                    self._set_flag('crf', 1)
+
+                    # 스카라 시작 지시
+                    self._send_scara(make_flag_u8(PID_SSF, 1))
+                    self._send_scara(make_flag_u8(PID_CRF, 1))
+
+                    self.get_logger().info(
+                        f'파종 완료 → SSF=1, CRF=1 승인 (smf={self.flags["smf"]}, uv={self.flags["uv"]})'
+                    )
+                else:
+                    self.get_logger().warn(
+                        f'파종 완료지만 스카라 busy 또는 UV full: smf={self.flags["smf"]}, uv={self.flags["uv"]}'
+                    )
             elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
                 self.start_flag = False
@@ -227,13 +284,15 @@ class MasterNode(Node):
                 self.stm_state  = 'error'
                 self.start_flag = False
                 self.get_logger().error(line)
+            # elif line.startswith('STM1:PC:FLAG:'):
+            #     parts = line.split(':')
+            #     if len(parts) == 5:
+            #         k = parts[3].lower()
+            #         v = int(parts[4])
+            #         if k in self.flags:
+            #             self.flags[k] = v
             elif line.startswith('STM1:PC:FLAG:'):
-                parts = line.split(':')
-                if len(parts) == 5:
-                    k = parts[3].lower()
-                    v = int(parts[4])
-                    if k in self.flags:
-                        self.flags[k] = v
+                self.get_logger().info(f'STM1 플래그 보고 수신: {line}')
             elif line.startswith('STM1:PI1:ACK:'):
                 self.get_logger().info(f'ACK: {line}')
 
@@ -249,10 +308,56 @@ class MasterNode(Node):
             self.get_logger().info('스카라 CRF=0 → STM1에 CRF=0 전달')
             self._send_binary(make_flag_u8(PID_CRF, 0))
             with self.state_lock:
-                self.flags['crf'] = 0
+                self._set_flag('crf', 0)
             return
 
         with self.state_lock:
+            # ── 스카라 작업 완료 이벤트 ─────────────────────
+            if line == 'SCARA:PC:EVENT:PUT_TO_UV_DONE':
+                self._set_flag('smf', 0)
+                self._set_flag('ssf', 0)
+                self._set_flag('crf', 0)
+                self._inc_flag('uv', +1, 0, 2)
+                self._broadcast_all_flags()
+                self.get_logger().info(
+                    f'SCARA UV 적재 완료 → uv={self.flags["uv"]}, smf=0, ssf=0, crf=0'
+                )
+                return
+
+            if line == 'SCARA:PC:EVENT:MOVE_UV_TO_WATER_DONE':
+                self._set_flag('smf', 0)
+                self._inc_flag('uv', -1, 0, 2)
+                self._inc_flag('wcnt', +1, 0, 2)
+                self._broadcast_all_flags()
+                self.get_logger().info(
+                    f'SCARA 수경 이동 완료 → uv={self.flags["uv"]}, wcnt={self.flags["wcnt"]}, smf=0'
+                )
+                return
+
+            if line == 'SCARA:PC:EVENT:MOVE_WATER_TO_CONVEY2_DONE':
+                self._set_flag('smf', 0)
+                self._inc_flag('wcnt', -1, 0, 2)
+                self._set_flag('ff', 1)
+                self._broadcast_all_flags()
+                self.get_logger().info(
+                    f'SCARA 2번 컨베이어 적재 완료 → wcnt={self.flags["wcnt"]}, ff=1, smf=0'
+                )
+                return
+
+            # ── STM2 이벤트 ────────────────────────────────
+            if line == 'STM2:PC:EVENT:FIX_DONE':
+                self._set_flag('ff', 1)
+                self._broadcast_all_flags()
+                self.get_logger().info('STM2 고정 완료 → ff=1')
+                return
+
+            if line == 'STM2:PC:EVENT:HARVEST_DONE':
+                self._set_flag('ff', 0)
+                self._broadcast_all_flags()
+                self.get_logger().info('STM2 수확 완료 → ff=0')
+                return
+
+            # ── STM2 상태 수신 ────────────────────────────
             if line == 'STM2:PC:STATE:CONVEY_RUN':
                 self.stm2_state = 'convey_run'
             elif line == 'STM2:PC:STATE:IR_DETECTED':
@@ -263,7 +368,7 @@ class MasterNode(Node):
                 self.stm2_state = 'harvesting'
             elif line == 'STM2:PC:STATE:EJECTING':
                 self.stm2_state = 'ejecting'
-            elif line == 'STM2:PC:DONE:CYCLE2':          # 수정: CYCLE → CYCLE2
+            elif line == 'STM2:PC:DONE:CYCLE2':
                 self.stm2_state = 'idle'
                 self.get_logger().info('[STM2] 사이클 완료')
             elif line == 'STM2:PC:STATE:RESET_DONE':
@@ -279,6 +384,9 @@ class MasterNode(Node):
 
     # ══════════════════════════════════════════
     # Pi2 플래그 업데이트
+    # TODO:
+    # 최종 구조에서는 /pi2/flag_update 로 전역 플래그를 직접 덮어쓰지 않고,
+    # 작업 완료 이벤트(EVENT) 기반으로만 PC가 flags를 갱신하도록 정리할 것.
     # ══════════════════════════════════════════
     def _on_pi2_flag(self, msg: String):
         """Pi2에서 오는 플래그 업데이트 — 형식: FLAG:SMF:1"""
@@ -353,6 +461,7 @@ class MasterNode(Node):
             with self.state_lock:
                 self.emergency  = True
                 self.start_flag = False
+                self._broadcast_all_flags()
             self._send_binary(make_estop())      # STM1
             self._send_binary_pi2(make_estop())  # STM2
             self.get_logger().warn('EMERGENCY!')
@@ -369,6 +478,7 @@ class MasterNode(Node):
                 self.cam1_last_conf    = 0.0
                 for k in self.flags:
                     self.flags[k] = 0
+                self._broadcast_all_flags()
             self._send_binary(make_reset())      # STM1
             self._send_binary_pi2(make_reset())  # STM2
             self.get_logger().info('RESET')
@@ -519,7 +629,7 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                         node.start_flag   = True
                         node.last_tx      = now
                         node.stable_cnt   = 0
-                        node.flags['ssf'] = 1
+                        node._set_flag('ssf', 1)
                         send_now = True
                 else:
                     node.stable_cnt   = 0

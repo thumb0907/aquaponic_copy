@@ -17,6 +17,9 @@ PC ←(ROS2)→ Pi1 ←(UART 바이너리)→ STM32 #1
   1. 카메라 영상 → PC로 TCP 스트리밍
   2. PC 명령(바이너리) → STM1 UART 전달
   3. STM1 응답(바이너리) → 파싱 → PC로 ROS2 전송
+
+self.flags 같은 전역 플래그 저장소를 Pi1에 추가하면 안 됨
+Pi1은 어디까지나 프레임 → 문자열 변환 + 전달까지만 해야 됨
 """
 from __future__ import annotations
 
@@ -231,6 +234,7 @@ class Pi1Node(Node):
             val      = data[0] if data else 0
             msg.data = f'STM1:PC:ERR:{ERR_STR.get(val, f"UNKNOWN_{val:02X}")}'
 
+        #Pi1이 STM1 프레임을 해석해서 사람이 읽는 문자열로 바꾸는 중계 역할
         elif pid in PID_NAME:
             name = PID_NAME[pid]
             if pid in (PID_UV, PID_WCNT) and len(data) >= 2:
