@@ -39,7 +39,7 @@ from std_msgs.msg import String, UInt8MultiArray
 # ── 설정 ──────────────────────────────────────
 PC_IP       = '192.168.0.183'
 STREAM_PORT = 5000
-SERIAL_PORT = '/dev/ttyACM0'
+SERIAL_PORT = '/dev/stm1'
 BAUD        = 115200
 CAM_INDEX   = 0
 CAM_WIDTH   = 640
