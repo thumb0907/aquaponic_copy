@@ -269,7 +269,8 @@ class MasterNode(Node):
                     # 스카라 시작 지시
                     self._send_scara(make_flag_u8(PID_SSF, 1))
                     self._send_scara(make_flag_u8(PID_CRF, 1))
-
+                    self._send_binary(make_flag_u8(PID_CRF, 1))
+                    
                     self.get_logger().info(
                         f'파종 완료 → SSF=1, CRF=1 승인 (smf={self.flags["smf"]}, uv={self.flags["uv"]})'
                     )
@@ -711,13 +712,13 @@ def video_receive_loop(node: MasterNode):
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(('0.0.0.0', STREAM_PORT))
     server.listen(1)
-    print(f'[Stream] Pi1 연결 대기 (port={STREAM_PORT})')
+    print(f'[Stream] Pi1(cam1) 연결 대기 (port={STREAM_PORT})')
 
     while rclpy.ok():
         conn = None
         try:
             conn, addr = server.accept()
-            print(f'[Stream] Pi1 연결됨: {addr}')
+            print(f'[Stream] Pi1(cam1) 연결됨: {addr}')
 
             with node.state_lock:
                 node.cam1_connected = True
