@@ -85,6 +85,7 @@ STM2_STATE_STR = {
     0x05: 'HARVESTING',
     0x06: 'EJECTING',
     0x07: 'ESTOP',
+    0x08: 'EJECT_DONE',
 }
 # STM2 완료 코드 → 문자열 (master_node의 'CYCLE2' 비교와 반드시 일치해야 함)
 STM2_DONE_STR = {
@@ -92,8 +93,12 @@ STM2_DONE_STR = {
     0x02: 'RESET_DONE',
 }
 STM2_ERR_STR = {
-    0x01: 'TIMEOUT',
-    0x02: 'SENSOR_FAIL',
+    0x01: 'CONVEY_TIMEOUT',
+    0x02: 'HOMING_TIMEOUT',
+    0x03: 'Z_FIX_TIMEOUT',
+    0x04: 'HARVEST_TIMEOUT',
+    0x05: 'Z_RETURN_TIMEOUT',
+    0x06: 'EXIT_TIMEOUT',
 }
 
 # 스카라(아두이노) 상태 코드 → 문자열

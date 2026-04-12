@@ -350,6 +350,11 @@ class MasterNode(Node):
                     f'SCARA 2번 컨베이어 적재 완료 → wcnt={self.flags["wcnt"]}, ff=1, smf=0'
                 )
                 return
+            if line == 'SCARA:PC:EVENT:HARVEST_DONE':  # 스카라 프로토콜에 맞게 조정
+                self._set_flag('ff', 0)
+                self._send_stm2(make_flag_u8(PID_FF, 0))
+                self.get_logger().info('수확 완료 → STM2에 FF=0 전송')
+                return
 
             # ── STM2 이벤트 ────────────────────────────────
             if line == 'STM2:PC:EVENT:FIX_DONE':
@@ -363,6 +368,7 @@ class MasterNode(Node):
                 self._broadcast_all_flags()
                 self.get_logger().info('STM2 수확 완료 → ff=0')
                 return
+            
 
             # ── STM2 상태 수신 ────────────────────────────
             if line == 'STM2:PC:STATE:CONVEY_RUN':
@@ -373,8 +379,14 @@ class MasterNode(Node):
                 self.stm2_state = 'z_fix'
             elif line == 'STM2:PC:STATE:HARVESTING':
                 self.stm2_state = 'harvesting'
+                # 수확 시작 → 스카라/매니퓰에 지시
+                # (현재는 SKIP_COMM=1로 STM2가 자체 타이머로 처리하므로 일단 로그만)
+                self.get_logger().info('STM2 수확 중 — 스카라/매니퓰 수확 지시 필요')
+
             elif line == 'STM2:PC:STATE:EJECTING':
                 self.stm2_state = 'ejecting'
+            elif line == 'STM2:PC:STATE:EJECT_DONE':   
+                self.stm2_state = 'eject_done'
             elif line == 'STM2:PC:DONE:CYCLE2':
                 self.stm2_state = 'idle'
                 self.get_logger().info('[STM2] 사이클 완료')
@@ -388,6 +400,8 @@ class MasterNode(Node):
                 self.get_logger().error(line)
             elif line.startswith('STM2:PI2:ACK:'):
                 self.get_logger().info(f'ACK: {line}')
+            
+            
 
     # ══════════════════════════════════════════
     # Pi2 플래그 업데이트
