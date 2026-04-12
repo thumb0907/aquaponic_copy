@@ -32,17 +32,17 @@ MODEL_PATH    = '/home/thumb/aquaponic_copy/tray2/best.pt'
 STREAM_PORT   = 5000
 TRAY_CLASS_ID = 0
 MIN_CONF      = 0.90
-STABLE_FRAMES = 5
+STABLE_FRAMES = 3
 COOLDOWN_SEC  = 2.0
 
 # ROI (트레이 감지 유효 영역)
-ROI_X_MIN = 0.37
-ROI_X_MAX = 0.73
+ROI_X_MIN = 0.35
+ROI_X_MAX = 0.75
 ROI_Y_MIN = 0.10
 ROI_Y_MAX = 0.90
 
 # 박스 최소 크기 (화면 대비 비율)
-MIN_BOX_RATIO = 0.25
+MIN_BOX_RATIO = 0.35
 
 # 캘리브레이션 파일
 CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
@@ -286,13 +286,7 @@ class MasterNode(Node):
                 self.stm_state  = 'error'
                 self.start_flag = False
                 self.get_logger().error(line)
-            # elif line.startswith('STM1:PC:FLAG:'):
-            #     parts = line.split(':')
-            #     if len(parts) == 5:
-            #         k = parts[3].lower()
-            #         v = int(parts[4])
-            #         if k in self.flags:
-            #             self.flags[k] = v
+           
             elif line.startswith('STM1:PC:FLAG:'):
                 self.get_logger().info(f'STM1 플래그 보고 수신: {line}')
             elif line.startswith('STM1:PI1:ACK:'):
