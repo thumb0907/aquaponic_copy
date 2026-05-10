@@ -8,6 +8,7 @@ master_node.py — PC 마스터 노드
   3. STM1/STM2 상태 수신 → 플래그 관리
   4. 전체 플래그를 모니터 노드에 publish
   5. 긴급정지/리셋 명령 처리
+  6. Pi3(수경재배실) 센서값 수신 → sensor_cache 저장 → 모니터 publish
 """
 from __future__ import annotations
 
@@ -138,6 +139,20 @@ class MasterNode(Node):
         self.pi2_last_hb     = 0.0
         self.pi2_alive_prev  = False  # 연결/끊김 변화 감지용
 
+        # ── Pi3 / STM3 (수경재배실 센서허브) ──
+        self.pi3_alive       = False
+        self.pi3_last_hb     = 0.0
+        self.pi3_alive_prev  = False
+
+        # 센서 캐시 — None이면 아직 수신 안 된 것, 모니터 publish에 포함
+        self.sensor_cache: dict[str, float | None] = {
+            'TDS':        None,   # TDS (ppm)
+            'PH':         None,   # pH
+            'WATER_TEMP': None,   # DS18B20 수온 (℃)
+            'AIR_TEMP':   None,   # DHT22 기온 (℃)
+            'HUMIDITY':   None,   # DHT22 습도 (%)
+        }
+
         # ── 카메라 상태 ───────────────────────
         self.cam1_connected      = False
         self.cam1_last_frame_ts  = 0.0
@@ -162,9 +177,12 @@ class MasterNode(Node):
         # Pi1 → STM1 명령 (바이너리)
         self.pub_pi1     = self.create_publisher(
             UInt8MultiArray, '/pi1/uart_cmd', 10)
-        # Pi2 → STM2 명령 (바이너리)
+        # Pi2 → STM2/스카라/매니퓰 명령 (바이너리)
         self.pub_pi2     = self.create_publisher(
             UInt8MultiArray, '/pi2/uart_cmd', 10)
+        # Pi3 → STM3 명령 (바이너리)
+        self.pub_pi3     = self.create_publisher(
+            UInt8MultiArray, '/pi3/uart_cmd', 10)
         # 모니터 노드용
         self.pub_monitor = self.create_publisher(
             String, '/monitor/state', 10)
@@ -179,6 +197,14 @@ class MasterNode(Node):
         self.create_subscription(
             String, '/pi2/flag_update',
             self._on_pi2_flag, 10)
+        # Pi3 — STM3 상태 수신
+        self.create_subscription(
+            String, '/pi3/uart_response',
+            self._on_uart3, 10)
+        # Pi3 — 센서값 수신 (즉시 publish 분 + 1초 주기 캐시 publish 분 모두 여기로)
+        self.create_subscription(
+            String, '/pi3/sensor_data',
+            self._on_sensor_data, 10)
         self.create_subscription(
             String, '/system/heartbeat',
             self._on_heartbeat, 10)
@@ -432,12 +458,15 @@ class MasterNode(Node):
                 self.pi1_last_hb = now
             elif msg.data == 'pi2':
                 self.pi2_last_hb = now
+            elif msg.data == 'pi3':
+                self.pi3_last_hb = now
 
     def _check_heartbeat(self):
         now = time.time()
         with self.state_lock:
             pi1_now = (now - self.pi1_last_hb) < 3.0
             pi2_now = (now - self.pi2_last_hb) < 3.0
+            pi3_now = (now - self.pi3_last_hb) < 3.0
 
             # Pi1 연결 상태 변화 감지
             if pi1_now and not self.pi1_alive_prev:
@@ -451,10 +480,18 @@ class MasterNode(Node):
             elif not pi2_now and self.pi2_alive_prev:
                 self.get_logger().warn('[Pi2] 연결 끊김')
 
+            # Pi3 연결 상태 변화 감지
+            if pi3_now and not self.pi3_alive_prev:
+                self.get_logger().info('[Pi3] 연결됨')
+            elif not pi3_now and self.pi3_alive_prev:
+                self.get_logger().warn('[Pi3] 연결 끊김')
+
             self.pi1_alive      = pi1_now
             self.pi2_alive      = pi2_now
+            self.pi3_alive      = pi3_now
             self.pi1_alive_prev = pi1_now
             self.pi2_alive_prev = pi2_now
+            self.pi3_alive_prev = pi3_now
 
             # 카메라 상태 판정
             if not self.cam1_connected:
@@ -483,8 +520,9 @@ class MasterNode(Node):
                 self.emergency  = True
                 self.start_flag = False
                 self._broadcast_all_flags()
-            self._send_binary(make_estop())      # STM1
-            self._send_binary_pi2(make_estop())  # STM2
+            self._send_binary(make_estop())           # STM1
+            self._send_binary_pi2(make_estop())       # STM2/스카라
+            self._send_binary_pi3(make_estop())       # STM3
             self.get_logger().warn('EMERGENCY!')
 
         elif cmd == 'RESET':
@@ -499,9 +537,12 @@ class MasterNode(Node):
                 self.cam1_last_conf    = 0.0
                 for k in self.flags:
                     self.flags[k] = 0
+                # 센서 캐시는 리셋해도 None으로 초기화하지 않음
+                # (센서값은 STM3가 계속 보내므로 곧 갱신됨)
                 self._broadcast_all_flags()
-            self._send_binary(make_reset())      # STM1
-            self._send_binary_pi2(make_reset())  # STM2
+            self._send_binary(make_reset())           # STM1
+            self._send_binary_pi2(make_reset())       # STM2/스카라
+            self._send_binary_pi3(make_reset())       # STM3
             self.get_logger().info('RESET')
 
         elif cmd == 'START_2':
@@ -552,6 +593,70 @@ class MasterNode(Node):
         msg.data = [0x03] + list(frame)
         self.pub_pi2.publish(msg)
 
+    def _send_binary_pi3(self, frame):
+        """Pi3 → STM3 바이너리 전송 (식별자 없음 → STM3 fallback, ESTOP/RESET용)"""
+        msg      = UInt8MultiArray()
+        msg.data = list(frame)
+        self.pub_pi3.publish(msg)
+
+    def _send_stm3(self, frame):
+        """PC → STM3 바이너리 전송 (식별자 0x01)"""
+        msg      = UInt8MultiArray()
+        msg.data = [0x01] + list(frame)
+        self.pub_pi3.publish(msg)
+
+    # ══════════════════════════════════════════
+    # STM3 상태 수신 (Pi3 경유)
+    # ══════════════════════════════════════════
+    def _on_uart3(self, msg: String):
+        """
+        Pi3 → PC : STM3 상태/완료/에러 수신.
+        형식: "STM3:PC:STATE:IDLE" / "STM3:PC:DONE:SENSE_DONE" 등
+        현재는 로그만 기록. 필요 시 stm3_state 변수 추가하여 상태 관리 가능.
+        """
+        line = msg.data.strip()
+        self.get_logger().info(f'[STM3] {line}')
+
+        with self.state_lock:
+            if line.startswith('STM3:PC:ERR:'):
+                self.get_logger().error(f'STM3 에러: {line}')
+            elif line.startswith('STM3:PC:RAW:'):
+                self.get_logger().debug(f'STM3 raw: {line}')
+
+    # ══════════════════════════════════════════
+    # 센서값 수신 (Pi3 /pi3/sensor_data)
+    # ══════════════════════════════════════════
+    def _on_sensor_data(self, msg: String):
+        """
+        Pi3에서 오는 센서값 수신 → sensor_cache 갱신.
+        형식: "TDS:512.0,PH:7.20"  또는  "WATER_TEMP:25.23"
+              "TDS:512.0,PH:7.20,WATER_TEMP:25.23,AIR_TEMP:25.1,HUMIDITY:60.3"
+
+        sensor_cache는 _publish_monitor에서 모니터 토픽에 포함됨.
+        """
+        line = msg.data.strip()
+        if not line:
+            return
+
+        updated = {}
+        try:
+            for pair in line.split(','):
+                pair = pair.strip()
+                if ':' not in pair:
+                    continue
+                key, val_str = pair.split(':', 1)
+                updated[key.strip()] = float(val_str.strip())
+        except ValueError as e:
+            self.get_logger().warn(f'센서 데이터 파싱 실패: {line} ({e})')
+            return
+
+        with self.state_lock:
+            for k, v in updated.items():
+                if k in self.sensor_cache:
+                    self.sensor_cache[k] = v
+
+        self.get_logger().debug(f'[Sensor] {updated}')
+
     # ══════════════════════════════════════════
     # 모니터 상태 publish
     # ══════════════════════════════════════════
@@ -563,6 +668,7 @@ class MasterNode(Node):
                 f'stm2_state:{self.stm2_state},'
                 f'pi1_alive:{self.pi1_alive},'
                 f'pi2_alive:{self.pi2_alive},'
+                f'pi3_alive:{self.pi3_alive},'
                 f'emergency:{self.emergency},'
                 f'cam1_connected:{self.cam1_connected},'
                 f'cam1_status:{self.cam1_status},'
@@ -572,8 +678,17 @@ class MasterNode(Node):
             flags_str = ','.join(
                 f'{k}:{v}' for k, v in self.flags.items()
             )
+            # 수신된 센서값만 포함 (None은 제외)
+            sensor_str = ','.join(
+                f'sensor_{k.lower()}:{v:.2f}'
+                for k, v in self.sensor_cache.items()
+                if v is not None
+            )
         msg = String()
-        msg.data = status + ',' + flags_str
+        parts = [status, flags_str]
+        if sensor_str:
+            parts.append(sensor_str)
+        msg.data = ','.join(parts)
         self.pub_monitor.publish(msg)
 
 
