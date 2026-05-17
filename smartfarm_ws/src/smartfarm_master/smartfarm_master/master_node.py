@@ -27,6 +27,7 @@ from rclpy.node import Node
 from std_msgs.msg import String, UInt8MultiArray
 
 frame_queue = queue.Queue(maxsize=2)
+nursery_frame_queue = queue.Queue(maxsize=2)
 
 # ── 설정 ──────────────────────────────────────
 # 컨베이어 트레이인식 카메라
@@ -933,6 +934,45 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray):
         f'[Nursery] tray={counts["tray"]}, sprout3={counts["sprout3"]}, '
         f'stable={stable}, label={label}'
     )
+    disp = frame.copy()
+
+    y = 30
+    for name, count in counts.items():
+        cv2.putText(
+            disp,
+            f'{name}: {count}',
+            (20, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 0, 255),
+            2
+        )
+        y += 30
+
+    cv2.putText(
+        disp,
+        f'nursery stable: {stable}/{NURSERY_STABLE_FRAMES}',
+        (20, y + 10),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (255, 0, 0),
+        2
+    )
+
+    cv2.putText(
+        disp,
+        f'label: {label}',
+        (20, y + 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (255, 0, 0),
+        2
+    )
+
+    try:
+        nursery_frame_queue.put_nowait(disp)
+    except queue.Full:
+        pass
 
 # ══════════════════════════════════════════════
 # 카메라 스트림 수신
@@ -1086,10 +1126,15 @@ def main(args=None):
             rclpy.spin_once(node, timeout_sec=0.01)
             try:
                 frame = frame_queue.get_nowait()
-                cv2.imshow('Pi1 Camera', frame)
-                cv2.waitKey(1)
+                cv2.imshow('Pi1 Camera', frame)               
             except queue.Empty:
                 pass
+            try:
+                nursery_frame = nursery_frame_queue.get_nowait()
+                cv2.imshow('Pi1 Nursery Camera', nursery_frame)
+            except queue.Empty:
+                pass
+            cv2.waitKey(1) 
     except KeyboardInterrupt:
         pass
     finally:
