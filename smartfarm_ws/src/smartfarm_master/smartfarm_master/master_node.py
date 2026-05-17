@@ -27,7 +27,8 @@ from rclpy.node import Node
 from std_msgs.msg import String, UInt8MultiArray
 
 frame_queue = queue.Queue(maxsize=2)
-nursery_frame_queue = queue.Queue(maxsize=2)
+nursery_left_frame_queue = queue.Queue(maxsize=2)
+nursery_right_frame_queue = queue.Queue(maxsize=2)
 
 # ── 설정 ──────────────────────────────────────
 # 컨베이어 트레이인식 카메라
@@ -52,14 +53,12 @@ CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
 
 # 발아실 카메라 / 모델
 NURSERY_MODEL_PATH = '/home/thumb/aquaponic_copy/best.pt'
-NURSERY_STREAM_PORT = 5001
+NURSERY_LEFT_STREAM_PORT = 5001
+NURSERY_RIGHT_STREAM_PORT = 5002
 
 NURSERY_MIN_CONF = 0.50
 NURSERY_STABLE_FRAMES = 5
 NURSERY_COOLDOWN_SEC = 5.0
-
-# 현재는 카메라 하나만 쓰므로 left 고정
-NURSERY_POSITION = 'left'
 
 # ── 프로토콜 상수 (comm.h / Serial.h 와 동일) ──
 SOF = 0xAA
@@ -179,10 +178,20 @@ class MasterNode(Node):
         self.cam1_overlay_hold_sec = 0.7
         self.cam1_last_conf_hold = 0.0
         # 발아실 카메라
-        self.nursery_stable_cnt = 0
-        self.nursery_last_tx = 0.0
-        self.nursery_last_label = 'none'
-        self.nursery_last_conf = 0.0
+        self.nursery_state = {
+            'left': {
+                'stable_cnt': 0,
+                'last_tx': 0.0,
+                'last_label': 'none',
+                'last_conf': 0.0,
+            },
+            'right': {
+                'stable_cnt': 0,
+                'last_tx': 0.0,
+                'last_label': 'none',
+                'last_conf': 0.0,
+            },
+}
 
         # ── 공통 ──────────────────────────────
         self.emergency = False
@@ -698,9 +707,12 @@ class MasterNode(Node):
                 f'cam1_status:{self.cam1_status},'
                 f'cam1_detect_label:{self.cam1_detect_label},'
                 f'cam1_last_conf:{self.cam1_last_conf:.2f},'
-                f'nursery_label:{self.nursery_last_label},'
-                f'nursery_conf:{self.nursery_last_conf:.2f},'
-                f'nursery_stable:{self.nursery_stable_cnt}'
+                f'nursery_left_label:{self.nursery_state["left"]["last_label"]},'
+                f'nursery_left_conf:{self.nursery_state["left"]["last_conf"]:.2f},'
+                f'nursery_left_stable:{self.nursery_state["left"]["stable_cnt"]},'
+                f'nursery_right_label:{self.nursery_state["right"]["last_label"]},'
+                f'nursery_right_conf:{self.nursery_state["right"]["last_conf"]:.2f},'
+                f'nursery_right_stable:{self.nursery_state["right"]["stable_cnt"]}'
             )
             flags_str = ','.join(
                 f'{k}:{v}' for k, v in self.flags.items()
@@ -853,7 +865,7 @@ def process_frame(node: MasterNode, frame: np.ndarray):
     except queue.Full:
         pass
 
-def process_nursery_frame(node: MasterNode, frame: np.ndarray):
+def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
     results = node.nursery_model.predict(
         source=frame,
         conf=NURSERY_MIN_CONF,
@@ -891,26 +903,25 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray):
     flag_name = None
 
     with node.state_lock:
+        st = node.nursery_state[position]
+
         if tray_detected and sprout3_detected:
-            node.nursery_stable_cnt += 1
-            node.nursery_last_label = 'sprout3'
-            node.nursery_last_conf = best_sprout3_conf
+            st['stable_cnt'] += 1
+            st['last_label'] = 'sprout3'
+            st['last_conf'] = best_sprout3_conf
         else:
-            node.nursery_stable_cnt = 0
-            if tray_detected:
-                node.nursery_last_label = 'tray_only'
-            else:
-                node.nursery_last_label = 'none'
-            node.nursery_last_conf = 0.0
+            st['stable_cnt'] = 0
+            st['last_label'] = 'tray_only' if tray_detected else 'none'
+            st['last_conf'] = 0.0
 
         if (
-            node.nursery_stable_cnt >= NURSERY_STABLE_FRAMES
-            and now - node.nursery_last_tx > NURSERY_COOLDOWN_SEC
+            st['stable_cnt'] >= NURSERY_STABLE_FRAMES
+            and now - st['last_tx'] > NURSERY_COOLDOWN_SEC
         ):
-            node.nursery_last_tx = now
-            node.nursery_stable_cnt = 0
+            st['last_tx'] = now
+            st['stable_cnt'] = 0
 
-            if NURSERY_POSITION == 'left':
+            if position == 'left':
                 if node.flags['ulf'] == 0:
                     node._set_flag('ulf', 1)
                     flag_name = 'ULF'
@@ -921,17 +932,17 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray):
                     flag_name = 'URF'
                     send_event = True
 
+        stable = st['stable_cnt']
+        label = st['last_label']
+
     if send_event:
         # node._broadcast_all_flags()  # 통합 테스트 전까지 잠시 비활성화
         node.get_logger().info(
             f'[TEST] 발아 완료 감지 → {flag_name}=1 예정, conf={best_sprout3_conf:.2f}'
         )
-    with node.state_lock:
-        stable = node.nursery_stable_cnt
-        label = node.nursery_last_label
 
     node.get_logger().info(
-        f'[Nursery] tray={counts["tray"]}, sprout3={counts["sprout3"]}, '
+        f'[Nursery {position}] tray={counts["tray"]}, sprout3={counts["sprout3"]}, '
         f'stable={stable}, label={label}'
     )
     disp = frame.copy()
@@ -969,8 +980,10 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray):
         2
     )
 
+    target_queue = nursery_left_frame_queue if position == 'left' else nursery_right_frame_queue
+
     try:
-        nursery_frame_queue.put_nowait(disp)
+        target_queue.put_nowait(disp)
     except queue.Full:
         pass
 
@@ -1052,13 +1065,12 @@ def video_receive_loop(node: MasterNode):
             with node.state_lock:
                 node.cam1_connected = False
 
-def nursery_video_receive_loop(node: MasterNode):
+def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(('0.0.0.0', NURSERY_STREAM_PORT))
+    server.bind(('0.0.0.0', stream_port))
     server.listen(1)
-
-    print(f'[Nursery Stream] Pi1 nursery cam 연결 대기 (port={NURSERY_STREAM_PORT})')
+    print(f'[Nursery Stream {position}] 연결 대기 (port={stream_port})')
 
     while rclpy.ok():
         conn = None
@@ -1096,7 +1108,7 @@ def nursery_video_receive_loop(node: MasterNode):
                 if frame is None:
                     continue
 
-                process_nursery_frame(node, frame)
+                process_nursery_frame(node, frame, position)
               
 
         except Exception as e:
@@ -1115,9 +1127,16 @@ def main(args=None):
     threading.Thread(
         target=video_receive_loop,
         args=(node,), daemon=True).start()
+    
     threading.Thread(
         target=nursery_video_receive_loop,
-        args=(node,),
+        args=(node, NURSERY_LEFT_STREAM_PORT, 'left'),
+        daemon=True
+    ).start()
+
+    threading.Thread(
+        target=nursery_video_receive_loop,
+        args=(node, NURSERY_RIGHT_STREAM_PORT, 'right'),
         daemon=True
     ).start()
 
@@ -1130,8 +1149,13 @@ def main(args=None):
             except queue.Empty:
                 pass
             try:
-                nursery_frame = nursery_frame_queue.get_nowait()
-                cv2.imshow('Pi1 Nursery Camera', nursery_frame)
+                frame = nursery_left_frame_queue.get_nowait()
+                cv2.imshow('Pi1 Nursery Left Camera', frame)
+            except queue.Empty:
+                pass
+            try:
+                frame = nursery_right_frame_queue.get_nowait()
+                cv2.imshow('Pi1 Nursery Right Camera', frame)
             except queue.Empty:
                 pass
             cv2.waitKey(1) 

@@ -41,12 +41,15 @@ PC_IP       = '192.168.0.183'
 STREAM_PORT = 5000
 SERIAL_PORT = '/dev/stm1'
 BAUD        = 115200
-CAM_INDEX   = 0
+CAM_INDEX = '/dev/video0'
 CAM_WIDTH   = 640
 CAM_HEIGHT  = 480
 # 추가 카메라: 발아실 감지용
-NURSERY_CAM_INDEX = 2
-NURSERY_STREAM_PORT = 5001
+NURSERY_LEFT_CAM_INDEX = '/dev/video2'
+NURSERY_LEFT_STREAM_PORT = 5001
+
+NURSERY_RIGHT_CAM_INDEX = '/dev/video4'
+NURSERY_RIGHT_STREAM_PORT = 5002
 
 # ── 프로토콜 상수 (comm.h와 동일) ─────────────
 SOF          = 0xAA
@@ -339,14 +342,22 @@ def main():
     threading.Thread(
         target=uart_rx_loop,
         args=(node,), daemon=True).start()
+    
     threading.Thread(
         target=camera_stream_loop,
         args=(CAM_INDEX, STREAM_PORT, 'CAM1_CONVEYOR'),
         daemon=True
     ).start()
+
     threading.Thread(
         target=camera_stream_loop,
-        args=(NURSERY_CAM_INDEX, NURSERY_STREAM_PORT, 'CAM_NURSERY'),
+        args=(NURSERY_LEFT_CAM_INDEX, NURSERY_LEFT_STREAM_PORT, 'CAM_NURSERY_LEFT'),
+        daemon=True
+    ).start()
+
+    threading.Thread(
+        target=camera_stream_loop,
+        args=(NURSERY_RIGHT_CAM_INDEX, NURSERY_RIGHT_STREAM_PORT, 'CAM_NURSERY_RIGHT'),
         daemon=True
     ).start()
 
