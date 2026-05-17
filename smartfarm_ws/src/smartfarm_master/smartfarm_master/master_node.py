@@ -60,6 +60,8 @@ NURSERY_MIN_CONF = 0.50
 NURSERY_STABLE_FRAMES = 5
 NURSERY_COOLDOWN_SEC = 5.0
 
+TRAY_OCCUPY_FRAMES = 5
+TRAY_LOST_FRAMES = 10
 # ── 프로토콜 상수 (comm.h / Serial.h 와 동일) ──
 SOF = 0xAA
 
@@ -184,14 +186,20 @@ class MasterNode(Node):
                 'last_tx': 0.0,
                 'last_label': 'none',
                 'last_conf': 0.0,
+                'occupied': 0,
+                'tray_seen_cnt': 0,
+                'tray_lost_cnt': 0,
             },
             'right': {
                 'stable_cnt': 0,
                 'last_tx': 0.0,
                 'last_label': 'none',
                 'last_conf': 0.0,
-            },
-}
+                'occupied': 0,
+                'tray_seen_cnt': 0,
+                'tray_lost_cnt': 0,
+            },  
+        }   
 
         # ── 공통 ──────────────────────────────
         self.emergency = False
@@ -383,7 +391,8 @@ class MasterNode(Node):
                 self._set_flag('smf', 0)
                 self._set_flag('ssf', 0)
                 self._set_flag('crf', 0)
-                self._inc_flag('uv', +1, 0, 2)
+
+                
                 self._broadcast_all_flags()
                 self.get_logger().info(
                     f'SCARA UV 적재 완료 → uv={self.flags["uv"]}, smf=0, ssf=0, crf=0'
@@ -392,11 +401,12 @@ class MasterNode(Node):
 
             if line == 'SCARA:PC:EVENT:MOVE_UV_TO_WATER_DONE':
                 self._set_flag('smf', 0)
-                self._inc_flag('uv', -1, 0, 2)
+                
                 self._inc_flag('wcnt', +1, 0, 2)
                 self._broadcast_all_flags()
                 self.get_logger().info(
-                    f'SCARA 수경 이동 완료 → uv={self.flags["uv"]}, wcnt={self.flags["wcnt"]}, smf=0'
+                    f'SCARA 수경 이동 완료 → uv는 카메라 기준 유지, '
+                    f'wcnt={self.flags["wcnt"]}, smf=0'
                 )
                 return
 
@@ -881,7 +891,8 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
     }
 
     best_sprout3_conf = 0.0
-
+    new_uv = None
+    
     for box in results.boxes:
         cls_id = int(box.cls[0].item())
         conf = float(box.conf[0].item())
@@ -905,6 +916,25 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
     with node.state_lock:
         st = node.nursery_state[position]
 
+        # ── 트레이 점유 판단 ─────────────────────
+        if tray_detected:
+            st['tray_seen_cnt'] += 1
+            st['tray_lost_cnt'] = 0
+        else:
+            st['tray_lost_cnt'] += 1
+            st['tray_seen_cnt'] = 0
+
+        if st['tray_seen_cnt'] >= TRAY_OCCUPY_FRAMES:
+            st['occupied'] = 1
+
+        if st['tray_lost_cnt'] >= TRAY_LOST_FRAMES:
+            st['occupied'] = 0
+            if position == 'left':
+                node._set_flag('ulf', 0)
+            else:
+                node._set_flag('urf', 0)
+
+        # ── 발아 완료 판단 ─────────────────────
         if tray_detected and sprout3_detected:
             st['stable_cnt'] += 1
             st['last_label'] = 'sprout3'
@@ -932,14 +962,29 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
                     flag_name = 'URF'
                     send_event = True
 
+        # ── 좌/우 점유 상태로 uv 재계산 ─────────
+        new_uv = (
+            int(node.nursery_state['left']['occupied'])
+            + int(node.nursery_state['right']['occupied'])
+        )
+
+        if node.flags['uv'] != new_uv:
+            node._set_flag('uv', new_uv)
+            send_event = True
+
         stable = st['stable_cnt']
         label = st['last_label']
 
-    if send_event:
-        # node._broadcast_all_flags()  # 통합 테스트 전까지 잠시 비활성화
-        node.get_logger().info(
-            f'[TEST] 발아 완료 감지 → {flag_name}=1 예정, conf={best_sprout3_conf:.2f}'
-        )
+        if send_event:
+            # node._broadcast_all_flags()  # 통합 테스트 전까지 잠시 비활성화
+            if flag_name is not None:
+                node.get_logger().info(
+                    f'[TEST] 발아 완료 감지 → {flag_name}=1 예정, conf={best_sprout3_conf:.2f}'
+                )
+            else:
+                node.get_logger().info(
+                    f'[TEST] UV 점유 상태 변경 → uv={new_uv} 예정'
+                )
 
     node.get_logger().info(
         f'[Nursery {position}] tray={counts["tray"]}, sprout3={counts["sprout3"]}, '
