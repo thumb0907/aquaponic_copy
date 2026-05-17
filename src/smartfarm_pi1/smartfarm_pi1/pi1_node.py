@@ -44,6 +44,9 @@ BAUD        = 115200
 CAM_INDEX   = 0
 CAM_WIDTH   = 640
 CAM_HEIGHT  = 480
+# 추가 카메라: 발아실 감지용
+NURSERY_CAM_INDEX = 2
+NURSERY_STREAM_PORT = 5001
 
 # ── 프로토콜 상수 (comm.h와 동일) ─────────────
 SOF          = 0xAA
@@ -281,35 +284,45 @@ def uart_rx_loop(node: Pi1Node):
         time.sleep(0.02)
 
 
-def video_stream_loop():
+def camera_stream_loop(cam_index: int, stream_port: int, label: str):
     """카메라 영상 → PC TCP 스트리밍"""
-    cap = cv2.VideoCapture(CAM_INDEX)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  CAM_WIDTH)
+    cap = cv2.VideoCapture(cam_index)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)
 
+    if not cap.isOpened():
+        print(f'[{label}] 카메라 열기 실패 index={cam_index}')
+        return
+
     while rclpy.ok():
+        sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((PC_IP, STREAM_PORT))
-            print(f'[Stream] PC 연결: {PC_IP}:{STREAM_PORT}')
+            sock.connect((PC_IP, stream_port))
+            print(f'[{label}] PC 연결: {PC_IP}:{stream_port}')
 
             while rclpy.ok():
                 ok, frame = cap.read()
                 if not ok:
                     continue
+
                 _, jpeg = cv2.imencode(
-                    '.jpg', frame,
-                    [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    '.jpg',
+                    frame,
+                    [cv2.IMWRITE_JPEG_QUALITY, 80]
+                )
+
                 data = jpeg.tobytes()
                 sock.sendall(struct.pack('>I', len(data)) + data)
 
         except Exception as e:
-            print(f'[Stream] 오류: {e} → 재연결')
+            print(f'[{label}] 오류: {e} → 재연결')
         finally:
-            try:
-                sock.close()
-            except Exception:
-                pass
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
             time.sleep(1.0)
 
     cap.release()
@@ -327,8 +340,15 @@ def main():
         target=uart_rx_loop,
         args=(node,), daemon=True).start()
     threading.Thread(
-        target=video_stream_loop,
-        daemon=True).start()
+        target=camera_stream_loop,
+        args=(CAM_INDEX, STREAM_PORT, 'CAM1_CONVEYOR'),
+        daemon=True
+    ).start()
+    threading.Thread(
+        target=camera_stream_loop,
+        args=(NURSERY_CAM_INDEX, NURSERY_STREAM_PORT, 'CAM_NURSERY'),
+        daemon=True
+    ).start()
 
     try:
         while rclpy.ok():

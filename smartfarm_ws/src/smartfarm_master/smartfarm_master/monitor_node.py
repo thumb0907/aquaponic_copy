@@ -44,8 +44,18 @@ class MonitorNode(Node):
             'stm_state':  'idle',
             'stm2_state': 'idle',
             'pi1_alive':  False,
-            'pi2_alive':  False, 
+            'pi2_alive':  False,
+            'pi3_alive':  False,
             'emergency':  False,
+        }
+
+        # 수경재배실 센서 캐시 — None이면 아직 수신 안 된 것
+        self.sensor_cache: dict[str, float | None] = {
+            'TDS':        None,   # TDS (ppm)
+            'PH':         None,   # pH
+            'WATER_TEMP': None,   # DS18B20 수온 (℃)
+            'AIR_TEMP':   None,   # DHT22 기온 (℃)
+            'HUMIDITY':   None,   # DHT22 습도 (%)
         }
         self.flags = {
             'ssf':  0,
@@ -66,7 +76,8 @@ class MonitorNode(Node):
         }
 
         self.pi1_last_hb = 0.0
-        self.pi2_last_hb = 0.0 
+        self.pi2_last_hb = 0.0
+        self.pi3_last_hb = 0.0
 
         self.create_subscription(
             String, '/pi1/uart_response',
@@ -129,18 +140,28 @@ class MonitorNode(Node):
                     except ValueError:
                         pass
 
+                # sensor_tds, sensor_ph 등 센서값 파싱
+                # master_node가 "sensor_tds:512.00" 형식으로 보냄
+                elif k.startswith('sensor_'):
+                    sensor_key = k[7:].upper()   # "sensor_tds" → "TDS"
+                    if sensor_key in self.sensor_cache:
+                        try:
+                            self.sensor_cache[sensor_key] = float(v)
+                        except ValueError:
+                            pass
+
     def _on_hb(self, msg: String):
         if msg.data == 'pi1':
             self.pi1_last_hb = time.time()
-        elif msg.data == 'pi2':          
+        elif msg.data == 'pi2':
             self.pi2_last_hb = time.time()
+        elif msg.data == 'pi3':
+            self.pi3_last_hb = time.time()
 
     def _refresh(self):
-        alive = (time.time() - self.pi1_last_hb) < 3.0
-        
         self.status['pi1_alive'] = (time.time() - self.pi1_last_hb) < 3.0
-        self.status['pi2_alive'] = (time.time() - self.pi2_last_hb) < 3.0 
-        
+        self.status['pi2_alive'] = (time.time() - self.pi2_last_hb) < 3.0
+        self.status['pi3_alive'] = (time.time() - self.pi3_last_hb) < 3.0
 
         if self.mode == 'stm':
             self._draw_stm()
@@ -215,28 +236,25 @@ class MonitorNode(Node):
     def _draw_flags(self):
         os.system('clear')
 
-        alive = self.status.get('pi1_alive', False)
+        alive  = self.status.get('pi1_alive', False)
         alive2 = self.status.get('pi2_alive', False)
-        emg   = self.status.get('emergency', False)
-        sf    = self.status.get('start_flag', False)
-        st    = self.status.get('stm_state', 'idle')
+        alive3 = self.status.get('pi3_alive', False)
+        emg    = self.status.get('emergency', False)
+        sf     = self.status.get('start_flag', False)
+        st     = self.status.get('stm_state', 'idle')
 
         print(f'{C.BOLD}━━━ 전체 플래그 상태 ━━━━━━━━━━━━━━━━━━━{C.RESET}')
         print()
 
         # 연결 상태
-        # Pi1 연결 
-        p1dot  = f'{C.GREEN}● 연결됨{C.RESET}' \
-                 if alive else f'{C.RED}● 끊김{C.RESET}'        
+        p1dot = f'{C.GREEN}● 연결됨{C.RESET}' if alive  else f'{C.RED}● 끊김{C.RESET}'
+        p2dot = f'{C.GREEN}● 연결됨{C.RESET}' if alive2 else f'{C.RED}● 끊김{C.RESET}'
+        p3dot = f'{C.GREEN}● 연결됨{C.RESET}' if alive3 else f'{C.RED}● 끊김{C.RESET}'
         print(f'  Pi1 연결    :  {p1dot}')
-
-        # Pi2 연결 
-        p2dot  = f'{C.GREEN}● 연결됨{C.RESET}' \
-                 if alive2 else f'{C.RED}● 끊김{C.RESET}'
         print(f'  Pi2 연결    :  {p2dot}')
+        print(f'  Pi3 연결    :  {p3dot}')
 
-        emgdot = f'{C.RED}{C.BOLD}● ON{C.RESET}' \
-                 if emg else f'{C.GRAY}○ OFF{C.RESET}'
+        emgdot = f'{C.RED}{C.BOLD}● ON{C.RESET}' if emg else f'{C.GRAY}○ OFF{C.RESET}'
         print(f'  긴급정지    :  {emgdot}')
         print()
 
@@ -279,6 +297,15 @@ class MonitorNode(Node):
         self._print_flag('wrf',  '오른쪽 성장 완료')
         print()
 
+        # 수경재배실 센서 (STM3)
+        print(f'{C.BOLD}  ── 수경재배실 센서 (STM3) ──{C.RESET}')
+        self._print_sensor('TDS',        'TDS',      'ppm')
+        self._print_sensor('PH',         'pH',       '')
+        self._print_sensor('WATER_TEMP', '수온',     '℃')
+        self._print_sensor('AIR_TEMP',   '기온',     '℃')
+        self._print_sensor('HUMIDITY',   '습도',     '%')
+        print()
+
         # 수확
         print(f'{C.BOLD}  ── 수확 ──{C.RESET}')
         self._print_flag('ff',   '트레이 고정')
@@ -301,11 +328,21 @@ class MonitorNode(Node):
 
         # 1이면 초록, 0이면 회색
         if val:
-            dot   = f'{C.GREEN}● {val}{C.RESET}'
+            dot = f'{C.GREEN}● {val}{C.RESET}'
         else:
-            dot   = f'{C.GRAY}○ {val}{C.RESET}'
+            dot = f'{C.GRAY}○ {val}{C.RESET}'
 
         print(f'  {key:<6}  ({desc:<22}) :  {dot}')
+
+    def _print_sensor(self, key: str, label: str, unit: str):
+        """센서값 한 줄 출력 — None이면 '수신 대기' 표시"""
+        val = self.sensor_cache.get(key)
+        if val is None:
+            dot = f'{C.GRAY}○ 수신 대기{C.RESET}'
+        else:
+            val_str = f'{val:.2f} {unit}'.strip()
+            dot     = f'{C.CYAN}● {val_str}{C.RESET}'
+        print(f'  {label:<8}  ({key:<12}) :  {dot}')
 
 
 def main():
