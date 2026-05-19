@@ -44,7 +44,7 @@ BAUD        = 115200
 CAM_INDEX = '/dev/video0'
 CAM_WIDTH   = 424#640
 CAM_HEIGHT  = 240#480
-JPEG_QUALITY = 50
+JPEG_QUALITY = 40
 FRAME_SKIP = 5
 SEND_INTERVAL = 0.5   # 카메라당 초당 2프레임 전송
 # 추가 카메라: 발아실 감지용
@@ -309,14 +309,17 @@ def camera_stream_loop(cam_index: int, stream_port: int, label: str):
             sock.connect((PC_IP, stream_port))
             print(f'[{label}] PC 연결: {PC_IP}:{stream_port}')
 
+            last_send_ts = 0.0
+
             while rclpy.ok():
                 ok, frame = cap.read()
                 if not ok:
                     continue
 
-                frame_count += 1
-                if frame_count % FRAME_SKIP != 0:
+                now = time.time()
+                if now - last_send_ts < SEND_INTERVAL:
                     continue
+                last_send_ts = now
 
                 ok, jpeg = cv2.imencode(
                     '.jpg',
