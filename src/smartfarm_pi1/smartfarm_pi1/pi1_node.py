@@ -46,7 +46,8 @@ CAM_WIDTH   = 424#640
 CAM_HEIGHT  = 240#480
 JPEG_QUALITY = 40
 #FRAME_SKIP = 5
-SEND_INTERVAL = 0.5   # 카메라당 초당 2프레임 전송
+CONVEYOR_SEND_INTERVAL = 0.5    # 컨베이어는 유지 (빠른 반응 불필요)
+NURSERY_SEND_INTERVAL  = 0.2    # 발아실은 5fps (5 * 0.2초 = 1초 내 판정 가능)
 # 추가 카메라: 발아실 감지용
 NURSERY_LEFT_CAM_INDEX = '/dev/video2'
 NURSERY_LEFT_STREAM_PORT = 5001
@@ -290,7 +291,7 @@ def uart_rx_loop(node: Pi1Node):
         time.sleep(0.02)
 
 
-def camera_stream_loop(cam_index: int, stream_port: int, label: str):
+def camera_stream_loop(cam_index: int, stream_port: int, label: str, send_interval: float = CONVEYOR_SEND_INTERVAL):
     """카메라 영상 → PC TCP 스트리밍"""
     cap = cv2.VideoCapture(cam_index)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -316,7 +317,7 @@ def camera_stream_loop(cam_index: int, stream_port: int, label: str):
 
             while rclpy.ok():
                 now = time.time()
-                if now - last_send_ts < SEND_INTERVAL:
+                if now - last_send_ts < send_interval:
                     # 전송 주기가 아닐 때도 카메라 버퍼는 계속 비움
                     cap.grab()
                     continue
@@ -376,13 +377,13 @@ def main():
 
     threading.Thread(
         target=camera_stream_loop,
-        args=(NURSERY_LEFT_CAM_INDEX, NURSERY_LEFT_STREAM_PORT, 'CAM_NURSERY_LEFT'),
+        args=(NURSERY_LEFT_CAM_INDEX, NURSERY_LEFT_STREAM_PORT, 'CAM_NURSERY_LEFT', NURSERY_SEND_INTERVAL),
         daemon=True
     ).start()
 
     threading.Thread(
         target=camera_stream_loop,
-        args=(NURSERY_RIGHT_CAM_INDEX, NURSERY_RIGHT_STREAM_PORT, 'CAM_NURSERY_RIGHT'),
+        args=(NURSERY_RIGHT_CAM_INDEX, NURSERY_RIGHT_STREAM_PORT, 'CAM_NURSERY_RIGHT', NURSERY_SEND_INTERVAL),
         daemon=True
     ).start()
 

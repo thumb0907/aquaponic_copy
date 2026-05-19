@@ -66,8 +66,8 @@ NURSERY_LEFT_STREAM_PORT = 5001
 NURSERY_RIGHT_STREAM_PORT = 5002
 
 NURSERY_MIN_CONF = 0.05
-NURSERY_STABLE_FRAMES = 5
-NURSERY_COOLDOWN_SEC = 5.0
+NURSERY_STABLE_FRAMES = 3
+NURSERY_COOLDOWN_SEC = 3.0
 
 TRAY_OCCUPY_FRAMES = 2
 TRAY_LOST_FRAMES = 10
@@ -1227,7 +1227,7 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
             data = b''
             payload_size = struct.calcsize('>I')
             last_process_ts = 0.0
-            PROCESS_INTERVAL = 0.5   # 약 2fps
+            PROCESS_INTERVAL = 0.15   # 약 2fps
 
             while rclpy.ok():
                 while len(data) < payload_size:
