@@ -890,7 +890,7 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         source=frame,
         imgsz=640,  
         conf=NURSERY_MIN_CONF,
-        device='cpu',
+        device='cuda',
         verbose=False
     )[0]
     disp = frame.copy()
