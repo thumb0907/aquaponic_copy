@@ -39,11 +39,18 @@ MIN_CONF      = 0.60
 STABLE_FRAMES = 5
 COOLDOWN_SEC  = 2.0
 
-# ROI (트레이 감지 유효 영역)
+# 컨베이어 ROI (트레이 감지 유효 영역)
 ROI_X_MIN = 0.25
 ROI_X_MAX = 0.85
 ROI_Y_MIN = 0.05
 ROI_Y_MAX = 0.95
+# 발아실 ROI
+NURSERY_ROI_X_MIN = 0.20
+NURSERY_ROI_X_MAX = 0.80
+NURSERY_ROI_Y_MIN = 0.15
+NURSERY_ROI_Y_MAX = 0.90
+NURSERY_TRAY_MIN_BOX_RATIO = 0.02
+NURSERY_SPROUT_MIN_BOX_RATIO = 0.005
 
 # 박스 최소 크기 (화면 대비 비율)
 MIN_BOX_RATIO = 0.20
@@ -58,11 +65,11 @@ NURSERY_MODEL_PATH = '/home/thumb/aquaponic_copy/best.pt'
 NURSERY_LEFT_STREAM_PORT = 5001
 NURSERY_RIGHT_STREAM_PORT = 5002
 
-NURSERY_MIN_CONF = 0.10
+NURSERY_MIN_CONF = 0.05
 NURSERY_STABLE_FRAMES = 5
 NURSERY_COOLDOWN_SEC = 5.0
 
-TRAY_OCCUPY_FRAMES = 5
+TRAY_OCCUPY_FRAMES = 3
 TRAY_LOST_FRAMES = 10
 # ── 프로토콜 상수 (comm.h / Serial.h 와 동일) ──
 SOF = 0xAA
@@ -881,11 +888,21 @@ def process_frame(node: MasterNode, frame: np.ndarray):
 def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
     results = node.nursery_model.predict(
         source=frame,
+        imgsz=640,  
         conf=NURSERY_MIN_CONF,
         device='cpu',
         verbose=False
     )[0]
     disp = frame.copy()
+    h, w = frame.shape[:2]
+
+    cv2.rectangle(
+        disp,
+        (int(w * NURSERY_ROI_X_MIN), int(h * NURSERY_ROI_Y_MIN)),
+        (int(w * NURSERY_ROI_X_MAX), int(h * NURSERY_ROI_Y_MAX)),
+        (255, 255, 0),
+        2
+    )
     node.get_logger().info(f'[Nursery {position}] boxes={len(results.boxes)}')
 
     for box in results.boxes:
@@ -894,18 +911,37 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         conf = float(box.conf[0].item())
         class_name = node.nursery_model.names[cls_id]
 
-        node.get_logger().info(
-            f'[Nursery {position}] DETECT class={class_name}, conf={conf:.2f}'
-        ) 
+        cx = (x1 + x2) / 2 / w
+        cy = (y1 + y2) / 2 / h
+        box_w = x2 - x1
+        box_h = y2 - y1
 
-        cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        if class_name == 'tray':
+            min_box_ratio = NURSERY_TRAY_MIN_BOX_RATIO
+        else:
+            min_box_ratio = NURSERY_SPROUT_MIN_BOX_RATIO
+
+        in_roi = (
+            NURSERY_ROI_X_MIN < cx < NURSERY_ROI_X_MAX
+            and NURSERY_ROI_Y_MIN < cy < NURSERY_ROI_Y_MAX
+            and box_w / w > min_box_ratio
+            and box_h / h > min_box_ratio
+        )
+
+        color = (0, 255, 0) if in_roi else (0, 0, 255)
+
+        node.get_logger().info(
+            f'[Nursery {position}] DETECT class={class_name}, conf={conf:.2f}, in_roi={in_roi}'
+        )
+
+        cv2.rectangle(disp, (x1, y1), (x2, y2), color, 2)
         cv2.putText(
             disp,
             f'{class_name} {conf:.2f}',
             (x1, max(20, y1 - 5)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
-            (0, 255, 0),
+            color,
             2
         )
 
@@ -920,6 +956,7 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
     new_uv = None
     
     for box in results.boxes:
+        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
         cls_id = int(box.cls[0].item())
         conf = float(box.conf[0].item())
         class_name = node.nursery_model.names[cls_id]
@@ -927,7 +964,31 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         if class_name not in counts:
             continue
 
-        counts[class_name] += 1
+        cx = (x1 + x2) / 2 / w
+        cy = (y1 + y2) / 2 / h
+        box_w = x2 - x1
+        box_h = y2 - y1
+
+        if class_name == 'tray':
+            min_box_ratio = NURSERY_TRAY_MIN_BOX_RATIO
+        else:
+            min_box_ratio = NURSERY_SPROUT_MIN_BOX_RATIO
+
+        in_roi = (
+            NURSERY_ROI_X_MIN < cx < NURSERY_ROI_X_MAX
+            and NURSERY_ROI_Y_MIN < cy < NURSERY_ROI_Y_MAX
+            and box_w / w > min_box_ratio
+            and box_h / h > min_box_ratio
+        )
+
+        if not in_roi:
+            continue
+
+        if class_name == 'tray':
+            counts['tray'] = 1
+        else:
+            counts[class_name] += 1
+
 
         if class_name == 'sprout3':
             best_sprout3_conf = max(best_sprout3_conf, conf)
@@ -1050,12 +1111,12 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         2
     )
 
-    target_queue = nursery_left_frame_queue if position == 'left' else nursery_right_frame_queue
+    #target_queue = nursery_left_frame_queue if position == 'left' else nursery_right_frame_queue
 
-    try:
-        target_queue.put_nowait(disp)
-    except queue.Full:
-        pass
+    #try:
+        #target_queue.put_nowait(disp)
+    #except queue.Full:
+        #pass
 
 # ══════════════════════════════════════════════
 # 카메라 스트림 수신
@@ -1156,7 +1217,7 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
     server.bind(('0.0.0.0', stream_port))
     server.listen(1)
     print(f'[Nursery Stream {position}] 연결 대기 (port={stream_port})')
-
+    
     while rclpy.ok():
         conn = None
         try:
@@ -1165,6 +1226,8 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
 
             data = b''
             payload_size = struct.calcsize('>I')
+            last_process_ts = 0.0
+            PROCESS_INTERVAL = 0.5   # 약 2fps
 
             while rclpy.ok():
                 while len(data) < payload_size:
@@ -1205,8 +1268,11 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
                         print(f'[Nursery Calib {position}] 왜곡 보정 맵 초기화 완료')
 
                     frame = cv2.remap(frame, map1, map2, cv2.INTER_LINEAR)
-
-                process_nursery_frame(node, frame, position)
+                now = time.time()
+                if now - last_process_ts >= PROCESS_INTERVAL:
+                    last_process_ts = now
+                    process_nursery_frame(node, frame, position)
+                
 
         except Exception as e:
             print(f'[Nursery Stream {position}] 오류: {e}')
@@ -1242,17 +1308,17 @@ def main(args=None):
             rclpy.spin_once(node, timeout_sec=0.01)
             try:
                 frame = frame_queue.get_nowait()
-                cv2.imshow('Pi1 Camera', frame)               
+                #cv2.imshow('Pi1 Camera', frame)               
             except queue.Empty:
                 pass
             try:
                 frame = nursery_left_frame_queue.get_nowait()
-                cv2.imshow('Pi1 Nursery Left Camera', frame)
+                #cv2.imshow('Pi1 Nursery Left Camera', frame)
             except queue.Empty:
                 pass
             try:
                 frame = nursery_right_frame_queue.get_nowait()
-                cv2.imshow('Pi1 Nursery Right Camera', frame)
+                #cv2.imshow('Pi1 Nursery Right Camera', frame)
             except queue.Empty:
                 pass
             cv2.waitKey(1) 

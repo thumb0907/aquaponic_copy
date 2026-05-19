@@ -42,8 +42,11 @@ STREAM_PORT = 5000
 SERIAL_PORT = '/dev/stm1'
 BAUD        = 115200
 CAM_INDEX = '/dev/video0'
-CAM_WIDTH   = 640
-CAM_HEIGHT  = 480
+CAM_WIDTH   = 424#640
+CAM_HEIGHT  = 240#480
+JPEG_QUALITY = 50
+FRAME_SKIP = 5
+SEND_INTERVAL = 0.5   # 카메라당 초당 2프레임 전송
 # 추가 카메라: 발아실 감지용
 NURSERY_LEFT_CAM_INDEX = '/dev/video2'
 NURSERY_LEFT_STREAM_PORT = 5001
@@ -292,11 +295,13 @@ def camera_stream_loop(cam_index: int, stream_port: int, label: str):
     cap = cv2.VideoCapture(cam_index)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)
-
+    
     if not cap.isOpened():
         print(f'[{label}] 카메라 열기 실패 index={cam_index}')
         return
 
+    frame_count = 0
+    
     while rclpy.ok():
         sock = None
         try:
@@ -309,24 +314,31 @@ def camera_stream_loop(cam_index: int, stream_port: int, label: str):
                 if not ok:
                     continue
 
-                _, jpeg = cv2.imencode(
+                frame_count += 1
+                if frame_count % FRAME_SKIP != 0:
+                    continue
+
+                ok, jpeg = cv2.imencode(
                     '.jpg',
                     frame,
-                    [cv2.IMWRITE_JPEG_QUALITY, 80]
+                    [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
                 )
+                if not ok:
+                    continue
 
                 data = jpeg.tobytes()
                 sock.sendall(struct.pack('>I', len(data)) + data)
 
         except Exception as e:
-            print(f'[{label}] 오류: {e} → 재연결')
+            print(f'[{label}] 스트림 오류: {e}')
+            time.sleep(1.0)
+
         finally:
             if sock is not None:
                 try:
                     sock.close()
                 except Exception:
                     pass
-            time.sleep(1.0)
 
     cap.release()
 
