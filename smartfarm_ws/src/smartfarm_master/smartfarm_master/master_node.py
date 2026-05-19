@@ -57,8 +57,8 @@ MIN_BOX_RATIO = 0.20
 
 # 캘리브레이션 파일
 CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
-NURSERY_LEFT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_left_calib.npz'
-NURSERY_RIGHT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_right_calib.npz'
+NURSERY_LEFT_CALIB_PATH = None#'/home/thumb/aquaponic_copy/smartfarm_ws/uv_left_calib.npz'
+NURSERY_RIGHT_CALIB_PATH = None#'/home/thumb/aquaponic_copy/smartfarm_ws/uv_right_calib.npz'
 
 # 발아실 카메라 / 모델
 NURSERY_MODEL_PATH = '/home/thumb/aquaponic_copy/best.pt'
@@ -1111,12 +1111,12 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         2
     )
 
-    #target_queue = nursery_left_frame_queue if position == 'left' else nursery_right_frame_queue
+    target_queue = nursery_left_frame_queue if position == 'left' else nursery_right_frame_queue
 
-    #try:
-        #target_queue.put_nowait(disp)
-    #except queue.Full:
-        #pass
+    try:
+        target_queue.put_nowait(disp)
+    except queue.Full:
+        pass
 
 # ══════════════════════════════════════════════
 # 카메라 스트림 수신
@@ -1227,7 +1227,7 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
             data = b''
             payload_size = struct.calcsize('>I')
             last_process_ts = 0.0
-            PROCESS_INTERVAL = 0.15   # 약 2fps
+            PROCESS_INTERVAL = 1
 
             while rclpy.ok():
                 while len(data) < payload_size:
@@ -1312,17 +1312,17 @@ def main(args=None):
             rclpy.spin_once(node, timeout_sec=0.01)
             try:
                 frame = frame_queue.get_nowait()
-                #cv2.imshow('Pi1 Camera', frame)               
+                cv2.imshow('Pi1 Camera', frame)               
             except queue.Empty:
                 pass
             try:
                 frame = nursery_left_frame_queue.get_nowait()
-                #cv2.imshow('Pi1 Nursery Left Camera', frame)
+                cv2.imshow('Pi1 Nursery Left Camera', frame)
             except queue.Empty:
                 pass
             try:
                 frame = nursery_right_frame_queue.get_nowait()
-                #cv2.imshow('Pi1 Nursery Right Camera', frame)
+                cv2.imshow('Pi1 Nursery Right Camera', frame)
             except queue.Empty:
                 pass
             cv2.waitKey(1) 
