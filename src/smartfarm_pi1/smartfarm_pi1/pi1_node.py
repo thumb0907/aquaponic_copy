@@ -45,7 +45,7 @@ CAM_INDEX = '/dev/video0'
 CAM_WIDTH   = 424#640
 CAM_HEIGHT  = 240#480
 JPEG_QUALITY = 40
-FRAME_SKIP = 5
+#FRAME_SKIP = 5
 SEND_INTERVAL = 0.5   # 카메라당 초당 2프레임 전송
 # 추가 카메라: 발아실 감지용
 NURSERY_LEFT_CAM_INDEX = '/dev/video2'
