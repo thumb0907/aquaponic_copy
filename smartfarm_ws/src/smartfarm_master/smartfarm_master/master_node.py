@@ -50,13 +50,15 @@ MIN_BOX_RATIO = 0.20
 
 # 캘리브레이션 파일
 CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
+NURSERY_LEFT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_left_calib.npz'
+NURSERY_RIGHT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_right_calib.npz'
 
 # 발아실 카메라 / 모델
 NURSERY_MODEL_PATH = '/home/thumb/aquaponic_copy/best.pt'
 NURSERY_LEFT_STREAM_PORT = 5001
 NURSERY_RIGHT_STREAM_PORT = 5002
 
-NURSERY_MIN_CONF = 0.50
+NURSERY_MIN_CONF = 0.10
 NURSERY_STABLE_FRAMES = 5
 NURSERY_COOLDOWN_SEC = 5.0
 
@@ -212,6 +214,7 @@ class MasterNode(Node):
         print('[YOLO] 발아실 모델 로딩 중...')
         self.nursery_model = YOLO(NURSERY_MODEL_PATH)
         print('[YOLO] 발아실 모델 로딩 완료')
+        print('[Nursery model names]', self.nursery_model.names)
 
 
         # ── Publisher ─────────────────────────
@@ -751,7 +754,7 @@ def process_frame(node: MasterNode, frame: np.ndarray):
         conf=0.25,
         verbose=False
     )[0]
-
+    disp = frame.copy()
     best = None
     for box in results.boxes:
         cls_id = int(box.cls[0].item())
@@ -882,6 +885,29 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         device='cpu',
         verbose=False
     )[0]
+    disp = frame.copy()
+    node.get_logger().info(f'[Nursery {position}] boxes={len(results.boxes)}')
+
+    for box in results.boxes:
+        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+        cls_id = int(box.cls[0].item())
+        conf = float(box.conf[0].item())
+        class_name = node.nursery_model.names[cls_id]
+
+        node.get_logger().info(
+            f'[Nursery {position}] DETECT class={class_name}, conf={conf:.2f}'
+        ) 
+
+        cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(
+            disp,
+            f'{class_name} {conf:.2f}',
+            (x1, max(20, y1 - 5)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 0),
+            2
+        )
 
     counts = {
         'tray': 0,
@@ -990,7 +1016,6 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         f'[Nursery {position}] tray={counts["tray"]}, sprout3={counts["sprout3"]}, '
         f'stable={stable}, label={label}'
     )
-    disp = frame.copy()
 
     y = 30
     for name, count in counts.items():
@@ -1110,7 +1135,22 @@ def video_receive_loop(node: MasterNode):
             with node.state_lock:
                 node.cam1_connected = False
 
-def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str):
+def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str, calib_path: str | None = None):
+    K = None
+    dist = None
+    map1, map2 = None, None
+
+    if calib_path is not None:
+        try:
+            calib = np.load(calib_path)
+            K = calib['camera_matrix']
+            dist = calib['dist_coeffs']
+            print(f'[Nursery Calib {position}] 로드 완료: {calib_path}')
+        except Exception as e:
+            print(f'[Nursery Calib {position}] 로드 실패: {e}')
+            K = None
+            dist = None
+
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(('0.0.0.0', stream_port))
@@ -1121,7 +1161,7 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
         conn = None
         try:
             conn, addr = server.accept()
-            print(f'[Nursery Stream] 연결됨: {addr}')
+            print(f'[Nursery Stream {position}] 연결됨: {addr}')
 
             data = b''
             payload_size = struct.calcsize('>I')
@@ -1153,11 +1193,23 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
                 if frame is None:
                     continue
 
+                if K is not None and dist is not None:
+                    if map1 is None:
+                        h, w = frame.shape[:2]
+                        newK, _ = cv2.getOptimalNewCameraMatrix(
+                            K, dist, (w, h), 0, (w, h)
+                        )
+                        map1, map2 = cv2.initUndistortRectifyMap(
+                            K, dist, None, newK, (w, h), cv2.CV_16SC2
+                        )
+                        print(f'[Nursery Calib {position}] 왜곡 보정 맵 초기화 완료')
+
+                    frame = cv2.remap(frame, map1, map2, cv2.INTER_LINEAR)
+
                 process_nursery_frame(node, frame, position)
-              
 
         except Exception as e:
-            print(f'[Nursery Stream] 오류: {e}')
+            print(f'[Nursery Stream {position}] 오류: {e}')
         finally:
             if conn is not None:
                 try:
@@ -1175,13 +1227,13 @@ def main(args=None):
     
     threading.Thread(
         target=nursery_video_receive_loop,
-        args=(node, NURSERY_LEFT_STREAM_PORT, 'left'),
+        args=(node, NURSERY_LEFT_STREAM_PORT, 'left', NURSERY_LEFT_CALIB_PATH),
         daemon=True
     ).start()
 
     threading.Thread(
         target=nursery_video_receive_loop,
-        args=(node, NURSERY_RIGHT_STREAM_PORT, 'right'),
+        args=(node, NURSERY_RIGHT_STREAM_PORT, 'right', NURSERY_RIGHT_CALIB_PATH),
         daemon=True
     ).start()
 
