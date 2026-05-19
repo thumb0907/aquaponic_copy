@@ -1248,6 +1248,11 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
                 frame_data = data[:msg_size]
                 data = data[msg_size:]
 
+                # 처리 주기가 아니면 JPEG 디코딩도 하지 않고 바로 버림
+                now = time.time()
+                if now - last_process_ts < PROCESS_INTERVAL:
+                    continue
+
                 frame = cv2.imdecode(
                     np.frombuffer(frame_data, dtype=np.uint8),
                     cv2.IMREAD_COLOR
@@ -1255,6 +1260,8 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
 
                 if frame is None:
                     continue
+
+                last_process_ts = now
 
                 if K is not None and dist is not None:
                     if map1 is None:
@@ -1268,12 +1275,9 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
                         print(f'[Nursery Calib {position}] 왜곡 보정 맵 초기화 완료')
 
                     frame = cv2.remap(frame, map1, map2, cv2.INTER_LINEAR)
-                now = time.time()
-                if now - last_process_ts >= PROCESS_INTERVAL:
-                    last_process_ts = now
-                    process_nursery_frame(node, frame, position)
-                
 
+                process_nursery_frame(node, frame, position)
+                
         except Exception as e:
             print(f'[Nursery Stream {position}] 오류: {e}')
         finally:

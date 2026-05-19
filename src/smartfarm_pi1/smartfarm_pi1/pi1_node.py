@@ -293,10 +293,12 @@ def uart_rx_loop(node: Pi1Node):
 def camera_stream_loop(cam_index: int, stream_port: int, label: str):
     """카메라 영상 → PC TCP 스트리밍"""
     cap = cv2.VideoCapture(cam_index)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     
-    if not cap.isOpened():
+    if not cap.isOpened():  
         print(f'[{label}] 카메라 열기 실패 index={cam_index}')
         return
 
@@ -306,19 +308,27 @@ def camera_stream_loop(cam_index: int, stream_port: int, label: str):
         sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             sock.connect((PC_IP, stream_port))
             print(f'[{label}] PC 연결: {PC_IP}:{stream_port}')
 
             last_send_ts = 0.0
 
             while rclpy.ok():
-                ok, frame = cap.read()
-                if not ok:
-                    continue
-
                 now = time.time()
                 if now - last_send_ts < SEND_INTERVAL:
+                    # 전송 주기가 아닐 때도 카메라 버퍼는 계속 비움
+                    cap.grab()
                     continue
+
+                # 전송할 시점에는 오래된 버퍼를 몇 장 버리고 최신 프레임만 가져옴
+                for _ in range(5):
+                    cap.grab()
+
+                ok, frame = cap.retrieve()
+                if not ok or frame is None:
+                    continue
+
                 last_send_ts = now
 
                 ok, jpeg = cv2.imencode(
