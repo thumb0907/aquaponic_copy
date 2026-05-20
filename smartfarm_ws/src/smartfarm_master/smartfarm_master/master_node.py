@@ -923,14 +923,25 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
     disp = frame.copy()
     h, w = frame.shape[:2]
 
+    if position == 'left':
+        draw_roi_x_min = 0.00
+        draw_roi_x_max = 1.00
+        draw_roi_y_min = 0.00
+        draw_roi_y_max = 1.00
+    else:
+        draw_roi_x_min = NURSERY_ROI_X_MIN
+        draw_roi_x_max = NURSERY_ROI_X_MAX
+        draw_roi_y_min = NURSERY_ROI_Y_MIN
+        draw_roi_y_max = NURSERY_ROI_Y_MAX
+
     cv2.rectangle(
         disp,
-        (int(w * NURSERY_ROI_X_MIN), int(h * NURSERY_ROI_Y_MIN)),
-        (int(w * NURSERY_ROI_X_MAX), int(h * NURSERY_ROI_Y_MAX)),
+        (int(w * draw_roi_x_min), int(h * draw_roi_y_min)),
+        (int(w * draw_roi_x_max), int(h * draw_roi_y_max)),
         (255, 255, 0),
         2
     )
-    node.get_logger().info(f'[Nursery {position}] boxes={len(results.boxes)}')
+    #node.get_logger().info(f'[Nursery {position}] boxes={len(results.boxes)}')
 
     for box in results.boxes:
         x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
@@ -944,22 +955,36 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         box_h = y2 - y1
 
         if class_name == 'tray':
-            min_box_ratio = NURSERY_TRAY_MIN_BOX_RATIO
+            min_box_ratio = 0.08 if position == 'left' else NURSERY_TRAY_MIN_BOX_RATIO
         else:
             min_box_ratio = NURSERY_SPROUT_MIN_BOX_RATIO
 
+        if position == 'left':
+            roi_x_min = 0.00
+            roi_x_max = 1.00
+            roi_y_min = 0.00
+            roi_y_max = 1.00
+        else:
+            roi_x_min = NURSERY_ROI_X_MIN
+            roi_x_max = NURSERY_ROI_X_MAX
+            roi_y_min = NURSERY_ROI_Y_MIN
+            roi_y_max = NURSERY_ROI_Y_MAX
+
         in_roi = (
-            NURSERY_ROI_X_MIN < cx < NURSERY_ROI_X_MAX
-            and NURSERY_ROI_Y_MIN < cy < NURSERY_ROI_Y_MAX
+            roi_x_min < cx < roi_x_max
+            and roi_y_min < cy < roi_y_max
             and box_w / w > min_box_ratio
             and box_h / h > min_box_ratio
         )
 
         color = (0, 255, 0) if in_roi else (0, 0, 255)
 
-        node.get_logger().info(
-            f'[Nursery {position}] DETECT class={class_name}, conf={conf:.2f}, in_roi={in_roi}'
-        )
+        #node.get_logger().info(
+        #    f'[Nursery {position}] DETECT class={class_name}, conf={conf:.2f}, '
+        #    f'cx={cx:.2f}, cy={cy:.2f}, '
+        #    f'bw={box_w / w:.2f}, bh={box_h / h:.2f}, '
+        #    f'in_roi={in_roi}'
+        #)
 
         cv2.rectangle(disp, (x1, y1), (x2, y2), color, 2)
         cv2.putText(
@@ -997,13 +1022,24 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         box_h = y2 - y1
 
         if class_name == 'tray':
-            min_box_ratio = NURSERY_TRAY_MIN_BOX_RATIO
+            min_box_ratio = 0.08 if position == 'left' else NURSERY_TRAY_MIN_BOX_RATIO
         else:
             min_box_ratio = NURSERY_SPROUT_MIN_BOX_RATIO
 
+        if position == 'left':
+            roi_x_min = 0.00
+            roi_x_max = 1.00
+            roi_y_min = 0.00
+            roi_y_max = 1.00
+        else:
+            roi_x_min = NURSERY_ROI_X_MIN
+            roi_x_max = NURSERY_ROI_X_MAX
+            roi_y_min = NURSERY_ROI_Y_MIN
+            roi_y_max = NURSERY_ROI_Y_MAX
+
         in_roi = (
-            NURSERY_ROI_X_MIN < cx < NURSERY_ROI_X_MAX
-            and NURSERY_ROI_Y_MIN < cy < NURSERY_ROI_Y_MAX
+            roi_x_min < cx < roi_x_max
+            and roi_y_min < cy < roi_y_max
             and box_w / w > min_box_ratio
             and box_h / h > min_box_ratio
         )
