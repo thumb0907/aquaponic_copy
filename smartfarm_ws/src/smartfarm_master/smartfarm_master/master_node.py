@@ -757,8 +757,9 @@ class MasterNode(Node):
 def process_frame(node: MasterNode, frame: np.ndarray):
     results = node.model(
         frame,
-        imgsz=960,
+        imgsz=640,
         conf=0.25,
+        device='cpu',
         verbose=False
     )[0]
     disp = frame.copy()
