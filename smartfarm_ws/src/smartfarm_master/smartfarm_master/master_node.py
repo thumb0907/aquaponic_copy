@@ -12,6 +12,9 @@ master_node.py — PC 마스터 노드
 """
 from __future__ import annotations
 
+import os
+os.environ.pop('CUDA_VISIBLE_DEVICES', None)  # 빈 문자열 설정 제거
+
 import time
 import threading
 import socket
@@ -77,7 +80,7 @@ NURSERY_MODEL_PATH = '/home/thumb/aquaponic_copy/best.pt'
 NURSERY_LEFT_STREAM_PORT = 5001
 NURSERY_RIGHT_STREAM_PORT = 5002
 
-NURSERY_MIN_CONF = 0.4     # YOLO conf 최소값, 이게 트레이일 확률이 40%이상이어야 박스를 그림
+NURSERY_MIN_CONF = 0.3     # YOLO conf 최소값, 이게 트레이일 확률이 30%이상이어야 박스를 그림
 NURSERY_STABLE_FRAMES = 3
 NURSERY_COOLDOWN_SEC = 3.0
 
