@@ -906,11 +906,18 @@ def process_frame(node: MasterNode, frame: np.ndarray):
     #    pass
 
 def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
+    import os
+    import torch
+    # 추론 직전에 강제 설정
+    if not torch.cuda.is_available():
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+        torch.cuda.set_device(0)
     results = node.nursery_model.predict(
         source=frame,
         imgsz=416, #640,  
         conf=NURSERY_MIN_CONF,
-        device='cuda',
+        #device='cuda',
+        device='cuda:0',  # 'cuda' 대신 'cuda:0'
         verbose=False
     )[0]
     disp = frame.copy()
