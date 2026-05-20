@@ -12,11 +12,6 @@ master_node.py — PC 마스터 노드
 """
 from __future__ import annotations
 
-import os
-# CUDA_VISIBLE_DEVICES 강제 설정 — 빈 문자열 덮어쓰기
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-
-
 import time
 import threading
 import socket
@@ -25,6 +20,7 @@ import queue
 
 import cv2
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 import rclpy
@@ -62,11 +58,11 @@ ROI_X_MAX = 0.85
 ROI_Y_MIN = 0.05
 ROI_Y_MAX = 0.95
 # 발아실 ROI
-NURSERY_ROI_X_MIN = 0.10
-NURSERY_ROI_X_MAX = 0.90
-NURSERY_ROI_Y_MIN = 0.15
-NURSERY_ROI_Y_MAX = 0.85
-NURSERY_TRAY_MIN_BOX_RATIO = 0.3   # 트레이 박스가 화면 대비 최소 30% 이상이어야 감지
+NURSERY_ROI_X_MIN = 0.05
+NURSERY_ROI_X_MAX = 0.95
+NURSERY_ROI_Y_MIN = 0.10
+NURSERY_ROI_Y_MAX = 0.90
+NURSERY_TRAY_MIN_BOX_RATIO = 0.15   # 트레이 박스가 화면 대비 최소 15% 이상이어야 감지
 NURSERY_SPROUT_MIN_BOX_RATIO = 0.005    
 
 # 박스 최소 크기 (화면 대비 비율)
@@ -82,7 +78,7 @@ NURSERY_MODEL_PATH = '/home/thumb/aquaponic_copy/best.pt'
 NURSERY_LEFT_STREAM_PORT = 5001
 NURSERY_RIGHT_STREAM_PORT = 5002
 
-NURSERY_MIN_CONF = 0.3     # YOLO conf 최소값, 이게 트레이일 확률이 30%이상이어야 박스를 그림
+NURSERY_MIN_CONF = 0.2     # YOLO conf 최소값, 이게 트레이일 확률이 20%이상이어야 박스를 그림
 NURSERY_STABLE_FRAMES = 3
 NURSERY_COOLDOWN_SEC = 3.0
 
@@ -141,8 +137,17 @@ class MasterNode(Node):
 
     def __init__(self):
         super().__init__('master_node')
-
+        
         self.state_lock = threading.Lock()
+        self.yolo_lock = threading.Lock()
+
+        self.yolo_device = 0 if torch.cuda.is_available() else 'cpu'
+
+        print('[Torch check]')
+        print('torch cuda available:', torch.cuda.is_available())
+        print('torch cuda count:', torch.cuda.device_count())
+        print('torch version:', torch.__version__)
+        print('YOLO device:', self.yolo_device)
 
         # ── 공유 플래그 ───────────────────────
         self.flags = {
@@ -776,7 +781,7 @@ def process_frame(node: MasterNode, frame: np.ndarray):
         frame,
         imgsz=416, #640,
         conf=0.25,
-        device='cpu',
+        device=node.yolo_device,
         verbose=False
     )[0]
     disp = frame.copy()
@@ -906,20 +911,15 @@ def process_frame(node: MasterNode, frame: np.ndarray):
     #    pass
 
 def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
-    import os
-    import torch
-    # 추론 직전에 강제 설정
-    if not torch.cuda.is_available():
-        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-        torch.cuda.set_device(0)
-    results = node.nursery_model.predict(
-        source=frame,
-        imgsz=416, #640,  
-        conf=NURSERY_MIN_CONF,
-        #device='cuda',
-        device='cuda:0',  # 'cuda' 대신 'cuda:0'
-        verbose=False
-    )[0]
+    with node.yolo_lock:
+        results = node.nursery_model.predict(
+            source=frame,
+            imgsz=416,
+            conf=NURSERY_MIN_CONF,
+            device=node.yolo_device,
+            verbose=False
+        )[0]
+        
     disp = frame.copy()
     h, w = frame.shape[:2]
 
