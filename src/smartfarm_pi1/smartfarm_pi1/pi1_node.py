@@ -44,7 +44,7 @@ BAUD        = 115200
 CAM_INDEX = '/dev/video2'
 CAM_WIDTH   = 640
 CAM_HEIGHT  = 480
-JPEG_QUALITY = 25
+JPEG_QUALITY = 20
 #FRAME_SKIP = 5
 CONVEYOR_SEND_INTERVAL = 0.5    # 컨베이어는 유지 (빠른 반응 불필요)
 NURSERY_SEND_INTERVAL  = 0.2    # 발아실은 5fps (5 * 0.2초 = 1초 내 판정 가능)
@@ -329,7 +329,6 @@ def camera_stream_loop(cam_index: int, stream_port: int, label: str, send_interv
                 ok, frame = cap.retrieve()
                 if not ok or frame is None:
                     continue
-                frame = cv2.resize(frame, (320, 240))  # 전송 전 축소
                 last_send_ts = now
 
                 ok, jpeg = cv2.imencode(
