@@ -318,6 +318,7 @@ def camera_stream_loop(cam_index: int, stream_port: int, label: str, send_interv
             while rclpy.ok():
                 now = time.time()
                 if now - last_send_ts < send_interval:
+                    time.sleep(0.005)
                     # 전송 주기가 아닐 때도 카메라 버퍼는 계속 비움
                     cap.grab()
                     continue

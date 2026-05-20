@@ -29,6 +29,18 @@ from std_msgs.msg import String, UInt8MultiArray
 frame_queue = queue.Queue(maxsize=2)
 nursery_left_frame_queue = queue.Queue(maxsize=2)
 nursery_right_frame_queue = queue.Queue(maxsize=2)
+def put_latest(q, item):
+    try:
+        q.put_nowait(item)
+    except queue.Full:
+        try:
+            q.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            q.put_nowait(item)
+        except queue.Full:
+            pass
 
 # ── 설정 ──────────────────────────────────────
 # 컨베이어 트레이인식 카메라
@@ -36,7 +48,7 @@ MODEL_PATH    = '/home/thumb/aquaponic_copy/tray2/best.pt'
 STREAM_PORT   = 5000
 TRAY_CLASS_ID = 0
 MIN_CONF      = 0.60
-STABLE_FRAMES = 5
+STABLE_FRAMES = 3
 COOLDOWN_SEC  = 2.0
 
 # 컨베이어 ROI (트레이 감지 유효 영역)
@@ -757,7 +769,7 @@ class MasterNode(Node):
 def process_frame(node: MasterNode, frame: np.ndarray):
     results = node.model(
         frame,
-        imgsz=640,
+        imgsz=416, #640,
         conf=0.25,
         device='cpu',
         verbose=False
@@ -881,15 +893,17 @@ def process_frame(node: MasterNode, frame: np.ndarray):
         cv2.putText(disp, 'EMERGENCY',
             (10, 170), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2)
 
-    try:
-        frame_queue.put_nowait(disp)
-    except queue.Full:
-        pass
+    
+    put_latest(frame_queue, disp)
+    #try:
+    #    put_latest(frame_queue, disp)
+    #except queue.Full:
+    #    pass
 
 def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
     results = node.nursery_model.predict(
         source=frame,
-        imgsz=640,  
+        imgsz=416, #640,  
         conf=NURSERY_MIN_CONF,
         device='cuda',
         verbose=False
@@ -1113,11 +1127,11 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
     )
 
     target_queue = nursery_left_frame_queue if position == 'left' else nursery_right_frame_queue
-
-    try:
-        target_queue.put_nowait(disp)
-    except queue.Full:
-        pass
+    put_latest(target_queue, disp)
+    #try:
+    #    target_queue.put_nowait(disp)
+    #except queue.Full:
+    #    pass
 
 # ══════════════════════════════════════════════
 # 카메라 스트림 수신
