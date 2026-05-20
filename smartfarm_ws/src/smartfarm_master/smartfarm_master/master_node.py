@@ -45,8 +45,8 @@ ROI_X_MAX = 0.85
 ROI_Y_MIN = 0.05
 ROI_Y_MAX = 0.95
 # 발아실 ROI
-NURSERY_ROI_X_MIN = 0.10
-NURSERY_ROI_X_MAX = 0.90
+NURSERY_ROI_X_MIN = 0.05
+NURSERY_ROI_X_MAX = 0.95
 NURSERY_ROI_Y_MIN = 0.15
 NURSERY_ROI_Y_MAX = 0.85
 NURSERY_TRAY_MIN_BOX_RATIO = 0.02
@@ -57,8 +57,8 @@ MIN_BOX_RATIO = 0.40
 
 # 캘리브레이션 파일
 CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
-NURSERY_LEFT_CALIB_PATH = None#'/home/thumb/aquaponic_copy/smartfarm_ws/uv_left_calib.npz'
-NURSERY_RIGHT_CALIB_PATH = None#'/home/thumb/aquaponic_copy/smartfarm_ws/uv_right_calib.npz'
+NURSERY_LEFT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_left_calib.npz'
+NURSERY_RIGHT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_right_calib.npz'
 
 # 발아실 카메라 / 모델
 NURSERY_MODEL_PATH = '/home/thumb/aquaponic_copy/best.pt'
