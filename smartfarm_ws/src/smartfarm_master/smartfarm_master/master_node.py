@@ -45,15 +45,15 @@ ROI_X_MAX = 0.85
 ROI_Y_MIN = 0.05
 ROI_Y_MAX = 0.95
 # 발아실 ROI
-NURSERY_ROI_X_MIN = 0.20
-NURSERY_ROI_X_MAX = 0.80
+NURSERY_ROI_X_MIN = 0.10
+NURSERY_ROI_X_MAX = 0.90
 NURSERY_ROI_Y_MIN = 0.15
-NURSERY_ROI_Y_MAX = 0.90
+NURSERY_ROI_Y_MAX = 0.85
 NURSERY_TRAY_MIN_BOX_RATIO = 0.02
 NURSERY_SPROUT_MIN_BOX_RATIO = 0.005
 
 # 박스 최소 크기 (화면 대비 비율)
-MIN_BOX_RATIO = 0.20
+MIN_BOX_RATIO = 0.40
 
 # 캘리브레이션 파일
 CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
@@ -70,7 +70,7 @@ NURSERY_STABLE_FRAMES = 3
 NURSERY_COOLDOWN_SEC = 3.0
 
 TRAY_OCCUPY_FRAMES = 2
-TRAY_LOST_FRAMES = 10
+TRAY_LOST_FRAMES = 7
 # ── 프로토콜 상수 (comm.h / Serial.h 와 동일) ──
 SOF = 0xAA
 
@@ -1227,7 +1227,7 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
             data = b''
             payload_size = struct.calcsize('>I')
             last_process_ts = 0.0
-            PROCESS_INTERVAL = 1
+            PROCESS_INTERVAL = 0.15
 
             while rclpy.ok():
                 while len(data) < payload_size:
