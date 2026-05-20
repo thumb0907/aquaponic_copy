@@ -13,7 +13,9 @@ master_node.py — PC 마스터 노드
 from __future__ import annotations
 
 import os
-os.environ.pop('CUDA_VISIBLE_DEVICES', None)  # 빈 문자열 설정 제거
+# CUDA_VISIBLE_DEVICES 강제 설정 — 빈 문자열 덮어쓰기
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+
 
 import time
 import threading
