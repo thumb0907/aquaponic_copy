@@ -41,7 +41,7 @@ PC_IP       = '192.168.0.183'
 STREAM_PORT = 5000
 SERIAL_PORT = '/dev/stm1'
 BAUD        = 115200
-CAM_INDEX = '/dev/video2'
+CAM_INDEX = '/dev/video0'
 CAM_WIDTH   = 640
 CAM_HEIGHT  = 480
 JPEG_QUALITY = 30
@@ -49,7 +49,7 @@ JPEG_QUALITY = 30
 CONVEYOR_SEND_INTERVAL = 0.25    # 컨베이어는 유지 (빠른 반응 불필요)
 NURSERY_SEND_INTERVAL  = 0.25   # 발아실은 5fps (5 * 0.25초  내 판정 가능)
 # 추가 카메라: 발아실 감지용
-NURSERY_LEFT_CAM_INDEX = '/dev/video0'
+NURSERY_LEFT_CAM_INDEX = '/dev/video2'
 NURSERY_LEFT_STREAM_PORT = 5001
 
 NURSERY_RIGHT_CAM_INDEX = '/dev/video4'
