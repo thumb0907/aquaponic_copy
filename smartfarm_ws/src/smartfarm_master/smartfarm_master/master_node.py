@@ -104,6 +104,7 @@ PID_C1F   = 0x0E
 PID_C2F   = 0x0F
 PID_ESTOP = 0x10
 PID_RESET = 0x11
+PID_HMF   = 0x12
 
 
 def make_frame(pid: int, data: bytes = b'') -> list:
@@ -166,6 +167,7 @@ class MasterNode(Node):
             'hf':   0,
             'c1f':  0,
             'c2f':  0,
+            'hmf':  0,
         }
 
         # ── STM1 상태 ─────────────────────────
@@ -345,6 +347,28 @@ class MasterNode(Node):
         with self.state_lock:
             if line == 'STM1:PC:STATE:HOMING':
                 self.stm_state = 'homing'
+
+                # STM1 홈잉 시간 동안 스카라도 미리 홈잉
+                if (
+                    self.flags['smf'] == 0
+                    and self.flags['uv'] < 2
+                    and self.flags['hmf'] == 0
+                    and not self.emergency
+                    and self.pi2_alive
+                ):
+                    self._set_flag('hmf', 1)
+                    self._send_scara(make_flag_u8(PID_HMF, 1))
+                    self.get_logger().info('STM1 홈잉 시작 → 스카라 사전 홈잉 HMF=1 전송')
+                else:
+                    self.get_logger().warn(
+                        f'스카라 사전 홈잉 생략: '
+                        f'smf={self.flags["smf"]}, '
+                        f'uv={self.flags["uv"]}, '
+                        f'hmf={self.flags["hmf"]}, '
+                        f'pi2_alive={self.pi2_alive}, '
+                        f'emergency={self.emergency}'
+                    )
+
             elif line == 'STM1:PC:STATE:RUN_CONVEYOR1':
                 self.stm_state = 'running'
             elif line == 'STM1:PC:STATE:SEEDING':
@@ -455,6 +479,10 @@ class MasterNode(Node):
                 self._set_flag('ff', 0)
                 self._send_stm2(make_flag_u8(PID_FF, 0))
                 self.get_logger().info('수확 완료 → STM2에 FF=0 전송')
+                return
+            if line == 'SCARA:PC:EVENT:HOME_DONE':
+                self._set_flag('hmf', 0)
+                self.get_logger().info('스카라 사전 홈잉 완료 → HMF=0')
                 return
 
             # ── STM2 이벤트 ────────────────────────────────

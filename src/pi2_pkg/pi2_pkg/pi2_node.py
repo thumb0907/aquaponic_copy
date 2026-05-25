@@ -71,6 +71,7 @@ PID_C1F   = 0x0E
 PID_C2F   = 0x0F
 PID_ESTOP = 0x10
 PID_RESET = 0x11
+PID_HMF   = 0x12
 
 PID_STATE = 0x20
 PID_DONE  = 0x21
@@ -115,6 +116,7 @@ PID_NAME = {
     PID_WCNT:'WCNT',PID_WLF: 'WLF', PID_WRF: 'WRF',
     PID_FF:  'FF',  PID_UEF: 'UEF', PID_WEF: 'WEF',
     PID_HF:  'HF',  PID_C1F: 'C1F', PID_C2F: 'C2F',
+    PID_HMF: 'HMF',
 }
 
 
@@ -212,6 +214,7 @@ class Pi2Node(Node):
             'uef': 0,
             'wef': 0,
             'ff': 0,
+            'hmf': 0,
         }
 
         # ── 장치별 시리얼 핸들 + 파서 ────────
