@@ -48,13 +48,13 @@ def put_latest(q, item):
 MODEL_PATH    = '/home/thumb/aquaponic_copy/tray2/best.pt'
 STREAM_PORT   = 5000
 TRAY_CLASS_ID = 0
-MIN_CONF      = 0.60
+MIN_CONF      = 0.35
 STABLE_FRAMES = 3
 COOLDOWN_SEC  = 2.0
 
 # 컨베이어 ROI (트레이 감지 유효 영역)
 ROI_X_MIN = 0.25
-ROI_X_MAX = 0.85
+ROI_X_MAX = 0.80
 ROI_Y_MIN = 0.05
 ROI_Y_MAX = 0.95
 # 발아실 ROI
@@ -66,7 +66,7 @@ NURSERY_TRAY_MIN_BOX_RATIO = 0.15   # 트레이 박스가 화면 대비 최소 1
 NURSERY_SPROUT_MIN_BOX_RATIO = 0.005    
 
 # 박스 최소 크기 (화면 대비 비율)
-MIN_BOX_RATIO = 0.40
+MIN_BOX_RATIO = 0.25
 
 # 캘리브레이션 파일
 CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
@@ -173,6 +173,7 @@ class MasterNode(Node):
         # ── STM1 상태 ─────────────────────────
         self.start_flag      = False
         self.stm_state       = 'idle'
+        self.scara_prehome_sent = False   # 이번 사이클에서 스카라 사전 홈잉을 보냈는지
         self.stable_cnt      = 0
         self.no_tray_cnt     = 0
         self.last_tx         = 0.0
@@ -324,6 +325,7 @@ class MasterNode(Node):
         self._send_scara(make_flag_u8(PID_WRF, self.flags['wrf']))
         self._send_scara(make_flag_u8(PID_UEF, self.flags['uef']))
         self._send_scara(make_flag_u8(PID_WEF, self.flags['wef']))
+        self._send_scara(make_flag_u8(PID_HMF, self.flags['hmf']))
 
     def _broadcast_flags_to_stm2(self):
         self._send_binary_pi2(make_flag_u8(PID_FF, self.flags['ff']))
@@ -347,32 +349,35 @@ class MasterNode(Node):
         with self.state_lock:
             if line == 'STM1:PC:STATE:HOMING':
                 self.stm_state = 'homing'
+                self.scara_prehome_sent = False
 
-                # STM1 홈잉 시간 동안 스카라도 미리 홈잉
+            elif line == 'STM1:PC:STATE:RUN_CONVEYOR1':
+                self.stm_state = 'running'
+            elif line == 'STM1:PC:STATE:SEEDING':
+                self.stm_state = 'seeding'
+                    # 직교로봇이 실제 파종 단계에 들어갔을 때 스카라 사전 홈잉 시작
                 if (
-                    self.flags['smf'] == 0
+                    not self.scara_prehome_sent
+                    and self.flags['smf'] == 0
                     and self.flags['uv'] < 2
                     and self.flags['hmf'] == 0
                     and not self.emergency
                     and self.pi2_alive
                 ):
+                    self.scara_prehome_sent = True
                     self._set_flag('hmf', 1)
                     self._send_scara(make_flag_u8(PID_HMF, 1))
-                    self.get_logger().info('STM1 홈잉 시작 → 스카라 사전 홈잉 HMF=1 전송')
+                    self.get_logger().info('STM1 파종 시작 → 스카라 사전 홈잉 HMF=1 전송')
                 else:
                     self.get_logger().warn(
                         f'스카라 사전 홈잉 생략: '
+                        f'sent={self.scara_prehome_sent}, '
                         f'smf={self.flags["smf"]}, '
                         f'uv={self.flags["uv"]}, '
                         f'hmf={self.flags["hmf"]}, '
                         f'pi2_alive={self.pi2_alive}, '
                         f'emergency={self.emergency}'
                     )
-
-            elif line == 'STM1:PC:STATE:RUN_CONVEYOR1':
-                self.stm_state = 'running'
-            elif line == 'STM1:PC:STATE:SEEDING':
-                self.stm_state = 'seeding'
             elif line == 'STM1:PC:STATE:EJECTING':
                 self.stm_state = 'ejecting'
             elif line == 'STM1:PC:STATE:WAIT_SCARA_PICK':
@@ -404,7 +409,9 @@ class MasterNode(Node):
             elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
                 self.start_flag = False
-                self._set_flag('c1f', 0)   
+                self.scara_prehome_sent = False
+                self._set_flag('c1f', 0)
+                self._set_flag('hmf', 0) 
             elif line.startswith('STM1:PC:ERR:'):
                 self.stm_state  = 'error'
                 self.start_flag = False
@@ -637,6 +644,7 @@ class MasterNode(Node):
                 self.stable_cnt        = 0
                 self.no_tray_cnt       = 0
                 self.cam1_detect_label = 'none'
+                self.scara_prehome_sent = False
                 self.cam1_last_conf    = 0.0
                 for k in self.flags:
                     self.flags[k] = 0
