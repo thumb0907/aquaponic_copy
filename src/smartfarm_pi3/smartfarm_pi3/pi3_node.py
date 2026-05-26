@@ -54,7 +54,7 @@ from std_msgs.msg import String, UInt8MultiArray
 
 
 # ── 포트 / 네트워크 설정 ──────────────────────
-PORT_STM3  = '/dev/stm3'      # 센서허브 STM32
+PORT_STM3  = '/dev/ttyACM0'      # 센서허브 STM32
 BAUD       = 115200
 
 PC_IP      = '192.168.0.183'  # master_node 실행 PC IP
