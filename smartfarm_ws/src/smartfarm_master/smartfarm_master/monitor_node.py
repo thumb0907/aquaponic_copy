@@ -47,6 +47,8 @@ class MonitorNode(Node):
             'pi2_alive':  False,
             'pi3_alive':  False,
             'emergency':  False,
+            'estop_stm1': False,
+            'estop_scara': False,
         }
 
         # 수경재배실 센서 캐시 — None이면 아직 수신 안 된 것
@@ -73,6 +75,7 @@ class MonitorNode(Node):
             'hf':   0,
             'c1f':  0,
             'c2f':  0,
+            'hmf':  0,
         }
 
         self.pi1_last_hb = 0.0
@@ -197,6 +200,10 @@ class MonitorNode(Node):
         }.get(st, st)
 
         print(f'  현재 상태: {state_color}{C.BOLD}{state_label}{C.RESET}')
+
+        stm1_estop = self.status.get('estop_stm1', False)
+        estop_label = f'{C.RED}{C.BOLD}ESTOP{C.RESET}' if stm1_estop else f'{C.GRAY}NORMAL{C.RESET}'
+        print(f'  STM1 ESTOP: {estop_label}')
         print()
 
         steps = [
@@ -256,6 +263,13 @@ class MonitorNode(Node):
 
         emgdot = f'{C.RED}{C.BOLD}● ON{C.RESET}' if emg else f'{C.GRAY}○ OFF{C.RESET}'
         print(f'  긴급정지    :  {emgdot}')
+
+        stm1_estop = self.status.get('estop_stm1', False)
+        scara_estop = self.status.get('estop_scara', False)
+        stm1dot = f'{C.RED}{C.BOLD}● ESTOP{C.RESET}' if stm1_estop else f'{C.GRAY}○ 정상{C.RESET}'
+        scaradot = f'{C.RED}{C.BOLD}● ESTOP{C.RESET}' if scara_estop else f'{C.GRAY}○ 정상{C.RESET}'
+        print(f'  STM1 정지상태 :  {stm1dot}')
+        print(f'  SCARA 정지상태:  {scaradot}')
         print()
 
         # STM1 상태
@@ -281,6 +295,7 @@ class MonitorNode(Node):
         self._print_flag('ssf',  '스카라 시작 명령')
         self._print_flag('smf',  '스카라 동작 중')
         self._print_flag('crf',  '직교로봇 리셋 명령')
+        self._print_flag('hmf',  '스카라 사전 홈잉')
         print()
 
         # UV실

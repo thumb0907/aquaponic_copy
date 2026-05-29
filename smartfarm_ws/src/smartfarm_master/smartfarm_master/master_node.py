@@ -237,6 +237,10 @@ class MasterNode(Node):
 
         # ── 공통 ──────────────────────────────
         self.emergency = False
+        self.device_estop = {
+            'stm1': False,
+            'scara': False,
+        }
 
         # ── YOLO 모델 ─────────────────────────
         print('[YOLO] 모델 로딩 중...')
@@ -625,52 +629,136 @@ class MasterNode(Node):
     def _on_command(self, msg: String):
         cmd = msg.data.strip()
 
-        if cmd == 'EMERGENCY':
+        # ─────────────────────────────
+        # 전체 긴급정지: STM1 + SCARA
+        # ─────────────────────────────
+        if cmd in ('EMERGENCY', 'EMERGENCY_ALL'):
             with self.state_lock:
-                self.emergency  = True
+                self.emergency = True
                 self.start_flag = False
-                self._broadcast_all_flags()
-            self._send_binary(make_estop())           # STM1
-            self._send_binary_pi2(make_estop())       # STM2/스카라
-            self._send_binary_pi3(make_estop())       # STM3
-            self.get_logger().warn('EMERGENCY!')
-
-        elif cmd == 'RESET':
-            with self.state_lock:
-                self.emergency         = False
-                self.start_flag        = False
-                self.stm_state         = 'idle'
-                self.stm2_state        = 'idle'
-                self.stable_cnt        = 0
-                self.no_tray_cnt       = 0
-                self.cam1_detect_label = 'none'
+                self.stm_state = 'error'
                 self.scara_prehome_sent = False
-                self.cam1_last_conf    = 0.0
-                for k in self.flags:
-                    self.flags[k] = 0
-                # 센서 캐시는 리셋해도 None으로 초기화하지 않음
-                # (센서값은 STM3가 계속 보내므로 곧 갱신됨)
-                self._broadcast_all_flags()
-            self._send_binary(make_reset())           # STM1
-            self._send_binary_pi2(make_reset())       # STM2/스카라
-            self._send_binary_pi3(make_reset())       # STM3
-            self.get_logger().info('RESET')
 
-        elif cmd == 'START_2':
+                # STM1/SCARA 관련 플래그 정리
+                self.flags['c1f'] = 0
+                self.flags['ssf'] = 0
+                self.flags['smf'] = 0
+                self.flags['crf'] = 0
+                self.flags['hmf'] = 0
+
+                self.device_estop['stm1'] = True
+                self.device_estop['scara'] = True
+
+            self._send_estop_stm1_scara()
+            self.get_logger().warn('EMERGENCY_ALL: STM1 + SCARA 정지')
+            return
+
+        # ─────────────────────────────
+        # 전체 리셋: STM1 + SCARA
+        # ─────────────────────────────
+        elif cmd in ('RESET', 'RESET_ALL'):
             with self.state_lock:
-                if self.emergency:
-                    self.get_logger().warn('긴급정지 중 — START_2 무시')
-                    return
-                if self.stm2_state != 'idle':
-                    self.get_logger().warn(
-                        f'STM2 동작 중({self.stm2_state}) — 무시')
-                    return
-            self._send_binary_pi2(make_flag_u8(PID_FF, 1))
-            self.get_logger().info('STM2 시작 → FF=1 전송')
+                self.emergency = False
+                self.start_flag = False
+                self.stm_state = 'idle'
+                self.scara_prehome_sent = False
+                self.stable_cnt = 0
+                self.no_tray_cnt = 0
+                self.cam1_detect_label = 'none'
+                self.cam1_last_conf = 0.0
+
+                # 우선 STM1/SCARA 관련 플래그만 초기화
+                self.flags['c1f'] = 0
+                self.flags['ssf'] = 0
+                self.flags['smf'] = 0
+                self.flags['crf'] = 0
+                self.flags['hmf'] = 0
+
+                self.device_estop['stm1'] = False
+                self.device_estop['scara'] = False
+
+
+            self._send_reset_stm1_scara()
+            self.get_logger().info('RESET_ALL: STM1 + SCARA 리셋')
+            return
+
+        # ─────────────────────────────
+        # 개별 STM1 긴급정지 / 리셋
+        # ─────────────────────────────
+        elif cmd == 'EMERGENCY_STM1':
+            with self.state_lock:
+                self.start_flag = False
+                self.stm_state = 'error'
+                self.flags['c1f'] = 0
+                self.flags['crf'] = 0
+                self.device_estop['stm1'] = True
+
+            self._send_estop_stm1()
+            self.get_logger().warn('EMERGENCY_STM1')
+            return
+
+        elif cmd == 'RESET_STM1':
+            with self.state_lock:
+                self.start_flag = False
+                self.stm_state = 'idle'
+                self.flags['c1f'] = 0
+                self.flags['crf'] = 0
+                self.device_estop['stm1'] = False
+
+            self._send_reset_stm1()
+            self.get_logger().info('RESET_STM1')
+            return
+
+        # ─────────────────────────────
+        # 개별 SCARA 긴급정지 / 리셋
+        # ─────────────────────────────
+        elif cmd == 'EMERGENCY_SCARA':
+            with self.state_lock:
+                self.flags['ssf'] = 0
+                self.flags['smf'] = 0
+                self.flags['crf'] = 0
+                self.flags['hmf'] = 0
+                self.device_estop['scara'] = True
+
+            self._send_estop_scara()
+            self.get_logger().warn('EMERGENCY_SCARA')
+            return
+
+        elif cmd == 'RESET_SCARA':
+            with self.state_lock:
+                self.flags['ssf'] = 0
+                self.flags['smf'] = 0
+                self.flags['crf'] = 0
+                self.flags['hmf'] = 0
+                self.device_estop['scara'] = False
+
+            self._send_reset_scara()
+            self.get_logger().info('RESET_SCARA')
+            return
 
         else:
             self.get_logger().warn(f'알 수 없는 명령: {cmd}')
+    
+    # 긴급정지 리셋
+    def _send_estop_stm1(self):
+        self._send_binary(make_estop())
 
+    def _send_reset_stm1(self):
+        self._send_binary(make_reset())
+
+    def _send_estop_scara(self):
+        self._send_scara(make_estop())
+
+    def _send_reset_scara(self):
+        self._send_scara(make_reset())
+
+    def _send_estop_stm1_scara(self):
+        self._send_estop_stm1()
+        self._send_estop_scara()
+
+    def _send_reset_stm1_scara(self):
+        self._send_reset_stm1()
+        self._send_reset_scara()
     # ══════════════════════════════════════════
     # 송신
     # ══════════════════════════════════════════
@@ -781,6 +869,8 @@ class MasterNode(Node):
                 f'pi2_alive:{self.pi2_alive},'
                 f'pi3_alive:{self.pi3_alive},'
                 f'emergency:{self.emergency},'
+                f'estop_stm1:{self.device_estop["stm1"]},'
+                f'estop_scara:{self.device_estop["scara"]},'
                 f'cam1_connected:{self.cam1_connected},'
                 f'cam1_status:{self.cam1_status},'
                 f'cam1_detect_label:{self.cam1_detect_label},'
