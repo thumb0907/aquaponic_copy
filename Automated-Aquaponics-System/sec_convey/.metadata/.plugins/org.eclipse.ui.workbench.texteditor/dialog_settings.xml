@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<item key="hasShownOverlayPopupBefore" value="true"/>
+	<item key="replaceBarOpen" value="false"/>
+	<list key="searchhistory">
+		<item value="HARV"/>
+		<item value="case SYS_HARVESTING:"/>
+		<item value="Comm_SetInEst"/>
+		<item value="if (Comm_IsHarvestDone()"/>
+		<item value="CONVEY_TIMEOUT"/>
+		<item value="HAL_UART_Receive_IT"/>
+		<item value="sendline"/>
+	</list>
+</section>

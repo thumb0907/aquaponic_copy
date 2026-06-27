@@ -1,8 +1,0 @@
-// sequence.h
-#ifndef SEQUENCE_H
-#define SEQUENCE_H
-
-void Sequence_Init(void);
-void App_Run(void);
-
-#endif // SEQUENCE_H

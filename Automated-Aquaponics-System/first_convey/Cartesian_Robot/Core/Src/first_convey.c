@@ -14,7 +14,7 @@
 	// 컨베이어 steps/mm (실측 후 조정)
 	// 1600pulse / 20mm(한바퀴 거리) = 80
 	static float g_con_steps_per_mm = 80.0f;
-	static uint32_t g_con_run_hz = 4500;
+	static uint32_t g_con_run_hz = 6000;
 
 	typedef enum { CONVEYOR_RUN = 0, CONVEYOR_STOP } ConveyorState;
 	static ConveyorState state = CONVEYOR_RUN; 	// 현재 상태: 컨베이어 구동중

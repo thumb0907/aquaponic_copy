@@ -1,3 +1,6 @@
-../Core/Src/sequence.c:62:6:Sequence_OnLimitHit	8	static
-../Core/Src/sequence.c:72:6:Sequence_Init	8	static
-../Core/Src/sequence.c:85:6:App_Run	8	static
+../Core/Src/sequence.c:68:13:Handle_Timeout	16	static
+../Core/Src/sequence.c:79:13:Do_EStop	8	static
+../Core/Src/sequence.c:89:13:Do_Reset	8	static
+../Core/Src/sequence.c:102:6:Sequence_OnLimitHit	8	static
+../Core/Src/sequence.c:112:6:Sequence_Init	8	static
+../Core/Src/sequence.c:126:6:App_Run	8	static

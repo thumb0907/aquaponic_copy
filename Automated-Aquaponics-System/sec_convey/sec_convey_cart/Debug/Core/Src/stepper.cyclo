@@ -1,8 +1,8 @@
-../Core/Src/stepper.c:7:17:TIM_APB1_GetTimerClockHz	2
-../Core/Src/stepper.c:18:6:Z_Enable	1
-../Core/Src/stepper.c:23:6:Z_SetDir	1
-../Core/Src/stepper.c:28:13:TIM5_SetStepHz	3
-../Core/Src/stepper.c:48:6:Z_Stop	1
-../Core/Src/stepper.c:59:6:Z_IsBusy	1
-../Core/Src/stepper.c:64:6:Z_MoveSteps	2
-../Core/Src/stepper.c:86:6:Z_OnTimUpdate	5
+../Core/Src/stepper.c:8:17:TIM_APB1_GetTimerClockHz	2
+../Core/Src/stepper.c:21:6:Z_Enable	1
+../Core/Src/stepper.c:31:6:Z_SetDir	1
+../Core/Src/stepper.c:38:13:TIM5_SetStepHz	3
+../Core/Src/stepper.c:60:6:Z_MoveSteps	2
+../Core/Src/stepper.c:84:6:Z_Stop	1
+../Core/Src/stepper.c:96:6:Z_IsBusy	1
+../Core/Src/stepper.c:102:6:Z_OnTimUpdate	5

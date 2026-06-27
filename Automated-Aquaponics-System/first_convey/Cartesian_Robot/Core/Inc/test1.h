@@ -3,10 +3,10 @@
 
 // 모드 선택
 // TEST_MODE  1 : 허큘러스 커맨드로 개별 동작 확인
-// TEST_MODE  0 : 정상 시퀀스 모드
+// TEST_MODE  0 : 정상 시퀀스 모드(정상통신)
 #define TEST_MODE     1
 
-// FULL_SEQ_TEST 1 : 허큘러스에서 S1 보내면 전체 시퀀스 구동
+// FULL_SEQ_TEST 1 : 허큘러스에서 개별 시퀸스 구동
 //               0 : 정상 시퀀스 (라즈베리파이/아두이노 통신 사용)
 // TEST_MODE=0 일 때만 유효
 #define FULL_SEQ_TEST 1

@@ -23,6 +23,7 @@
 
 #define Z_LIM_PORT		GPIOB
 #define Z_LIM_PIN		GPIO_PIN_5
+
 // 컨베이어 스텝모터
 #define CON_DIR_PORT GPIOC
 #define CON_DIR_PIN  GPIO_PIN_9
@@ -34,7 +35,8 @@
 #define IR_PORT  GPIOC
 #define IR_PIN   GPIO_PIN_3
 
-// 거리센서 ADC1 IN1 PA1
-
+// 파종 펌프모터
+#define PUMP_PORT	GPIOC
+#define PUMP_PIN	GPIO_PIN_0
 
 #endif

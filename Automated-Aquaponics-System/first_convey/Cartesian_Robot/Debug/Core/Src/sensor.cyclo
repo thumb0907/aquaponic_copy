@@ -1,5 +1,1 @@
-../Core/Src/sensor.c:11:7:Sensor_IR_Detected	1
-../Core/Src/sensor.c:17:11:Sensor_Distance_ReadRawOnce	2
-../Core/Src/sensor.c:28:11:Sensor_Distance_ReadRawAvg	3
-../Core/Src/sensor.c:41:8:Sensor_Distance_RawToVoltage	1
-../Core/Src/sensor.c:59:8:Sensor_Distance_VoltageToCm	7
+../Core/Src/sensor.c:8:7:Sensor_IR_Detected	1

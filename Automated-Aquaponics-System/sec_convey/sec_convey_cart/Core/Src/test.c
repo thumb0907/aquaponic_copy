@@ -3,14 +3,14 @@
 // 허큘러스(PC) USART2 115200bps, 줄끝 LF(\n) 설정
 //
 // 커맨드 목록:
-//   C1   컨베이어 구동 (3000Hz)
-//   C0   컨베이어 정지
-//   ZF   Z축 CW 이동 (호밍 방향, 5000스텝)
-//   ZB   Z축 CCW 이동 (복귀 방향, 5000스텝)
-//   ZS   Z축 즉시 정지
-//   IR   IR 센서 상태 출력
-//   LM   리밋스위치 상태 출력
-//   E1   긴급정지
+//   C1   컨베이어 구동 (3000Hz)			43 31 0A
+//   C0   컨베이어 정지						43 30 0A
+//   ZF   Z축 CW 이동 (호밍 방향, 5000스텝)	5A 46 0A
+//   ZB   Z축 CCW 이동 (복귀 방향, 5000스텝) 5A 42 0A
+//   ZS   Z축 즉시 정지					5A 53 0A
+//   IR   IR 센서 상태 출력					49 52 0A
+//   LM   리밋스위치 상태 출력				4C 4D 0A
+//   E1   긴급정지							45 31 0A
 // ─────────────────────────────────────────────────────────────
 
 #include "test.h"
@@ -19,6 +19,7 @@
 #include "stepper.h"
 #include "sensor.h"
 #include <string.h>
+#include "comm.h"
 
 extern UART_HandleTypeDef huart2;
 

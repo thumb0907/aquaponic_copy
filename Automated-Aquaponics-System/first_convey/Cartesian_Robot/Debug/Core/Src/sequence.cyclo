@@ -1,0 +1,8 @@
+../Core/Src/sequence.c:19:13:Sequence_EnterState	1
+../Core/Src/sequence.c:24:6:Sequence_Init	1
+../Core/Src/sequence.c:36:13:Sequence_GetState	1
+../Core/Src/sequence.c:37:13:Sequence_IsError	1
+../Core/Src/sequence.c:42:6:Sequence_EStop	1
+../Core/Src/sequence.c:55:6:Sequence_ResetError	1
+../Core/Src/sequence.c:70:13:Sequence_ReportCartesianStage	6
+../Core/Src/sequence.c:97:6:Sequence_Task	15

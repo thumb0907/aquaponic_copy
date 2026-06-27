@@ -27,6 +27,8 @@
 #include "comm.h"
 #include "sequence.h"
 #include "test.h"
+
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,10 +50,7 @@
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim5;
 
-UART_HandleTypeDef huart1;  // 스카라 (atmega)
-UART_HandleTypeDef huart2;  // 라즈베리파이
-UART_HandleTypeDef huart6;  // 매니퓰레이터 (opencr)
-
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
@@ -63,8 +62,6 @@ static void MX_GPIO_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM5_Init(void);
 static void MX_USART2_UART_Init(void);
-static void MX_USART1_UART_Init(void);
-static void MX_USART6_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -106,8 +103,6 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM5_Init();
   MX_USART2_UART_Init();
-  MX_USART1_UART_Init();
-  MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
   Sequence_Init();    // UART 수신 인터럽트 시작 + 상태 초기화
   /* USER CODE END 2 */
@@ -116,33 +111,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  /*Conveyor_Enable(true);
-	  Conveyor_SetDir(true);
-	  Conveyor_StartHz(3000); // 컨베이어 STEP 3000Hz
-	  //Conveyor_RampToHz(8500, 200, 10);   // (목표 4000, 100Hz씩, 10ms 간격)
-	  // IR 감지될 때까지 컨베이어 계속
-	    while (IR_Detected() == 0)
-	    {
-	      // 아무것도 안 함
-	    }
-
-	    // 감지되면 정지
-	    Conveyor_Stop();
-	    Conveyor_Enable(false);
-
-	    HAL_Delay(200);
-
-	    // 하강: 8000 steps, 4000Hz,
-	    Z_MoveSteps(+8000, 4000);
-	    while (Z_IsBusy()) { }
-
-	    // 수확
-	    HAL_Delay(1000);
-
-	    // 상승
-	    Z_MoveSteps(-8000, 4000);
-	    while (Z_IsBusy()) { }*/
-
 	  App_Run();
     /* USER CODE END WHILE */
 
@@ -297,39 +265,6 @@ static void MX_TIM5_Init(void)
 }
 
 /**
-  * @brief USART1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART1_UART_Init(void)
-{
-
-  /* USER CODE BEGIN USART1_Init 0 */
-
-  /* USER CODE END USART1_Init 0 */
-
-  /* USER CODE BEGIN USART1_Init 1 */
-
-  /* USER CODE END USART1_Init 1 */
-  huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
-  huart1.Init.WordLength = UART_WORDLENGTH_8B;
-  huart1.Init.StopBits = UART_STOPBITS_1;
-  huart1.Init.Parity = UART_PARITY_NONE;
-  huart1.Init.Mode = UART_MODE_TX_RX;
-  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART1_Init 2 */
-
-  /* USER CODE END USART1_Init 2 */
-
-}
-
-/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -359,39 +294,6 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
-
-}
-
-/**
-  * @brief USART6 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART6_UART_Init(void)
-{
-
-  /* USER CODE BEGIN USART6_Init 0 */
-
-  /* USER CODE END USART6_Init 0 */
-
-  /* USER CODE BEGIN USART6_Init 1 */
-
-  /* USER CODE END USART6_Init 1 */
-  huart6.Instance = USART6;
-  huart6.Init.BaudRate = 115200;
-  huart6.Init.WordLength = UART_WORDLENGTH_8B;
-  huart6.Init.StopBits = UART_STOPBITS_1;
-  huart6.Init.Parity = UART_PARITY_NONE;
-  huart6.Init.Mode = UART_MODE_TX_RX;
-  huart6.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart6.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart6) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART6_Init 2 */
-
-  /* USER CODE END USART6_Init 2 */
 
 }
 
@@ -458,25 +360,25 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 #if TEST_MODE
     if (huart->Instance == USART2) Test_RxCallback();
 #else
-    if (huart->Instance == USART1) Comm_Scara_RxCallback();
+    /* STM2는 USART2(라파2)만 사용. USART1/6은 사용 안 함. */
     if (huart->Instance == USART2) Comm_Rasp_RxCallback();
-    if (huart->Instance == USART6) Comm_Manip_RxCallback();
 #endif
 }
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-  Z_OnTimUpdate(htim);
+    Z_OnTimUpdate(htim);
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  static uint32_t last = 0;
-  uint32_t now = HAL_GetTick();
-  if (GPIO_Pin == GPIO_PIN_2) {
-    if (now - last < 50) return;  // 디바운싱 50ms
-    last = now;
-    Sequence_OnLimitHit();
-  }
+    static uint32_t last = 0;
+    uint32_t now = HAL_GetTick();
+    if (GPIO_Pin == GPIO_PIN_2) {
+        if (now - last < 50) return;   /* 디바운싱 50ms */
+        last = now;
+        Sequence_OnLimitHit();
+    }
 }
 /* USER CODE END 4 */
 
