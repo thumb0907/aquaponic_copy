@@ -22,6 +22,8 @@ import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
+import sys
+from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
@@ -42,6 +44,22 @@ def put_latest(q, item):
             q.put_nowait(item)
         except queue.Full:
             pass
+
+CAM_MODULE_CANDIDATES = [
+    Path('/home/thumb/aquaponic_copy/Automated-Aquaponics-System/first_convey/cam'),
+    Path('/home/thumb/aquaponics_copy/Automated-Aquaponics-System/first_convey/cam'),
+]
+
+for cam_module_dir in CAM_MODULE_CANDIDATES:
+    if cam_module_dir.exists():
+        sys.path.append(str(cam_module_dir))
+        break
+
+try:
+    from op_sprout import detect_sprouts
+except Exception as e:
+    detect_sprouts = None
+    print(f'[Sprout] op_sprout import failed: {e}')
 
 # ── 설정 ──────────────────────────────────────
 # 컨베이어 트레이인식 카메라
@@ -81,6 +99,8 @@ NURSERY_RIGHT_STREAM_PORT = 5002
 NURSERY_MIN_CONF = 0.2     # YOLO conf 최소값, 이게 트레이일 확률이 20%이상이어야 박스를 그림
 NURSERY_STABLE_FRAMES = 3
 NURSERY_COOLDOWN_SEC = 3.0
+SPROUT_DONE_COUNT = 25   # 새싹 후보가 몇 개 이상이면 발아 완료로 볼지 정하는 값. 
+NURSERY_SEND_FLAGS = True  
 
 TRAY_OCCUPY_FRAMES = 2
 TRAY_LOST_FRAMES = 7
@@ -1049,6 +1069,16 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
     disp = frame.copy()
     h, w = frame.shape[:2]
 
+    sprout_count = 0
+    sprout_done = False
+
+    if detect_sprouts is not None:
+        try:
+            _, sprout_count, _ = detect_sprouts(frame)
+            sprout_done = sprout_count >= SPROUT_DONE_COUNT
+        except Exception as e:
+            node.get_logger().warn(f'[Sprout {position}] detect_sprouts failed: {e}')
+
     if position == 'left':
         draw_roi_x_min = 0.00
         draw_roi_x_max = 1.00
@@ -1183,7 +1213,15 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
             best_sprout3_conf = max(best_sprout3_conf, conf)
 
     tray_detected = counts['tray'] > 0
-    sprout3_detected = counts['sprout3'] > 0
+
+    # 발아 완료 여부는 first_convey/cam/op_sprout.py의 새싹 검출 개수로 판단
+    sprout_done_detected = False
+
+    if detect_sprouts is not None:
+        sprout_done_detected = sprout_done
+        best_sprout3_conf = min(1.0, sprout_count / max(SPROUT_DONE_COUNT, 1))
+    else:
+        node.get_logger().warn('[Sprout] op_sprout unavailable, sprout done check disabled')
 
     now = time.time()
     send_event = False
@@ -1211,9 +1249,9 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
                 node._set_flag('urf', 0)
 
         # ── 발아 완료 판단 ─────────────────────
-        if tray_detected and sprout3_detected:
+        if tray_detected and sprout_done_detected:
             st['stable_cnt'] += 1
-            st['last_label'] = 'sprout3'
+            st['last_label'] = 'sprout_done'
             st['last_conf'] = best_sprout3_conf
         else:
             st['stable_cnt'] = 0
@@ -1252,18 +1290,24 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         label = st['last_label']
 
         if send_event:
-            # node._broadcast_all_flags()  # 통합 테스트 전까지 잠시 비활성화
+            if NURSERY_SEND_FLAGS:
+                node._send_scara(make_flag_u8(PID_ULF, node.flags['ulf']))
+                node._send_scara(make_flag_u8(PID_URF, node.flags['urf']))
+                node._send_scara(make_flag_u16(PID_UV, new_uv))
+
             if flag_name is not None:
                 node.get_logger().info(
-                    f'[TEST] 발아 완료 감지 → {flag_name}=1 예정, conf={best_sprout3_conf:.2f}'
+                    f'[Nursery {position}] sprout done -> {flag_name}=1, '
+                    f'sprout_count={sprout_count}, uv={new_uv}'
                 )
             else:
                 node.get_logger().info(
-                    f'[TEST] UV 점유 상태 변경 → uv={new_uv} 예정'
+                    f'[Nursery {position}] UV changed -> uv={new_uv}'
                 )
 
     node.get_logger().info(
-        f'[Nursery {position}] tray={counts["tray"]}, sprout3={counts["sprout3"]}, '
+        f'[Nursery {position}] tray={counts["tray"]}, '
+        f'op_sprout={sprout_count}/{SPROUT_DONE_COUNT}, '
         f'stable={stable}, label={label}'
     )
 
@@ -1297,6 +1341,15 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
         (255, 0, 0),
+        2
+    )
+    cv2.putText(
+        disp,
+        f'op_sprout: {sprout_count}/{SPROUT_DONE_COUNT}',
+        (20, y + 70),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 255, 255),
         2
     )
 
