@@ -76,10 +76,10 @@ ROI_X_MAX = 0.80
 ROI_Y_MIN = 0.05
 ROI_Y_MAX = 0.95
 # 발아실 ROI
-NURSERY_ROI_X_MIN = 0.05
-NURSERY_ROI_X_MAX = 0.95
-NURSERY_ROI_Y_MIN = 0.10
-NURSERY_ROI_Y_MAX = 0.90
+NURSERY_ROI_X_MIN = 0.15
+NURSERY_ROI_X_MAX = 0.85
+NURSERY_ROI_Y_MIN = 0.20
+NURSERY_ROI_Y_MAX = 0.70
 NURSERY_TRAY_MIN_BOX_RATIO = 0.15   # 트레이 박스가 화면 대비 최소 15% 이상이어야 감지
 NURSERY_SPROUT_MIN_BOX_RATIO = 0.005    
 
@@ -1074,21 +1074,23 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
 
     if detect_sprouts is not None:
         try:
-            _, sprout_count, _ = detect_sprouts(frame)
+            rx1 = int(w * NURSERY_ROI_X_MIN)
+            rx2 = int(w * NURSERY_ROI_X_MAX)
+            ry1 = int(h * NURSERY_ROI_Y_MIN)
+            ry2 = int(h * NURSERY_ROI_Y_MAX)
+
+            roi_frame = frame[ry1:ry2, rx1:rx2]
+
+            _, sprout_count, _ = detect_sprouts(roi_frame)
             sprout_done = sprout_count >= SPROUT_DONE_COUNT
         except Exception as e:
             node.get_logger().warn(f'[Sprout {position}] detect_sprouts failed: {e}')
 
-    if position == 'left':
-        draw_roi_x_min = 0.00
-        draw_roi_x_max = 1.00
-        draw_roi_y_min = 0.00
-        draw_roi_y_max = 1.00
-    else:
-        draw_roi_x_min = NURSERY_ROI_X_MIN
-        draw_roi_x_max = NURSERY_ROI_X_MAX
-        draw_roi_y_min = NURSERY_ROI_Y_MIN
-        draw_roi_y_max = NURSERY_ROI_Y_MAX
+    
+    draw_roi_x_min = NURSERY_ROI_X_MIN
+    draw_roi_x_max = NURSERY_ROI_X_MAX
+    draw_roi_y_min = NURSERY_ROI_Y_MIN
+    draw_roi_y_max = NURSERY_ROI_Y_MAX
 
     cv2.rectangle(
         disp,
@@ -1115,16 +1117,11 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         else:
             min_box_ratio = NURSERY_SPROUT_MIN_BOX_RATIO
 
-        if position == 'left':
-            roi_x_min = 0.00
-            roi_x_max = 1.00
-            roi_y_min = 0.00
-            roi_y_max = 1.00
-        else:
-            roi_x_min = NURSERY_ROI_X_MIN
-            roi_x_max = NURSERY_ROI_X_MAX
-            roi_y_min = NURSERY_ROI_Y_MIN
-            roi_y_max = NURSERY_ROI_Y_MAX
+        
+        roi_x_min = NURSERY_ROI_X_MIN
+        roi_x_max = NURSERY_ROI_X_MAX
+        roi_y_min = NURSERY_ROI_Y_MIN
+        roi_y_max = NURSERY_ROI_Y_MAX
 
         in_roi = (
             roi_x_min < cx < roi_x_max
@@ -1182,16 +1179,11 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         else:
             min_box_ratio = NURSERY_SPROUT_MIN_BOX_RATIO
 
-        if position == 'left':
-            roi_x_min = 0.00
-            roi_x_max = 1.00
-            roi_y_min = 0.00
-            roi_y_max = 1.00
-        else:
-            roi_x_min = NURSERY_ROI_X_MIN
-            roi_x_max = NURSERY_ROI_X_MAX
-            roi_y_min = NURSERY_ROI_Y_MIN
-            roi_y_max = NURSERY_ROI_Y_MAX
+        
+        roi_x_min = NURSERY_ROI_X_MIN
+        roi_x_max = NURSERY_ROI_X_MAX
+        roi_y_min = NURSERY_ROI_Y_MIN
+        roi_y_max = NURSERY_ROI_Y_MAX
 
         in_roi = (
             roi_x_min < cx < roi_x_max
