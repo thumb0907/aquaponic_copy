@@ -1,149 +1,251 @@
+# tray.py
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+
 import cv2
 import numpy as np
-import time
 
-# pyserial 미설치 시 안내
 try:
     import serial
     from serial.tools import list_ports
-except ModuleNotFoundError:
-    print("[ERROR] pyserial이 설치되어 있지 않습니다.")
-    print("CMD/PowerShell에서 아래를 실행하세요:")
-    print("  py -m pip install pyserial")
-    raise
+except ModuleNotFoundError as e:
+    raise ModuleNotFoundError(
+        "pyserial이 설치되어 있지 않습니다. 설치:  py -m pip install pyserial"
+    ) from e
 
 
-# =========================
-# 설정
-# =========================
-CAM_INDEX = 1                  # 웹캠 번호
-USE_DSHOW = True               # Windows면 True 추천
-BAUD = 115200
+@dataclass
+class TrayConfig:
+    # -----------------
+    # Camera
+    # -----------------
+    cam_index: int = 1
+    use_dshow: bool = True  # Windows면 True 추천
 
-# 자동 포트 탐색이 싫으면 여기에 직접 입력: 예) "COM5" 또는 "/dev/ttyACM0"
-FORCE_PORT = "COM20"              # None이면 자동 탐색 시도
+    # -----------------
+    # Calibration / Undistort
+    # -----------------
+    calib_path: str | None = "camera_calib.npz" # None이면 왜곡보정 안 함
+    alpha: float = 1.0        # 0~1 (0: 최대 crop / 1: 최대 시야 유지)
+    crop: bool = True         # ROI로 crop
+    use_remap: bool = True    # remap이 가장 빠르고 안정적
 
-SEND_INTERVAL = 0.05           # 50ms (너무 빠르면 버퍼 밀릴 수 있음)
-SEND_DELTA_DEG = 0.3           # 각도 변화가 이 이상일 때만 전송(노이즈 줄임)
+    # -----------------
+    # Serial(OpenCR)
+    # -----------------
+    baud: int = 115200
+    force_port: str | None = "COM20"  # None이면 자동 탐색
 
-MIN_AREA = 4000                # 사각형 최소 면적
-CANNY1, CANNY2 = 150, 350
+    # -----------------
+    # Vision params
+    # -----------------
+    min_area: int = 4000
+    canny1: int = 150
+    canny2: int = 350
+
+    # -----------------
+    # Send throttling
+    # -----------------
+    send_interval: float = 0.05   # sec
+    send_delta_deg: float = 0.3   # deg (변화량이 작으면 전송 안 함)
+
+    # -----------------
+    # UI / Debug
+    # -----------------
+    show_windows: bool = True
+    draw_axis_len: int = 100
+    print_angle_to_console: bool = False  # True면 파이썬 콘솔에 angle 찍음
 
 
-def find_opencr_port():
+class TrayAngleStreamer:
     """
-    OpenCR로 보이는 포트를 대충 자동 추정.
-    - Windows: description/manufacturer에 'OpenCR', 'ROBOTIS', 'STM' 등 힌트
-    - Linux: /dev/ttyACM*, /dev/ttyUSB* 중 description 힌트
+    - webcam frame -> (optional) undistort -> detect largest rectangle -> angle
+    - send to OpenCR: "ANG,xx.xx\\n"
+    - also read OpenCR prints and show in python console as [OPENCR] ...
     """
-    ports = list(list_ports.comports())
-    if not ports:
-        return None
 
-    # 1) description 기반 우선순위
-    keywords = ["opencr", "robotis", "open cr", "stm", "cdc", "serial"]
-    for p in ports:
-        desc = (p.description or "").lower()
-        manu = (p.manufacturer or "").lower()
-        hwid = (p.hwid or "").lower()
-        text = f"{desc} {manu} {hwid}"
-        if any(k in text for k in keywords):
-            return p.device
+    def __init__(self, cfg: TrayConfig):
+        self.cfg = cfg
 
-    # 2) 그래도 없으면 첫 번째 포트(최후)
-    return ports[0].device
+        self.ser: serial.Serial | None = None
+        self.cap: cv2.VideoCapture | None = None
 
+        # undistort related
+        self.K: np.ndarray | None = None
+        self.dist: np.ndarray | None = None
+        self.newK: np.ndarray | None = None
+        self.roi: tuple[int, int, int, int] | None = None
+        self.map1 = None
+        self.map2 = None
 
-def open_serial():
-    port = FORCE_PORT if FORCE_PORT else find_opencr_port()
-    if not port:
-        print("[WARN] 시리얼 포트를 찾지 못했습니다. (OpenCR 연결 확인)")
-        return None
+        # send throttling
+        self.last_send_time = 0.0
+        self.last_sent_angle: float | None = None
 
-    try:
-        ser = serial.Serial(port, BAUD, timeout=0.01)
-        time.sleep(2.0)  # OpenCR 리셋/안정화 대기
-        ser.reset_input_buffer()
-        ser.reset_output_buffer()
-        print(f"[OK] Serial connected: {port} @ {BAUD}")
-        print("※ Arduino IDE 시리얼 모니터는 닫아야 합니다(포트 충돌).")
-        return ser
-    except Exception as e:
-        print(f"[WARN] 시리얼 열기 실패: {e}")
-        return None
+    # ----------------------------
+    # Serial
+    # ----------------------------
+    def _find_opencr_port(self) -> str | None:
+        ports = list(list_ports.comports())
+        if not ports:
+            return None
 
+        keywords = ["opencr", "robotis", "open cr", "stm", "cdc", "serial"]
+        for p in ports:
+            desc = (p.description or "").lower()
+            manu = (p.manufacturer or "").lower()
+            hwid = (p.hwid or "").lower()
+            text = f"{desc} {manu} {hwid}"
+            if any(k in text for k in keywords):
+                return p.device
 
-def read_opencr_lines(ser):
-    """OpenCR이 보내는 로그를 파이썬 콘솔로 출력(논블로킹)."""
-    if ser is None:
-        return
-    try:
-        while ser.in_waiting > 0:
-            line = ser.readline().decode("utf-8", errors="ignore").strip()
-            if line:
-                print("[OPENCR]", line)
-    except Exception as e:
-        print("[WARN] Serial read failed:", e)
+        return ports[0].device
 
+    def open_serial(self) -> None:
+        port = self.cfg.force_port if self.cfg.force_port else self._find_opencr_port()
+        if not port:
+            print("[WARN] 시리얼 포트를 찾지 못했습니다. OpenCR 연결/드라이버 확인.")
+            self.ser = None
+            return
 
-def send_angle(ser, angle_deg):
-    """OpenCR로 각도 전송."""
-    if ser is None:
-        return
-    msg = f"ANG,{angle_deg:.2f}\n"
-    try:
-        ser.write(msg.encode("utf-8"))
-    except Exception as e:
-        print("[WARN] Serial write failed:", e)
+        try:
+            self.ser = serial.Serial(port, self.cfg.baud, timeout=0.01)
+            time.sleep(2.0)  # OpenCR USB 시리얼 안정화
+            self.ser.reset_input_buffer()
+            self.ser.reset_output_buffer()
+            print(f"[OK] Serial connected: {port} @ {self.cfg.baud}")
+            print("※ 같은 COM 포트는 한 프로그램만 사용 가능 → Arduino 시리얼 모니터는 닫아야 함.")
+        except Exception as e:
+            print(f"[WARN] 시리얼 열기 실패: {e}")
+            self.ser = None
 
+    def close_serial(self) -> None:
+        if self.ser:
+            try:
+                self.ser.close()
+            except Exception:
+                pass
+        self.ser = None
 
-def main():
-    # 시리얼 연결
-    ser = open_serial()
+    def _read_opencr_lines(self) -> None:
+        if self.ser is None:
+            return
+        try:
+            while self.ser.in_waiting > 0:
+                line = self.ser.readline().decode("utf-8", errors="ignore").strip()
+                if line:
+                    print("[OPENCR]", line)
+        except Exception as e:
+            print("[WARN] Serial read failed:", e)
 
-    # 웹캠 연결
-    api = cv2.CAP_DSHOW if USE_DSHOW else cv2.CAP_ANY
-    cap = cv2.VideoCapture(CAM_INDEX, api)
+    def _send_angle(self, angle_deg: float) -> None:
+        if self.ser is None:
+            return
+        msg = f"ANG,{angle_deg:.2f}\n"
+        try:
+            self.ser.write(msg.encode("utf-8"))
+        except Exception as e:
+            print("[WARN] Serial write failed:", e)
 
-    if not cap.isOpened():
-        print("[ERROR] 웹캠을 열 수 없습니다.")
-        if ser:
-            ser.close()
-        return
+    # ----------------------------
+    # Camera + Calibration
+    # ----------------------------
+    def open_camera(self) -> None:
+        api = cv2.CAP_DSHOW if self.cfg.use_dshow else cv2.CAP_ANY
+        self.cap = cv2.VideoCapture(self.cfg.cam_index, api)
+        if not self.cap.isOpened():
+            raise RuntimeError("웹캠을 열 수 없습니다. cam_index/연결 상태 확인 필요.")
+        print("[OK] Camera opened.")
 
-    print("[OK] 웹캠이 켜졌습니다. 'ESC'를 눌러 종료.")
+        # 캘리브레이션 로드/맵 생성(옵션)
+        if self.cfg.calib_path:
+            self._load_calibration_and_prepare_undistort()
 
-    last_send_time = 0.0
-    last_sent_angle = None
+    def close_camera(self) -> None:
+        if self.cap:
+            try:
+                self.cap.release()
+            except Exception:
+                pass
+        self.cap = None
 
-    while True:
-        ret, frame = cap.read()
+    def _load_calibration_and_prepare_undistort(self) -> None:
+        assert self.cap is not None
+
+        data = np.load(self.cfg.calib_path)
+        keys = list(data.files)
+
+        def pick_key(candidates):
+            for k in candidates:
+                if k in data:
+                    return data[k]
+            return None
+
+        K = pick_key(["K", "camera_matrix", "mtx", "cameraMatrix", "intrinsic", "intrinsics"])
+        dist = pick_key(["dist", "dist_coeff", "distCoeffs", "dist_coeffs", "distortion", "D"])
+
+        if K is None or dist is None:
+            raise RuntimeError(
+                f"calib 파일에서 K/dist 키를 찾지 못했습니다.\n"
+                f"- 파일: {self.cfg.calib_path}\n"
+                f"- keys: {keys}\n"
+                f"tip) npz에 저장된 키 이름에 맞춰 후보 목록을 추가해야 합니다."
+            )
+
+        self.K = np.array(K, dtype=np.float64)
+        self.dist = np.array(dist, dtype=np.float64).reshape(-1, 1)
+
+        # 프레임 크기 확보
+        ret, frame0 = self.cap.read()
         if not ret:
-            print("[ERROR] 프레임을 읽을 수 없습니다.")
-            break
+            raise RuntimeError("캘리브레이션 준비 중 첫 프레임을 읽지 못했습니다.")
+        h, w = frame0.shape[:2]
 
-        # OpenCR 로그 읽기(항상)
-        read_opencr_lines(ser)
+        self.newK, self.roi = cv2.getOptimalNewCameraMatrix(
+            self.K, self.dist, (w, h), self.cfg.alpha, (w, h)
+        )
 
-        # 1) 그레이스케일
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if self.cfg.use_remap:
+            self.map1, self.map2 = cv2.initUndistortRectifyMap(
+                self.K, self.dist, None, self.newK, (w, h), cv2.CV_16SC2
+            )
 
-        # 2) 블러
+        print(f"[OK] Calibration loaded: {self.cfg.calib_path}")
+        print(f"     keys={keys}")
+
+    def _apply_undistort(self, frame: np.ndarray) -> np.ndarray:
+        if self.K is None or self.dist is None or self.newK is None:
+            return frame
+
+        if self.cfg.use_remap and (self.map1 is not None) and (self.map2 is not None):
+            frame = cv2.remap(frame, self.map1, self.map2, cv2.INTER_LINEAR)
+        else:
+            frame = cv2.undistort(frame, self.K, self.dist, None, self.newK)
+
+        if self.cfg.crop and self.roi is not None:
+            x, y, w, h = self.roi
+            frame = frame[y:y + h, x:x + w]
+
+        return frame
+
+    # ----------------------------
+    # Vision
+    # ----------------------------
+    def _detect_best_rectangle(self, frame_bgr: np.ndarray):
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        edge = cv2.Canny(blur, self.cfg.canny1, self.cfg.canny2)
 
-        # 3) 엣지
-        edge = cv2.Canny(blur, CANNY1, CANNY2)
-
-        # 4) 컨투어
         contours, _ = cv2.findContours(edge, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         best = None
         best_area = 0
 
-        # 가장 큰 사각형 하나만 선택(전송 안정)
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area < MIN_AREA:
+            if area < self.cfg.min_area:
                 continue
 
             epsilon = 0.02 * cv2.arcLength(cnt, True)
@@ -153,66 +255,113 @@ def main():
                 best = (cnt, approx)
                 best_area = area
 
-        if best is not None:
-            cnt, approx = best
+        if best is None:
+            return None
 
-            # 사각형 그리기
-            cv2.drawContours(frame, [approx], -1, (0, 255, 0), 2)
+        cnt, approx = best
+        (cx, cy), (w, h), angle = cv2.minAreaRect(cnt)
 
-            # 2D 자세 추정
-            rect = cv2.minAreaRect(cnt)
-            (cx, cy), (w, h), angle = rect
+        if w < h:
+            angle += 90
 
-            # 각도 보정
-            if w < h:
-                angle += 90
+        return float(angle), int(cx), int(cy), approx, edge
 
-            cx, cy = int(cx), int(cy)
+    # ----------------------------
+    # Step / Run
+    # ----------------------------
+    def step(self) -> bool:
+        """
+        1 프레임 처리(외부 루프에서 호출 가능)
+        return False if frame read failed
+        """
+        if self.cap is None:
+            raise RuntimeError("Camera not opened. call open_camera() first")
 
-            # 방향 벡터 시각화
-            rad = np.deg2rad(angle)
-            length = 100
-            dx = int(length * np.cos(rad))
-            dy = int(length * np.sin(rad))
+        ret, frame = self.cap.read()
+        if not ret:
+            return False
 
-            cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
-            cv2.line(frame, (cx, cy), (cx + dx, cy + dy), (0, 0, 255), 2)
+        # OpenCR 로그
+        self._read_opencr_lines()
 
-            # 각도 텍스트
-            cv2.putText(
-                frame, f"Angle: {angle:.2f} deg",
-                (cx - 80, cy - 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2
-            )
+        # undistort
+        frame = self._apply_undistort(frame)
 
-            # =========================
-            # OpenCR로 전송(주기/변화량 제한)
-            # =========================
+        result = self._detect_best_rectangle(frame)
+
+        if result is not None:
+            angle, cx, cy, approx, edge = result
+
+            if self.cfg.print_angle_to_console:
+                print(f"[ANGLE] {angle:.2f}")
+
+            # 전송 조건
             now = time.time()
-            can_send_by_time = (now - last_send_time) >= SEND_INTERVAL
+            can_send_by_time = (now - self.last_send_time) >= self.cfg.send_interval
             can_send_by_delta = (
-                last_sent_angle is None or abs(angle - last_sent_angle) >= SEND_DELTA_DEG
+                self.last_sent_angle is None or abs(angle - self.last_sent_angle) >= self.cfg.send_delta_deg
             )
 
-            if ser is not None and can_send_by_time and can_send_by_delta:
-                send_angle(ser, angle)
-                last_send_time = now
-                last_sent_angle = angle
+            if self.ser is not None and can_send_by_time and can_send_by_delta:
+                self._send_angle(angle)
+                self.last_send_time = now
+                self.last_sent_angle = angle
 
-        # 출력
-        cv2.imshow("Rectangle Pose Estimation (2D)", frame)
-        cv2.imshow("Edge", edge)
+            # 화면 표시
+            if self.cfg.show_windows:
+                cv2.drawContours(frame, [approx], -1, (0, 255, 0), 2)
 
-        key = cv2.waitKey(1)
-        if key == 27:
-            print("종료합니다.")
-            break
+                rad = np.deg2rad(angle)
+                dx = int(self.cfg.draw_axis_len * np.cos(rad))
+                dy = int(self.cfg.draw_axis_len * np.sin(rad))
 
-    cap.release()
-    cv2.destroyAllWindows()
-    if ser is not None:
-        ser.close()
+                cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
+                cv2.line(frame, (cx, cy), (cx + dx, cy + dy), (0, 0, 255), 2)
 
+                cv2.putText(
+                    frame, f"Angle: {angle:.2f} deg",
+                    (cx - 80, cy - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2
+                )
 
-if __name__ == "__main__":
-    main()
+                cv2.imshow("Rectangle Pose Estimation (2D)", frame)
+                cv2.imshow("Edge", edge)
+        else:
+            if self.cfg.show_windows:
+                cv2.imshow("Rectangle Pose Estimation (2D)", frame)
+
+        return True
+
+    def run(self) -> None:
+        """
+        내부 루프 실행 (ESC 종료)
+        """
+        if self.ser is None:
+            self.open_serial()
+        if self.cap is None:
+            self.open_camera()
+
+        print("[RUN] ESC to exit.")
+        try:
+            while True:
+                ok = self.step()
+                if not ok:
+                    print("[ERROR] 프레임을 읽을 수 없습니다.")
+                    break
+
+                if self.cfg.show_windows:
+                    key = cv2.waitKey(1)
+                    if key == 27:
+                        break
+                else:
+                    time.sleep(0.001)
+        finally:
+            self.close()
+
+    def close(self) -> None:
+        self.close_camera()
+        self.close_serial()
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
