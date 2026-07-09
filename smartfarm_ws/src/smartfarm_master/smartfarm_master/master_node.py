@@ -22,8 +22,8 @@ import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
-import sys
-from pathlib import Path
+#import sys
+#from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
@@ -45,21 +45,21 @@ def put_latest(q, item):
         except queue.Full:
             pass
 
-CAM_MODULE_CANDIDATES = [
-    Path('/home/thumb/aquaponic_copy/Automated-Aquaponics-System/first_convey/cam'),
-    Path('/home/thumb/aquaponics_copy/Automated-Aquaponics-System/first_convey/cam'),
-]
+# CAM_MODULE_CANDIDATES = [
+#     Path('/home/thumb/aquaponic_copy/Automated-Aquaponics-System/first_convey/cam'),
+#     Path('/home/thumb/aquaponics_copy/Automated-Aquaponics-System/first_convey/cam'),
+# ]
 
-for cam_module_dir in CAM_MODULE_CANDIDATES:
-    if cam_module_dir.exists():
-        sys.path.append(str(cam_module_dir))
-        break
+# for cam_module_dir in CAM_MODULE_CANDIDATES:
+#     if cam_module_dir.exists():
+#         sys.path.append(str(cam_module_dir))
+#         break
 
-try:
-    from op_sprout import detect_sprouts
-except Exception as e:
-    detect_sprouts = None
-    print(f'[Sprout] op_sprout import failed: {e}')
+# try:
+#     from op_sprout import detect_sprouts
+# except Exception as e:
+#     detect_sprouts = None
+#     print(f'[Sprout] op_sprout import failed: {e}')
 
 # ── 설정 ──────────────────────────────────────
 # 컨베이어 트레이인식 카메라
@@ -76,10 +76,10 @@ ROI_X_MAX = 0.80
 ROI_Y_MIN = 0.05
 ROI_Y_MAX = 0.95
 # 발아실 ROI
-NURSERY_ROI_X_MIN = 0.15
-NURSERY_ROI_X_MAX = 0.85
-NURSERY_ROI_Y_MIN = 0.20
-NURSERY_ROI_Y_MAX = 0.70
+NURSERY_ROI_X_MIN = 0.13
+NURSERY_ROI_X_MAX = 0.90
+NURSERY_ROI_Y_MIN = 0.17
+NURSERY_ROI_Y_MAX = 0.74
 NURSERY_TRAY_MIN_BOX_RATIO = 0.15   # 트레이 박스가 화면 대비 최소 15% 이상이어야 감지
 NURSERY_SPROUT_MIN_BOX_RATIO = 0.005    
 
@@ -92,14 +92,19 @@ NURSERY_LEFT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_left_calib
 NURSERY_RIGHT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_right_calib.npz'
 
 # 발아실 카메라 / 모델
-NURSERY_MODEL_PATH = '/home/thumb/aquaponic_copy/best.pt'
+NURSERY_SEED_MODEL_PATH = '/home/thumb/aquaponic_copy/best.pt'
+NURSERY_TRAY_MODEL_PATH = '/home/thumb/aquaponic_copy/tray2/sprout_tray_best.pt'
+
 NURSERY_LEFT_STREAM_PORT = 5001
 NURSERY_RIGHT_STREAM_PORT = 5002
 
-NURSERY_MIN_CONF = 0.2     # YOLO conf 최소값, 이게 트레이일 확률이 20%이상이어야 박스를 그림
+#NURSERY_MIN_CONF = 0.2     # YOLO conf 최소값, 이게 트레이일 확률이 20%이상이어야 박스를 그림
+NURSERY_TRAY_CONF = 0.35
+NURSERY_SPROUT_CONF = 0.20
+
 NURSERY_STABLE_FRAMES = 3
 NURSERY_COOLDOWN_SEC = 3.0
-SPROUT_DONE_COUNT = 25   # 새싹 후보가 몇 개 이상이면 발아 완료로 볼지 정하는 값. 
+NURSERY_SPROUT_DONE_COUNT = 25  # 새싹 후보가 몇 개 이상이면 발아 완료로 볼지 정하는 값. 
 NURSERY_SEND_FLAGS = True  
 
 TRAY_OCCUPY_FRAMES = 2
@@ -268,10 +273,11 @@ class MasterNode(Node):
         print('[YOLO] 로딩 완료')
 
         print('[YOLO] 발아실 모델 로딩 중...')
-        self.nursery_model = YOLO(NURSERY_MODEL_PATH)
+        self.nursery_seed_model = YOLO(NURSERY_SEED_MODEL_PATH)
+        self.nursery_tray_model = YOLO(NURSERY_TRAY_MODEL_PATH)
         print('[YOLO] 발아실 모델 로딩 완료')
-        print('[Nursery model names]', self.nursery_model.names)
-
+        print('[Nursery seed model names]', self.nursery_seed_model.names)
+        print('[Nursery tray model names]', self.nursery_tray_model.names)
 
         # ── Publisher ─────────────────────────
         # Pi1 → STM1 명령 (바이너리)
@@ -1056,99 +1062,73 @@ def process_frame(node: MasterNode, frame: np.ndarray):
     #except queue.Full:
     #    pass
 
-def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
+def process_nursery_frame(
+    node: MasterNode,
+    frame: np.ndarray,
+    position: str
+):
+    # ─────────────────────────────────────────
+    # 1. YOLO 추론
+    # 트레이 모델과 씨앗/발아 모델을 각각 실행
+    # ─────────────────────────────────────────
     with node.yolo_lock:
-        results = node.nursery_model.predict(
+        tray_results = node.nursery_tray_model.predict(
             source=frame,
             imgsz=416,
-            conf=NURSERY_MIN_CONF,
+            conf=NURSERY_TRAY_CONF,
             device=node.yolo_device,
             verbose=False
         )[0]
-        
+
+        seed_results = node.nursery_seed_model.predict(
+            source=frame,
+            imgsz=416,
+            conf=NURSERY_SPROUT_CONF,
+            device=node.yolo_device,
+            verbose=False
+        )[0]
+
     disp = frame.copy()
     h, w = frame.shape[:2]
 
-    sprout_count = 0
-    sprout_done = False
+    roi_x_min = NURSERY_ROI_X_MIN
+    roi_x_max = NURSERY_ROI_X_MAX
+    roi_y_min = NURSERY_ROI_Y_MIN
+    roi_y_max = NURSERY_ROI_Y_MAX
 
-    if detect_sprouts is not None:
-        try:
-            rx1 = int(w * NURSERY_ROI_X_MIN)
-            rx2 = int(w * NURSERY_ROI_X_MAX)
-            ry1 = int(h * NURSERY_ROI_Y_MIN)
-            ry2 = int(h * NURSERY_ROI_Y_MAX)
+    # ─────────────────────────────────────────
+    # 2. op_sprout 기반 새싹 개수 판단
+    # ─────────────────────────────────────────
+    # sprout_count = 0
+    # sprout_done = False
 
-            roi_frame = frame[ry1:ry2, rx1:rx2]
+    # if detect_sprouts is not None:
+    #     try:
+    #         rx1 = int(w * roi_x_min)
+    #         rx2 = int(w * roi_x_max)
+    #         ry1 = int(h * roi_y_min)
+    #         ry2 = int(h * roi_y_max)
 
-            _, sprout_count, _ = detect_sprouts(roi_frame)
-            sprout_done = sprout_count >= SPROUT_DONE_COUNT
-        except Exception as e:
-            node.get_logger().warn(f'[Sprout {position}] detect_sprouts failed: {e}')
+    #         roi_frame = frame[ry1:ry2, rx1:rx2]
 
-    
-    draw_roi_x_min = NURSERY_ROI_X_MIN
-    draw_roi_x_max = NURSERY_ROI_X_MAX
-    draw_roi_y_min = NURSERY_ROI_Y_MIN
-    draw_roi_y_max = NURSERY_ROI_Y_MAX
+    #         _, sprout_count, _ = detect_sprouts(roi_frame)
+    #         sprout_done = sprout_count >= NURSERY_SPROUT_DONE_COUNT
 
+    #     except Exception as e:
+    #         node.get_logger().warn(
+    #             f'[Sprout {position}] detect_sprouts failed: {e}'
+    #         )
+
+    # ─────────────────────────────────────────
+    # 3. ROI 표시
+    # ─────────────────────────────────────────
     cv2.rectangle(
         disp,
-        (int(w * draw_roi_x_min), int(h * draw_roi_y_min)),
-        (int(w * draw_roi_x_max), int(h * draw_roi_y_max)),
+        (int(w * roi_x_min), int(h * roi_y_min)),
+        (int(w * roi_x_max), int(h * roi_y_max)),
         (255, 255, 0),
         2
     )
-    #node.get_logger().info(f'[Nursery {position}] boxes={len(results.boxes)}')
-
-    for box in results.boxes:
-        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-        cls_id = int(box.cls[0].item())
-        conf = float(box.conf[0].item())
-        class_name = node.nursery_model.names[cls_id]
-
-        cx = (x1 + x2) / 2 / w
-        cy = (y1 + y2) / 2 / h
-        box_w = x2 - x1
-        box_h = y2 - y1
-
-        if class_name == 'tray':
-            min_box_ratio = 0.08 if position == 'left' else NURSERY_TRAY_MIN_BOX_RATIO
-        else:
-            min_box_ratio = NURSERY_SPROUT_MIN_BOX_RATIO
-
-        
-        roi_x_min = NURSERY_ROI_X_MIN
-        roi_x_max = NURSERY_ROI_X_MAX
-        roi_y_min = NURSERY_ROI_Y_MIN
-        roi_y_max = NURSERY_ROI_Y_MAX
-
-        in_roi = (
-            roi_x_min < cx < roi_x_max
-            and roi_y_min < cy < roi_y_max
-            and box_w / w > min_box_ratio
-            and box_h / h > min_box_ratio
-        )
-
-        color = (0, 255, 0) if in_roi else (0, 0, 255)
-
-        #node.get_logger().info(
-        #    f'[Nursery {position}] DETECT class={class_name}, conf={conf:.2f}, '
-        #    f'cx={cx:.2f}, cy={cy:.2f}, '
-        #    f'bw={box_w / w:.2f}, bh={box_h / h:.2f}, '
-        #    f'in_roi={in_roi}'
-        #)
-
-        cv2.rectangle(disp, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(
-            disp,
-            f'{class_name} {conf:.2f}',
-            (x1, max(20, y1 - 5)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            color,
-            2
-        )
 
     counts = {
         'tray': 0,
@@ -1157,72 +1137,159 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         'sprout3': 0,
     }
 
-    best_sprout3_conf = 0.0
-    new_uv = None
-    
-    for box in results.boxes:
-        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+    #best_sprout3_conf = 0.0
+
+    # ─────────────────────────────────────────
+    # 4. 트레이 모델 처리
+    # tray_results만 사용
+    # ─────────────────────────────────────────
+    for box in tray_results.boxes:
+        x1, y1, x2, y2 = map(
+            int,
+            box.xyxy[0].tolist()
+        )
+
         cls_id = int(box.cls[0].item())
         conf = float(box.conf[0].item())
-        class_name = node.nursery_model.names[cls_id]
 
-        if class_name not in counts:
-            continue
+        class_name = node.nursery_tray_model.names[cls_id]
 
         cx = (x1 + x2) / 2 / w
         cy = (y1 + y2) / 2 / h
-        box_w = x2 - x1
-        box_h = y2 - y1
+        box_w_ratio = (x2 - x1) / w
+        box_h_ratio = (y2 - y1) / h
 
-        if class_name == 'tray':
-            min_box_ratio = 0.08 if position == 'left' else NURSERY_TRAY_MIN_BOX_RATIO
-        else:
-            min_box_ratio = NURSERY_SPROUT_MIN_BOX_RATIO
-
-        
-        roi_x_min = NURSERY_ROI_X_MIN
-        roi_x_max = NURSERY_ROI_X_MAX
-        roi_y_min = NURSERY_ROI_Y_MIN
-        roi_y_max = NURSERY_ROI_Y_MAX
+        # 왼쪽 카메라는 기존 조건 유지
+        min_box_ratio = (
+            0.08
+            if position == 'left'
+            else NURSERY_TRAY_MIN_BOX_RATIO
+        )
 
         in_roi = (
             roi_x_min < cx < roi_x_max
             and roi_y_min < cy < roi_y_max
-            and box_w / w > min_box_ratio
-            and box_h / h > min_box_ratio
+            and box_w_ratio > min_box_ratio
+            and box_h_ratio > min_box_ratio
+        )
+
+        color = (0, 255, 0) if in_roi else (0, 0, 255)
+
+        cv2.rectangle(
+            disp,
+            (x1, y1),
+            (x2, y2),
+            color,
+            2
+        )
+
+        cv2.putText(
+            disp,
+            f'tray {conf:.2f}',
+            (x1, max(20, y1 - 5)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            color,
+            2
+        )
+
+        # 새 트레이 모델이 클래스 이름을 tray로 사용한다는 전제
+        if class_name == 'tray' and in_roi:
+            counts['tray'] = 1
+
+    # ─────────────────────────────────────────
+    # 5. 씨앗/발아 모델 처리
+    # seed_results만 사용
+    # ─────────────────────────────────────────
+    for box in seed_results.boxes:
+        x1, y1, x2, y2 = map(
+            int,
+            box.xyxy[0].tolist()
+        )
+
+        cls_id = int(box.cls[0].item())
+        conf = float(box.conf[0].item())
+
+        class_name = node.nursery_seed_model.names[cls_id]
+
+        # 기존 best.pt의 tray 클래스는 여기서 사용하지 않음
+        if class_name not in ('sprout1', 'sprout2', 'sprout3'):
+            continue
+
+        cx = (x1 + x2) / 2 / w
+        cy = (y1 + y2) / 2 / h
+        box_w_ratio = (x2 - x1) / w
+        box_h_ratio = (y2 - y1) / h
+
+        in_roi = (
+            roi_x_min < cx < roi_x_max
+            and roi_y_min < cy < roi_y_max
+            and box_w_ratio > NURSERY_SPROUT_MIN_BOX_RATIO
+            and box_h_ratio > NURSERY_SPROUT_MIN_BOX_RATIO
+        )
+
+        color = (0, 255, 0) if in_roi else (0, 0, 255)
+
+        cv2.rectangle(
+            disp,
+            (x1, y1),
+            (x2, y2),
+            color,
+            2
+        )
+
+        cv2.putText(
+            disp,
+            f'sprout {conf:.2f}',
+            (x1, max(20, y1 - 5)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            color,
+            2
         )
 
         if not in_roi:
             continue
 
-        if class_name == 'tray':
-            counts['tray'] = 1
-        else:
-            counts[class_name] += 1
+        counts[class_name] += 1
 
-
-        if class_name == 'sprout3':
-            best_sprout3_conf = max(best_sprout3_conf, conf)
+        # if class_name == 'sprout3':
+        #     best_sprout3_conf = max(
+        #         best_sprout3_conf,
+        #         conf
+        #     )
 
     tray_detected = counts['tray'] > 0
+    yolo_sprout_count = (
+        counts['sprout1']
+        + counts['sprout2']
+        + counts['sprout3']
+    )
+    # ─────────────────────────────────────────
+    # 6. 발아 완료 판단
+    # YOLO 새싹 총개수로 발아 완료 판단
+    # ─────────────────────────────────────────
+    # YOLO에서 검출한 전체 새싹 개수로 발아 완료 판단
+    sprout_done_detected = (
+        yolo_sprout_count >= NURSERY_SPROUT_DONE_COUNT
+    )
 
-    # 발아 완료 여부는 first_convey/cam/op_sprout.py의 새싹 검출 개수로 판단
-    sprout_done_detected = False
-
-    if detect_sprouts is not None:
-        sprout_done_detected = sprout_done
-        best_sprout3_conf = min(1.0, sprout_count / max(SPROUT_DONE_COUNT, 1))
-    else:
-        node.get_logger().warn('[Sprout] op_sprout unavailable, sprout done check disabled')
+    sprout_progress = min(
+        1.0,
+        yolo_sprout_count / max(NURSERY_SPROUT_DONE_COUNT, 1)
+    )
 
     now = time.time()
     send_event = False
     flag_name = None
 
+    # ─────────────────────────────────────────
+    # 7. 상태 및 플래그 처리
+    # ─────────────────────────────────────────
     with node.state_lock:
         st = node.nursery_state[position]
 
-        # ── 트레이 점유 판단 ─────────────────────
+        # 트레이 점유 판단
         if tray_detected:
             st['tray_seen_cnt'] += 1
             st['tray_lost_cnt'] = 0
@@ -1235,21 +1302,34 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
 
         if st['tray_lost_cnt'] >= TRAY_LOST_FRAMES:
             st['occupied'] = 0
+
             if position == 'left':
                 node._set_flag('ulf', 0)
             else:
                 node._set_flag('urf', 0)
 
-        # ── 발아 완료 판단 ─────────────────────
+        # 발아 완료 판단
         if tray_detected and sprout_done_detected:
             st['stable_cnt'] += 1
             st['last_label'] = 'sprout_done'
-            st['last_conf'] = best_sprout3_conf
+            st['last_conf'] = sprout_progress
+
         else:
             st['stable_cnt'] = 0
-            st['last_label'] = 'tray_only' if tray_detected else 'none'
-            st['last_conf'] = 0.0
 
+            if not tray_detected:
+                st['last_label'] = 'none'
+                st['last_conf'] = 0.0
+
+            elif yolo_sprout_count == 0:
+                st['last_label'] = 'tray_only'
+                st['last_conf'] = 0.0
+
+            else:
+                st['last_label'] = 'sprout_growing'
+                st['last_conf'] = sprout_progress
+
+        # 안정 프레임 수 충족 시 ULF 또는 URF 설정
         if (
             st['stable_cnt'] >= NURSERY_STABLE_FRAMES
             and now - st['last_tx'] > NURSERY_COOLDOWN_SEC
@@ -1268,7 +1348,7 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
                     flag_name = 'URF'
                     send_event = True
 
-        # ── 좌/우 점유 상태로 uv 재계산 ─────────
+        # 좌/우 점유 상태 합산
         new_uv = (
             int(node.nursery_state['left']['occupied'])
             + int(node.nursery_state['right']['occupied'])
@@ -1281,45 +1361,94 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
         stable = st['stable_cnt']
         label = st['last_label']
 
-        if send_event:
-            if NURSERY_SEND_FLAGS:
-                node._send_scara(make_flag_u8(PID_ULF, node.flags['ulf']))
-                node._send_scara(make_flag_u8(PID_URF, node.flags['urf']))
-                node._send_scara(make_flag_u16(PID_UV, new_uv))
+        if send_event and NURSERY_SEND_FLAGS:
+            node._send_scara(
+                make_flag_u8(
+                    PID_ULF,
+                    node.flags['ulf']
+                )
+            )
 
+            node._send_scara(
+                make_flag_u8(
+                    PID_URF,
+                    node.flags['urf']
+                )
+            )
+
+            node._send_scara(
+                make_flag_u16(
+                    PID_UV,
+                    new_uv
+                )
+            )
+
+        if send_event:
             if flag_name is not None:
                 node.get_logger().info(
-                    f'[Nursery {position}] sprout done -> {flag_name}=1, '
-                    f'sprout_count={sprout_count}, uv={new_uv}'
+                    f'[Nursery {position}] '
+                    f'sprout done -> {flag_name}=1, '
+                    f'sprout_count={yolo_sprout_count}, '
+                    f'uv={new_uv}'
                 )
             else:
                 node.get_logger().info(
-                    f'[Nursery {position}] UV changed -> uv={new_uv}'
+                    f'[Nursery {position}] '
+                    f'UV changed -> uv={new_uv}'
                 )
 
+    # ─────────────────────────────────────────
+    # 8. 로그 출력
+    # ─────────────────────────────────────────
     node.get_logger().info(
-        f'[Nursery {position}] tray={counts["tray"]}, '
-        f'op_sprout={sprout_count}/{SPROUT_DONE_COUNT}, '
-        f'stable={stable}, label={label}'
+        f'[Nursery {position}] '
+        f'tray={counts["tray"]}, '
+        f'sprouts={yolo_sprout_count}/{NURSERY_SPROUT_DONE_COUNT}, '
+        f'progress={sprout_progress:.2f}, '
+        f'done={sprout_done_detected}, '
+        f'stable={stable}, '
+        f'label={label}'
     )
 
+    # ─────────────────────────────────────────
+    # 9. 화면 텍스트
+    # ─────────────────────────────────────────
     y = 30
-    for name, count in counts.items():
-        cv2.putText(
-            disp,
-            f'{name}: {count}',
-            (20, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (0, 0, 255),
-            2
-        )
-        y += 30
 
     cv2.putText(
         disp,
-        f'nursery stable: {stable}/{NURSERY_STABLE_FRAMES}',
-        (20, y + 10),
+        f'tray: {counts["tray"]}',
+        (20, y),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 0, 255),
+        2
+    )
+
+    cv2.putText(
+        disp,
+        f'sprouts: {yolo_sprout_count}/{NURSERY_SPROUT_DONE_COUNT}',
+        (20, y + 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 255, 255),
+        2
+    )
+
+    cv2.putText(
+        disp,
+        f'progress: {sprout_progress:.2f}',
+        (20, y + 60),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 255, 255),
+        2
+    )
+
+    cv2.putText(
+        disp,
+        f'stable: {stable}/{NURSERY_STABLE_FRAMES}',
+        (20, y + 90),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
         (255, 0, 0),
@@ -1329,28 +1458,20 @@ def process_nursery_frame(node: MasterNode, frame: np.ndarray, position: str):
     cv2.putText(
         disp,
         f'label: {label}',
-        (20, y + 40),
+        (20, y + 120),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
         (255, 0, 0),
         2
     )
-    cv2.putText(
-        disp,
-        f'op_sprout: {sprout_count}/{SPROUT_DONE_COUNT}',
-        (20, y + 70),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.7,
-        (0, 255, 255),
-        2
+
+    target_queue = (
+        nursery_left_frame_queue
+        if position == 'left'
+        else nursery_right_frame_queue
     )
 
-    target_queue = nursery_left_frame_queue if position == 'left' else nursery_right_frame_queue
     put_latest(target_queue, disp)
-    #try:
-    #    target_queue.put_nowait(disp)
-    #except queue.Full:
-    #    pass
 
 # ══════════════════════════════════════════════
 # 카메라 스트림 수신
@@ -1461,7 +1582,7 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
             data = b''
             payload_size = struct.calcsize('>I')
             last_process_ts = 0.0
-            PROCESS_INTERVAL = 0.15
+            PROCESS_INTERVAL = 0.3
 
             while rclpy.ok():
                 while len(data) < payload_size:
