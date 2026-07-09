@@ -80,8 +80,7 @@ NURSERY_ROI_X_MIN = 0.13
 NURSERY_ROI_X_MAX = 0.90
 NURSERY_ROI_Y_MIN = 0.17
 NURSERY_ROI_Y_MAX = 0.74
-NURSERY_TRAY_MIN_BOX_RATIO = 0.15   # 트레이 박스가 화면 대비 최소 15% 이상이어야 감지
-NURSERY_SPROUT_MIN_BOX_RATIO = 0.005    
+NURSERY_TRAY_MIN_BOX_RATIO = 0.5   # 트레이 박스가 화면 대비 최소 50% 이상이어야 감지
 
 # 박스 최소 크기 (화면 대비 비율)
 MIN_BOX_RATIO = 0.25
@@ -92,7 +91,6 @@ NURSERY_LEFT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_left_calib
 NURSERY_RIGHT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_right_calib.npz'
 
 # 발아실 카메라 / 모델
-NURSERY_SEED_MODEL_PATH = '/home/thumb/aquaponic_copy/best.pt'
 NURSERY_TRAY_MODEL_PATH = '/home/thumb/aquaponic_copy/tray2/sprout_tray_best.pt'
 
 NURSERY_LEFT_STREAM_PORT = 5001
@@ -100,7 +98,32 @@ NURSERY_RIGHT_STREAM_PORT = 5002
 
 #NURSERY_MIN_CONF = 0.2     # YOLO conf 최소값, 이게 트레이일 확률이 20%이상이어야 박스를 그림
 NURSERY_TRAY_CONF = 0.35
-NURSERY_SPROUT_CONF = 0.20
+# 초록색 새싹
+NURSERY_LOWER_GREEN = np.array([35, 60, 70], dtype=np.uint8)
+NURSERY_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
+
+# 노란색·황록색 새싹
+NURSERY_LOWER_YELLOW = np.array([20, 55, 110], dtype=np.uint8)
+NURSERY_UPPER_YELLOW = np.array([42, 220, 255], dtype=np.uint8)
+
+# 새싹으로 인정할 최소/최대 면적
+NURSERY_MIN_SPROUT_AREA = 35
+NURSERY_MAX_SPROUT_AREA = 20000
+
+# 작은 노이즈 제거용
+NURSERY_OPEN_KERNEL_SIZE = 3
+
+# 한 새싹의 떨어진 잎을 연결하기 위한 크기
+NURSERY_CLOSE_KERNEL_SIZE = 3
+
+# 너무 작고 가느다란 영역 제거
+NURSERY_MIN_SPROUT_WIDTH = 6
+NURSERY_MIN_SPROUT_HEIGHT = 6
+
+# 발아실 ROI 내부에서 가운데 흰색 영역 제외
+# ROI 내부 너비를 0~1로 봤을 때의 비율
+NURSERY_CENTER_EXCLUDE_X_MIN = 0.36
+NURSERY_CENTER_EXCLUDE_X_MAX = 0.67
 
 NURSERY_STABLE_FRAMES = 3
 NURSERY_COOLDOWN_SEC = 3.0
@@ -272,11 +295,9 @@ class MasterNode(Node):
         self.model = YOLO(MODEL_PATH)
         print('[YOLO] 로딩 완료')
 
-        print('[YOLO] 발아실 모델 로딩 중...')
-        self.nursery_seed_model = YOLO(NURSERY_SEED_MODEL_PATH)
+        print('[YOLO] 발아실 트레이 모델 로딩 중...')
         self.nursery_tray_model = YOLO(NURSERY_TRAY_MODEL_PATH)
-        print('[YOLO] 발아실 모델 로딩 완료')
-        print('[Nursery seed model names]', self.nursery_seed_model.names)
+        print('[YOLO] 발아실 트레이 모델 로딩 완료')
         print('[Nursery tray model names]', self.nursery_tray_model.names)
 
         # ── Publisher ─────────────────────────
@@ -1062,28 +1083,290 @@ def process_frame(node: MasterNode, frame: np.ndarray):
     #except queue.Full:
     #    pass
 
+def merge_nearby_sprout_boxes(boxes, merge_distance=22):
+    """
+    서로 가까운 새싹 contour 박스를 하나의 새싹 후보로 합친다.
+    """
+    if not boxes:
+        return []
+
+    groups = []
+
+    for box in boxes:
+        x1, y1, x2, y2, area = box
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+
+        merged = False
+
+        for group in groups:
+            gx1, gy1, gx2, gy2, garea = group
+
+            gcx = (gx1 + gx2) / 2
+            gcy = (gy1 + gy2) / 2
+
+            distance = np.hypot(cx - gcx, cy - gcy)
+
+            if distance < merge_distance:
+                group[0] = min(gx1, x1)
+                group[1] = min(gy1, y1)
+                group[2] = max(gx2, x2)
+                group[3] = max(gy2, y2)
+                group[4] = garea + area
+                merged = True
+                break
+
+        if not merged:
+            groups.append([x1, y1, x2, y2, area])
+
+    return [tuple(group) for group in groups]
+def detect_sprouts_by_color(
+    frame: np.ndarray,
+    roi_x_min: float,
+    roi_x_max: float,
+    roi_y_min: float,
+    roi_y_max: float
+):
+    frame_h, frame_w = frame.shape[:2]
+
+    # 비율 ROI → 픽셀 좌표
+    rx1 = int(frame_w * roi_x_min)
+    rx2 = int(frame_w * roi_x_max)
+    ry1 = int(frame_h * roi_y_min)
+    ry2 = int(frame_h * roi_y_max)
+
+    # 이미지 범위 안전 보정
+    rx1 = max(0, rx1)
+    ry1 = max(0, ry1)
+    rx2 = min(frame_w, rx2)
+    ry2 = min(frame_h, ry2)
+
+    if rx2 <= rx1 or ry2 <= ry1:
+        empty_mask = np.zeros((1, 1), dtype=np.uint8)
+        return 0, [], empty_mask
+
+    # 발아실 ROI 추출
+    roi = frame[ry1:ry2, rx1:rx2]
+
+    roi_h, roi_w = roi.shape[:2]
+
+    # BGR → HSV
+    hsv = cv2.cvtColor(
+        roi,
+        cv2.COLOR_BGR2HSV
+    )
+    # 초록
+    green_mask = cv2.inRange(
+        hsv,
+        NURSERY_LOWER_GREEN,
+        NURSERY_UPPER_GREEN
+    )
+    # 노랑
+    yellow_mask = cv2.inRange(
+        hsv,
+        NURSERY_LOWER_YELLOW,
+        NURSERY_UPPER_YELLOW
+    )
+
+    mask = cv2.bitwise_or(
+        green_mask,
+        yellow_mask
+    )
+
+    # ROI 오른쪽 새싹 영역
+    right_start = int(roi_w * 0.67)
+
+    right_roi = roi[:, right_start:]
+    right_hsv = hsv[:, right_start:]
+
+    # 오른쪽 새싹은 밝은 노랑·황록색
+    right_hsv_mask = cv2.inRange(
+        right_hsv,
+        np.array([24, 45, 115], dtype=np.uint8),
+        np.array([42, 220, 255], dtype=np.uint8)
+    )
+
+    # BGR 채널 조건
+    b, g, r = cv2.split(right_roi)
+
+    right_bgr_mask = (
+        (g >= 120)
+        & (r >= 110)
+        & ((g.astype(np.int16) - b.astype(np.int16)) >= 25)
+        & ((r.astype(np.int16) - b.astype(np.int16)) >= 20)
+    ).astype(np.uint8) * 255
+
+    # HSV 또는 BGR 조건을 만족하는 영역
+    right_light_mask = cv2.bitwise_or(
+        right_hsv_mask,
+        right_bgr_mask
+    )
+
+    # 작은 점만 제거
+    right_kernel = np.ones((3, 3), dtype=np.uint8)
+
+    right_light_mask = cv2.morphologyEx(
+        right_light_mask,
+        cv2.MORPH_OPEN,
+        right_kernel,
+        iterations=1
+    )
+
+    right_light_mask = cv2.morphologyEx(
+        right_light_mask,
+        cv2.MORPH_CLOSE,
+        right_kernel,
+        iterations=1
+    )
+
+    mask[:, right_start:] = right_light_mask
+
+    # ------------------------------------------
+    # 가운데 흰색 판 영역 강제 제외
+    # ------------------------------------------
+    exclude_x1 = int(
+        roi_w * NURSERY_CENTER_EXCLUDE_X_MIN
+    )
+
+    exclude_x2 = int(
+        roi_w * NURSERY_CENTER_EXCLUDE_X_MAX
+    )
+
+    exclude_x1 = max(0, exclude_x1)
+    exclude_x2 = min(roi_w, exclude_x2)
+
+    if exclude_x2 > exclude_x1:
+        mask[:, exclude_x1:exclude_x2] = 0
+
+    # ------------------------------------------
+    # 작은 점 제거
+    # ------------------------------------------
+    open_kernel = np.ones(
+        (
+            NURSERY_OPEN_KERNEL_SIZE,
+            NURSERY_OPEN_KERNEL_SIZE
+        ),
+        dtype=np.uint8
+    )
+
+    mask_clean = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_OPEN,
+        open_kernel,
+        iterations=1
+    )
+
+    # ------------------------------------------
+    # 한 새싹의 떨어진 잎 영역 연결
+    # ------------------------------------------
+    close_kernel = np.ones(
+        (
+            NURSERY_CLOSE_KERNEL_SIZE,
+            NURSERY_CLOSE_KERNEL_SIZE
+        ),
+        dtype=np.uint8
+    )
+
+    mask_clean = cv2.morphologyEx(
+        mask_clean,
+        cv2.MORPH_CLOSE,
+        close_kernel,
+        iterations=1
+    )
+
+    # 윤곽선 검출
+    contours, _ = cv2.findContours(
+        mask_clean,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    sprout_boxes = []
+
+    for contour in contours:
+        area = cv2.contourArea(contour)
+
+        # 너무 작은 노이즈 제거
+        if area < NURSERY_MIN_SPROUT_AREA:
+            continue
+
+        # 지나치게 큰 배경 영역 제거
+        if area > NURSERY_MAX_SPROUT_AREA:
+            continue
+
+        x, y, bw, bh = cv2.boundingRect(contour)
+
+        # 너무 작거나 가느다란 형태 제거
+        if bw < NURSERY_MIN_SPROUT_WIDTH:
+            continue
+
+        if bh < NURSERY_MIN_SPROUT_HEIGHT:
+            continue
+        
+        # 지나치게 가늘고 긴 물체 제거
+        aspect_ratio = bw / float(bh)
+
+        if aspect_ratio < 0.20 or aspect_ratio > 5.0:
+            continue
+
+        # 박스 면적 대비 실제 초록 영역 비율
+        box_area = bw * bh
+        fill_ratio = area / max(box_area, 1)
+
+        if fill_ratio < 0.08:
+            continue
+
+        # ROI 가장자리에 붙은 구조물 제거
+        # border_margin = 5
+
+        # touches_border = (
+        #     x <= border_margin
+        #     or y <= border_margin
+        #     or x + bw >= roi_w - border_margin
+        #     or y + bh >= roi_h - border_margin
+        # )
+
+        # if touches_border:
+        #     continue
+
+        # ROI 좌표 → 전체 프레임 좌표
+        x1 = rx1 + x
+        y1 = ry1 + y
+        x2 = x1 + bw
+        y2 = y1 + bh
+
+        sprout_boxes.append(
+            (x1, y1, x2, y2, area)
+        )
+
+    sprout_boxes = merge_nearby_sprout_boxes(
+        sprout_boxes,
+        merge_distance=35
+    )
+
+    sprout_boxes.sort(
+        key=lambda box: (box[1], box[0])
+    )
+
+    sprout_count = len(sprout_boxes)
+
+    return sprout_count, sprout_boxes, mask_clean
+
 def process_nursery_frame(
     node: MasterNode,
     frame: np.ndarray,
     position: str
-):
+):  
     # ─────────────────────────────────────────
     # 1. YOLO 추론
-    # 트레이 모델과 씨앗/발아 모델을 각각 실행
+    # YOLO로 발아실 트레이 검출
+    # OpenCV HSV 색상 분할로 새싹 검출
     # ─────────────────────────────────────────
     with node.yolo_lock:
         tray_results = node.nursery_tray_model.predict(
             source=frame,
             imgsz=416,
             conf=NURSERY_TRAY_CONF,
-            device=node.yolo_device,
-            verbose=False
-        )[0]
-
-        seed_results = node.nursery_seed_model.predict(
-            source=frame,
-            imgsz=416,
-            conf=NURSERY_SPROUT_CONF,
             device=node.yolo_device,
             verbose=False
         )[0]
@@ -1095,6 +1378,40 @@ def process_nursery_frame(
     roi_x_max = NURSERY_ROI_X_MAX
     roi_y_min = NURSERY_ROI_Y_MIN
     roi_y_max = NURSERY_ROI_Y_MAX
+    
+    # 가운데 흰색 영역 표시
+    roi_px1 = int(w * roi_x_min)
+    roi_px2 = int(w * roi_x_max)
+    roi_py1 = int(h * roi_y_min)
+    roi_py2 = int(h * roi_y_max)
+
+    roi_width = roi_px2 - roi_px1
+
+    exclude_px1 = roi_px1 + int(
+        roi_width * NURSERY_CENTER_EXCLUDE_X_MIN
+    )
+
+    exclude_px2 = roi_px1 + int(
+        roi_width * NURSERY_CENTER_EXCLUDE_X_MAX
+    )
+
+    cv2.rectangle(
+        disp,
+        (exclude_px1, roi_py1),
+        (exclude_px2, roi_py2),
+        (0, 0, 255),
+        2
+    )
+
+    cv2.putText(
+        disp,
+        'IGNORE',
+        (exclude_px1 + 5, roi_py1 + 25),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 0, 255),
+        2
+    )
 
     # ─────────────────────────────────────────
     # 2. op_sprout 기반 새싹 개수 판단
@@ -1130,12 +1447,8 @@ def process_nursery_frame(
         2
     )
 
-    counts = {
-        'tray': 0,
-        'sprout1': 0,
-        'sprout2': 0,
-        'sprout3': 0,
-    }
+    tray_count = 0
+    sprout_count = 0
 
     #best_sprout3_conf = 0.0
 
@@ -1195,88 +1508,85 @@ def process_nursery_frame(
 
         # 새 트레이 모델이 클래스 이름을 tray로 사용한다는 전제
         if class_name == 'tray' and in_roi:
-            counts['tray'] = 1
+            tray_count = 1
 
-    # ─────────────────────────────────────────
-    # 5. 씨앗/발아 모델 처리
-    # seed_results만 사용
-    # ─────────────────────────────────────────
-    for box in seed_results.boxes:
-        x1, y1, x2, y2 = map(
-            int,
-            box.xyxy[0].tolist()
+    tray_detected = tray_count > 0
+
+    # 트레이가 있을 때만 OpenCV 새싹 검출
+    if tray_detected:
+        sprout_count, sprout_boxes, sprout_mask = detect_sprouts_by_color(
+            frame,
+            roi_x_min,
+            roi_x_max,
+            roi_y_min,
+            roi_y_max
         )
+    else:
+        sprout_count = 0
+        sprout_boxes = []
 
-        cls_id = int(box.cls[0].item())
-        conf = float(box.conf[0].item())
+        roi_h = int(h * (roi_y_max - roi_y_min))
+        roi_w = int(w * (roi_x_max - roi_x_min))
 
-        class_name = node.nursery_seed_model.names[cls_id]
+        sprout_mask = np.zeros(
+            (max(1, roi_h), max(1, roi_w)),
+            dtype=np.uint8
+        )   
 
-        # 기존 best.pt의 tray 클래스는 여기서 사용하지 않음
-        if class_name not in ('sprout1', 'sprout2', 'sprout3'):
-            continue
-
-        cx = (x1 + x2) / 2 / w
-        cy = (y1 + y2) / 2 / h
-        box_w_ratio = (x2 - x1) / w
-        box_h_ratio = (y2 - y1) / h
-
-        in_roi = (
-            roi_x_min < cx < roi_x_max
-            and roi_y_min < cy < roi_y_max
-            and box_w_ratio > NURSERY_SPROUT_MIN_BOX_RATIO
-            and box_h_ratio > NURSERY_SPROUT_MIN_BOX_RATIO
-        )
-
-        color = (0, 255, 0) if in_roi else (0, 0, 255)
-
+    # 검출된 새싹 박스 표시
+    for index, (x1, y1, x2, y2, area) in enumerate(
+        sprout_boxes,
+        start=1
+    ):
         cv2.rectangle(
             disp,
             (x1, y1),
             (x2, y2),
-            color,
+            (0, 255, 0),
             2
         )
 
         cv2.putText(
             disp,
-            f'sprout {conf:.2f}',
+            f'{index}: {int(area)}',
             (x1, max(20, y1 - 5)),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            color,
-            2
+            0.5,
+            (0, 255, 0),
+            1
         )
+    # mask_bgr = cv2.cvtColor(
+    #     sprout_mask,
+    #     cv2.COLOR_GRAY2BGR
+    # )
 
-        if not in_roi:
-            continue
+    # preview_w = 240
+    # preview_h = 140
 
-        counts[class_name] += 1
+    # mask_preview = cv2.resize(
+    #     mask_bgr,
+    #     (preview_w, preview_h)
+    # )
 
-        # if class_name == 'sprout3':
-        #     best_sprout3_conf = max(
-        #         best_sprout3_conf,
-        #         conf
-        #     )
+    # ph, pw = disp.shape[:2]
 
-    tray_detected = counts['tray'] > 0
-    yolo_sprout_count = (
-        counts['sprout1']
-        + counts['sprout2']
-        + counts['sprout3']
-    )
+    # if ph >= preview_h and pw >= preview_w:
+    #     disp[
+    #         ph - preview_h:ph,
+    #         pw - preview_w:pw
+    #     ] = mask_preview
+
     # ─────────────────────────────────────────
-    # 6. 발아 완료 판단
-    # YOLO 새싹 총개수로 발아 완료 판단
+    # 6. OpenCV 새싹 개수로 발아 완료 판단
     # ─────────────────────────────────────────
     # YOLO에서 검출한 전체 새싹 개수로 발아 완료 판단
     sprout_done_detected = (
-        yolo_sprout_count >= NURSERY_SPROUT_DONE_COUNT
+        sprout_count >= NURSERY_SPROUT_DONE_COUNT
     )
 
     sprout_progress = min(
         1.0,
-        yolo_sprout_count / max(NURSERY_SPROUT_DONE_COUNT, 1)
+        sprout_count / max(NURSERY_SPROUT_DONE_COUNT, 1)
     )
 
     now = time.time()
@@ -1304,9 +1614,14 @@ def process_nursery_frame(
             st['occupied'] = 0
 
             if position == 'left':
-                node._set_flag('ulf', 0)
+                if node.flags['ulf'] != 0:
+                    node._set_flag('ulf', 0)
+                    send_event = True
             else:
-                node._set_flag('urf', 0)
+                if node.flags['urf'] != 0:
+                    node._set_flag('urf', 0)
+                    send_event = True
+
 
         # 발아 완료 판단
         if tray_detected and sprout_done_detected:
@@ -1321,7 +1636,7 @@ def process_nursery_frame(
                 st['last_label'] = 'none'
                 st['last_conf'] = 0.0
 
-            elif yolo_sprout_count == 0:
+            elif sprout_count == 0:
                 st['last_label'] = 'tray_only'
                 st['last_conf'] = 0.0
 
@@ -1361,34 +1676,15 @@ def process_nursery_frame(
         stable = st['stable_cnt']
         label = st['last_label']
 
-        if send_event and NURSERY_SEND_FLAGS:
-            node._send_scara(
-                make_flag_u8(
-                    PID_ULF,
-                    node.flags['ulf']
-                )
-            )
-
-            node._send_scara(
-                make_flag_u8(
-                    PID_URF,
-                    node.flags['urf']
-                )
-            )
-
-            node._send_scara(
-                make_flag_u16(
-                    PID_UV,
-                    new_uv
-                )
-            )
+        ulf_value = node.flags['ulf']
+        urf_value = node.flags['urf']
 
         if send_event:
             if flag_name is not None:
                 node.get_logger().info(
                     f'[Nursery {position}] '
                     f'sprout done -> {flag_name}=1, '
-                    f'sprout_count={yolo_sprout_count}, '
+                    f'sprout_count={sprout_count}, '
                     f'uv={new_uv}'
                 )
             else:
@@ -1396,14 +1692,35 @@ def process_nursery_frame(
                     f'[Nursery {position}] '
                     f'UV changed -> uv={new_uv}'
                 )
+    if send_event and NURSERY_SEND_FLAGS:
+        node._send_scara(
+            make_flag_u8(
+                PID_ULF,
+                ulf_value
+            )
+        )
+
+        node._send_scara(
+            make_flag_u8(
+                PID_URF,
+                urf_value
+            )
+        )
+
+        node._send_scara(
+            make_flag_u16(
+                PID_UV,
+                new_uv
+            )
+        )
 
     # ─────────────────────────────────────────
     # 8. 로그 출력
     # ─────────────────────────────────────────
     node.get_logger().info(
         f'[Nursery {position}] '
-        f'tray={counts["tray"]}, '
-        f'sprouts={yolo_sprout_count}/{NURSERY_SPROUT_DONE_COUNT}, '
+        f'tray={tray_count}, '
+        f'sprouts={sprout_count}/{NURSERY_SPROUT_DONE_COUNT}, '
         f'progress={sprout_progress:.2f}, '
         f'done={sprout_done_detected}, '
         f'stable={stable}, '
@@ -1417,7 +1734,7 @@ def process_nursery_frame(
 
     cv2.putText(
         disp,
-        f'tray: {counts["tray"]}',
+        f'tray: {tray_count}',
         (20, y),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
@@ -1427,7 +1744,7 @@ def process_nursery_frame(
 
     cv2.putText(
         disp,
-        f'sprouts: {yolo_sprout_count}/{NURSERY_SPROUT_DONE_COUNT}',
+        f'sprouts: {sprout_count}/{NURSERY_SPROUT_DONE_COUNT}',
         (20, y + 30),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
