@@ -58,8 +58,8 @@ PORT_STM3  = '/dev/ttyACM0'      # 센서허브 STM32
 BAUD       = 115200
 
 PC_IP      = '192.168.0.183'  # master_node 실행 PC IP
-CAM2_PORT  = 5001             # 수경재배실 카메라 왼쪽
-CAM3_PORT  = 5002             # 수경재배실 카메라 오른쪽
+CAM2_PORT  = 5011             # 수경재배실 카메라 왼쪽
+CAM3_PORT  = 5012             # 수경재배실 카메라 오른쪽
 
 CAM2_INDEX = 0                # Pi3 기준 CAM2 장치 번호
 CAM3_INDEX = 1                # Pi3 기준 CAM3 장치 번호
