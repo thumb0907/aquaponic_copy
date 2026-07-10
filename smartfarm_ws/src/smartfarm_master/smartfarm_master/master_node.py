@@ -2042,6 +2042,18 @@ def water_video_receive_loop(node: MasterNode, stream_port: int, position: str):
                 if frame is None:
                     continue
 
+                cv2.putText(
+                    frame,
+                    f'Pi3 Water {position}',
+                    (20, 35),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    (0, 255, 255),
+                    2
+                )
+
+                put_latest(target_queue, frame)
+
                 last_process_ts = now
                 process_water_frame(node, frame, position)
 
@@ -2053,6 +2065,11 @@ def water_video_receive_loop(node: MasterNode, stream_port: int, position: str):
                     conn.close()
                 except Exception:
                     pass
+    target_queue = (
+        water_left_frame_queue
+        if position == 'left'
+        else water_right_frame_queue
+    )
 
 # 발아실 카메라
 def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str, calib_path: str | None = None):
@@ -2119,7 +2136,7 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
 
                 if frame is None:
                     continue
-
+                
                 last_process_ts = now
 
                 if K is not None and dist is not None:
@@ -2194,6 +2211,17 @@ def main(args=None):
             try:
                 frame = nursery_right_frame_queue.get_nowait()
                 cv2.imshow('Pi1 Nursery Right Camera', frame)
+            except queue.Empty:
+                pass
+            try:
+                frame = water_left_frame_queue.get_nowait()
+                cv2.imshow('Pi3 Water Left Camera', frame)
+            except queue.Empty:
+                pass
+
+            try:
+                frame = water_right_frame_queue.get_nowait()
+                cv2.imshow('Pi3 Water Right Camera', frame)
             except queue.Empty:
                 pass
             cv2.waitKey(1) 
