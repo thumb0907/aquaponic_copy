@@ -1999,6 +1999,11 @@ def water_video_receive_loop(node: MasterNode, stream_port: int, position: str):
     server.bind(('0.0.0.0', stream_port))
     server.listen(1)
     print(f'[Water Stream {position}] 연결 대기 (port={stream_port})')
+    target_queue = (
+        water_left_frame_queue
+        if position == 'left'
+        else water_right_frame_queue
+    )
 
     while rclpy.ok():
         conn = None
@@ -2065,11 +2070,6 @@ def water_video_receive_loop(node: MasterNode, stream_port: int, position: str):
                     conn.close()
                 except Exception:
                     pass
-    target_queue = (
-        water_left_frame_queue
-        if position == 'left'
-        else water_right_frame_queue
-    )
 
 # 발아실 카메라
 def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str, calib_path: str | None = None):
