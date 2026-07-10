@@ -32,6 +32,8 @@ from std_msgs.msg import String, UInt8MultiArray
 frame_queue = queue.Queue(maxsize=2)
 nursery_left_frame_queue = queue.Queue(maxsize=2)
 nursery_right_frame_queue = queue.Queue(maxsize=2)
+water_left_frame_queue = queue.Queue(maxsize=2)
+water_right_frame_queue = queue.Queue(maxsize=2)
 def put_latest(q, item):
     try:
         q.put_nowait(item)
