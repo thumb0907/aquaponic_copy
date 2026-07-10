@@ -61,8 +61,9 @@ PC_IP      = '192.168.0.183'  # master_node 실행 PC IP
 CAM2_PORT  = 5011             # 수경재배실 카메라 왼쪽
 CAM3_PORT  = 5012             # 수경재배실 카메라 오른쪽
 
-CAM2_INDEX = 0                # Pi3 기준 CAM2 장치 번호
-CAM3_INDEX = 1                # Pi3 기준 CAM3 장치 번호
+CAM2_INDEX = '/dev/cam_water_left'  # Pi3 기준 CAM2 장치 번호
+CAM3_INDEX = '/dev/cam_water_right' # Pi3 기준 CAM3 장치 번호
+
 CAM_WIDTH  = 640
 CAM_HEIGHT = 480
 
