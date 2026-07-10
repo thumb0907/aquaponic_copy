@@ -90,7 +90,7 @@ CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
 NURSERY_LEFT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_left_calib.npz'
 NURSERY_RIGHT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_right_calib.npz'
 
-# 발아실 카메라 / 모델
+# 발아실 카메라 / 모델 (pi1)
 NURSERY_TRAY_MODEL_PATH = '/home/thumb/aquaponic_copy/tray2/sprout_tray_best.pt'
 
 NURSERY_LEFT_STREAM_PORT = 5001
@@ -132,6 +132,26 @@ NURSERY_SEND_FLAGS = True
 
 TRAY_OCCUPY_FRAMES = 2
 TRAY_LOST_FRAMES = 7
+
+# 수경재배실 카메라(pi3)
+WATER_LEFT_STREAM_PORT = 5011
+WATER_RIGHT_STREAM_PORT = 5012
+
+#수경재배실 opencv기준값
+WATER_LOWER_GREEN = np.array([35, 45, 40], dtype=np.uint8)
+WATER_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
+
+WATER_ROI_X_MIN = 0.10
+WATER_ROI_X_MAX = 0.90
+WATER_ROI_Y_MIN = 0.10
+WATER_ROI_Y_MAX = 0.90
+
+WATER_GROWTH_AREA_RATIO = 0.18
+WATER_MIN_LEAF_AREA = 2500
+WATER_STABLE_FRAMES = 5
+WATER_LOST_FRAMES = 8
+WATER_COOLDOWN_SEC = 3.0
+
 # ── 프로토콜 상수 (comm.h / Serial.h 와 동일) ──
 SOF = 0xAA
 
@@ -282,6 +302,23 @@ class MasterNode(Node):
                 'tray_lost_cnt': 0,
             },  
         }   
+        #수경재배실 카메라
+        self.water_state = {
+            'left': {
+                'stable_cnt': 0,
+                'lost_cnt': 0,
+                'last_tx': 0.0,
+                'last_label': 'none',
+                'last_score': 0.0,
+            },
+            'right': {
+                'stable_cnt': 0,
+                'lost_cnt': 0,
+                'last_tx': 0.0,
+                'last_label': 'none',
+                'last_score': 0.0,
+            },
+        }
 
         # ── 공통 ──────────────────────────────
         self.emergency = False
@@ -1868,6 +1905,154 @@ def video_receive_loop(node: MasterNode):
             with node.state_lock:
                 node.cam1_connected = False
 
+#수경재배실 프레임 처리 함수
+def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
+    disp = frame.copy()
+    h, w = frame.shape[:2]
+    rx1 = int(w * WATER_ROI_X_MIN)
+    rx2 = int(w * WATER_ROI_X_MAX)
+    ry1 = int(h * WATER_ROI_Y_MIN)
+    ry2 = int(h * WATER_ROI_Y_MAX)
+
+    roi = frame[ry1:ry2, rx1:rx2]
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+
+    mask = cv2.inRange(hsv, WATER_LOWER_GREEN, WATER_UPPER_GREEN)
+
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+    green_pixels = cv2.countNonZero(mask)
+    roi_pixels = max(1, mask.shape[0] * mask.shape[1])
+    green_ratio = green_pixels / roi_pixels
+
+    contours, _ = cv2.findContours(
+        mask,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    largest_area = 0
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area > largest_area:
+            largest_area = area
+
+    growth_done = (
+        green_ratio >= WATER_GROWTH_AREA_RATIO
+        and largest_area >= WATER_MIN_LEAF_AREA
+    )
+
+    now = time.time()
+    send_event = False
+    flag_name = 'wlf' if position == 'left' else 'wrf'
+    pid = PID_WLF if position == 'left' else PID_WRF
+
+    with node.state_lock:
+        st = node.water_state[position]
+
+        if growth_done:
+            st['stable_cnt'] += 1
+            st['lost_cnt'] = 0
+            st['last_label'] = 'growth_done'
+            st['last_score'] = green_ratio
+        else:
+            st['stable_cnt'] = 0
+            st['lost_cnt'] += 1
+            st['last_label'] = 'growing' if green_ratio > 0.03 else 'none'
+            st['last_score'] = green_ratio
+
+        if (
+            st['stable_cnt'] >= WATER_STABLE_FRAMES
+            and now - st['last_tx'] > WATER_COOLDOWN_SEC
+        ):
+            st['last_tx'] = now
+            st['stable_cnt'] = 0
+
+            if node.flags[flag_name] == 0:
+                node._set_flag(flag_name, 1)
+                send_event = True
+                node.get_logger().info(
+                    f'[Water {position}] growth done -> '
+                    f'{flag_name.upper()}=1, '
+                    f'green_ratio={green_ratio:.3f}, '
+                    f'largest_area={largest_area:.1f}'
+                )
+
+        if st['lost_cnt'] >= WATER_LOST_FRAMES:
+            if node.flags[flag_name] != 0:
+                node._set_flag(flag_name, 0)
+                send_event = True
+                node.get_logger().info(
+                    f'[Water {position}] plant lost -> {flag_name.upper()}=0'
+                )
+
+    if send_event:
+        node._broadcast_all_flags()
+#수경재배실 카메라
+def water_video_receive_loop(node: MasterNode, stream_port: int, position: str):
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(('0.0.0.0', stream_port))
+    server.listen(1)
+    print(f'[Water Stream {position}] 연결 대기 (port={stream_port})')
+
+    while rclpy.ok():
+        conn = None
+        try:
+            conn, addr = server.accept()
+            print(f'[Water Stream {position}] 연결됨: {addr}')
+
+            data = b''
+            payload_size = struct.calcsize('>I')
+            last_process_ts = 0.0
+            PROCESS_INTERVAL = 0.3
+
+            while rclpy.ok():
+                while len(data) < payload_size:
+                    packet = conn.recv(4096)
+                    if not packet:
+                        raise ConnectionError('water stream disconnected')
+                    data += packet
+
+                msg_size = struct.unpack('>I', data[:payload_size])[0]
+                data = data[payload_size:]
+
+                while len(data) < msg_size:
+                    packet = conn.recv(4096)
+                    if not packet:
+                        raise ConnectionError('water stream disconnected')
+                    data += packet
+
+                frame_data = data[:msg_size]
+                data = data[msg_size:]
+
+                now = time.time()
+                if now - last_process_ts < PROCESS_INTERVAL:
+                    continue
+
+                frame = cv2.imdecode(
+                    np.frombuffer(frame_data, dtype=np.uint8),
+                    cv2.IMREAD_COLOR
+                )
+
+                if frame is None:
+                    continue
+
+                last_process_ts = now
+                process_water_frame(node, frame, position)
+
+        except Exception as e:
+            print(f'[Water Stream {position}] 오류: {e}')
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+# 발아실 카메라
 def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str, calib_path: str | None = None):
     K = None
     dist = None
@@ -1959,6 +2144,7 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
                 except Exception:
                     pass
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = MasterNode()
@@ -1976,6 +2162,17 @@ def main(args=None):
     threading.Thread(
         target=nursery_video_receive_loop,
         args=(node, NURSERY_RIGHT_STREAM_PORT, 'right', NURSERY_RIGHT_CALIB_PATH),
+        daemon=True
+    ).start()
+    threading.Thread(
+        target=water_video_receive_loop,
+        args=(node, WATER_LEFT_STREAM_PORT, 'left'),
+        daemon=True
+    ).start()
+
+    threading.Thread(
+        target=water_video_receive_loop,
+        args=(node, WATER_RIGHT_STREAM_PORT, 'right'),
         daemon=True
     ).start()
 
