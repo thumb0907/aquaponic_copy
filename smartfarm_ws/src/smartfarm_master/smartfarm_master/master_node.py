@@ -577,12 +577,20 @@ class MasterNode(Node):
             water_source is not None
             and self.stm2_state == 'idle'
         ):
-            self._queue_water_to_c2_locked(water_source)
-            return
+            queued = self._queue_water_to_c2_locked(
+                water_source
+            )
+
+            if queued:
+                return
 
         # 2. 발아실 READY 트레이를 수경실로 이동
-        nursery_source = self._find_ready_slot_locked('nursery')
-        water_destination = self._find_empty_slot_locked('water')
+        nursery_source = self._find_ready_slot_locked(
+            'nursery'
+        )
+        water_destination = self._find_empty_slot_locked(
+            'water'
+        )
 
         if (
             nursery_source is not None
@@ -606,6 +614,190 @@ class MasterNode(Node):
             return 'right'
 
         return None
+    def _queue_nursery_to_water_locked(
+        self,
+        source: str,
+        destination: str,
+    ) -> bool:
+        """
+        발아 완료 트레이를 발아실에서 수경실로 옮기는
+        SCARA 작업을 생성한다.
+
+        이 함수는 반드시 state_lock을 잡은 상태에서 호출한다.
+        """
+
+        # ─────────────────────────────────────
+        # 1. 슬롯 이름 검사
+        # ─────────────────────────────────────
+        if source not in self.nursery_slots:
+            self.get_logger().error(
+                f'잘못된 발아실 출발 슬롯: {source}'
+            )
+            return False
+
+        if destination not in self.water_slots:
+            self.get_logger().error(
+                f'잘못된 수경실 목적 슬롯: {destination}'
+            )
+            return False
+
+        nursery_source = self.nursery_slots[source]
+        water_destination = self.water_slots[destination]
+
+        # ─────────────────────────────────────
+        # 2. 출발 슬롯 상태 검사
+        # ─────────────────────────────────────
+        if nursery_source['state'] != SLOT_READY:
+            self.get_logger().warn(
+                f'발아실 {source} 이동 불가: '
+                f'state={nursery_source["state"]}, '
+                f'expected={SLOT_READY}'
+            )
+            return False
+
+        # ─────────────────────────────────────
+        # 3. 목적 슬롯 상태 검사
+        # ─────────────────────────────────────
+        if water_destination['state'] != SLOT_EMPTY:
+            self.get_logger().warn(
+                f'수경실 {destination} 적재 불가: '
+                f'state={water_destination["state"]}, '
+                f'expected={SLOT_EMPTY}'
+            )
+            return False
+
+        # ─────────────────────────────────────
+        # 4. 새로운 SCARA 작업 ID 생성
+        # ─────────────────────────────────────
+        job_id = self._next_scara_job_id_locked()
+
+        job = {
+            'job_id': job_id,
+            'type': JOB_NURSERY_TO_WATER,
+            'source': source,
+            'destination': destination,
+            'sent_at': 0.0,
+            'retry_count': 0,
+        }
+
+        # ─────────────────────────────────────
+        # 5. 실제 명령 전 슬롯부터 예약
+        # ─────────────────────────────────────
+        nursery_source['state'] = SLOT_RESERVED_OUT
+        nursery_source['job_id'] = job_id
+
+        water_destination['state'] = SLOT_RESERVED_IN
+        water_destination['job_id'] = job_id
+
+        # ─────────────────────────────────────
+        # 6. 대기 작업 큐에 추가
+        # ─────────────────────────────────────
+        self.pending_scara_jobs.append(job)
+
+        # 슬롯 상태를 UV/WCNT/ULF/URF 등에 반영
+        self._sync_slot_flags_locked()
+
+        self.get_logger().info(
+            f'NURSERY_TO_WATER 작업 생성: '
+            f'job_id={job_id}, '
+            f'nursery={source} -> water={destination}, '
+            f'uv={self.flags["uv"]}, '
+            f'wcnt={self.flags["wcnt"]}'
+        )
+
+        return True
+    
+    def _queue_water_to_c2_locked(
+        self,
+        source: str,
+    ) -> bool:
+        """
+        성장 완료 트레이를 수경실에서 꺼내
+        진동부를 거쳐 2번 컨베이어로 옮기는
+        SCARA 작업을 생성한다.
+
+        이 함수는 반드시 state_lock을 잡은 상태에서 호출한다.
+        """
+
+        # ─────────────────────────────────────
+        # 1. 슬롯 이름 검사
+        # ─────────────────────────────────────
+        if source not in self.water_slots:
+            self.get_logger().error(
+                f'잘못된 수경실 출발 슬롯: {source}'
+            )
+            return False
+
+        water_source = self.water_slots[source]
+
+        # ─────────────────────────────────────
+        # 2. 성장 완료 상태 검사
+        # ─────────────────────────────────────
+        if water_source['state'] != SLOT_READY:
+            self.get_logger().warn(
+                f'수경실 {source} 이동 불가: '
+                f'state={water_source["state"]}, '
+                f'expected={SLOT_READY}'
+            )
+            return False
+
+        # ─────────────────────────────────────
+        # 3. STM2가 이전 수확 작업 중인지 검사
+        # ─────────────────────────────────────
+        if self.stm2_state != 'idle':
+            self.get_logger().warn(
+                f'2번 컨베이어 사용 불가: '
+                f'stm2_state={self.stm2_state}'
+            )
+            return False
+
+        # FF=1이면 이미 STM2 시작 요청이 살아 있는 상태
+        if self.flags['ff'] != 0:
+            self.get_logger().warn(
+                f'2번 컨베이어 시작 요청이 이미 존재함: '
+                f'ff={self.flags["ff"]}'
+            )
+            return False
+
+        # ─────────────────────────────────────
+        # 4. 새로운 SCARA 작업 ID 생성
+        # ─────────────────────────────────────
+        job_id = self._next_scara_job_id_locked()
+
+        job = {
+            'job_id': job_id,
+            'type': JOB_WATER_TO_VIB_AND_C2,
+            'source': source,
+
+            # 진동부·2번 컨베이어는 좌우 슬롯이 아니므로 None
+            'destination': None,
+
+            'sent_at': 0.0,
+            'retry_count': 0,
+        }
+
+        # ─────────────────────────────────────
+        # 5. 수경실 출발 슬롯 예약
+        # ─────────────────────────────────────
+        water_source['state'] = SLOT_RESERVED_OUT
+        water_source['job_id'] = job_id
+
+        # ─────────────────────────────────────
+        # 6. SCARA 대기 큐에 추가
+        # ─────────────────────────────────────
+        self.pending_scara_jobs.append(job)
+
+        self._sync_slot_flags_locked()
+
+        self.get_logger().info(
+            f'WATER_TO_VIB_AND_C2 작업 생성: '
+            f'job_id={job_id}, '
+            f'water={source} -> vibration -> conveyor2, '
+            f'wcnt={self.flags["wcnt"]}'
+        )
+
+        return True
+
     # 플래그 공유 및 재배포
     def _broadcast_flags_to_scara(self):
         self._send_scara(make_flag_u8(PID_SSF, self.flags['ssf']))
@@ -690,6 +882,7 @@ class MasterNode(Node):
                 self.start_flag = False
                 self.get_logger().warn('[STM1] ESTOP')
             elif line == 'STM1:PC:DONE:CYCLE1':
+                self.stm_state = 'waiting_scara'
                 target_slot = self.seed_target_slot
 
                 if target_slot is None:
@@ -1233,7 +1426,7 @@ class MasterNode(Node):
                 f'nursery_left_stable:{self.nursery_state["left"]["stable_cnt"]},'
                 f'nursery_right_label:{self.nursery_state["right"]["last_label"]},'
                 f'nursery_right_conf:{self.nursery_state["right"]["last_conf"]:.2f},'
-                f'nursery_right_stable:{self.nursery_state["right"]["stable_cnt"]}'
+                f'nursery_right_stable:{self.nursery_state["right"]["stable_cnt"]},'
 
                 f'nursery_left_slot:{self.nursery_slots["left"]["state"]},'
                 f'nursery_right_slot:{self.nursery_slots["right"]["state"]},'
