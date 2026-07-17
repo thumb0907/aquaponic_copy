@@ -1,0 +1,141 @@
+// test.c
+// ─────────────────────────────────────────────────────────────
+// 허큘러스(PC) USART2 115200bps, 줄끝 LF(\n) 설정
+//
+// 커맨드 목록:
+//   C1   컨베이어 구동 (3000Hz)			43 31 0A
+//   C0   컨베이어 정지						43 30 0A
+//   ZF   Z축 CW 이동 (호밍 방향, 5000스텝)	5A 46 0A
+//   ZB   Z축 CCW 이동 (복귀 방향, 5000스텝) 5A 42 0A
+//   ZS   Z축 즉시 정지					5A 53 0A
+//   IR   IR 센서 상태 출력					49 52 0A
+//   LM   리밋스위치 상태 출력				4C 4D 0A
+//   E1   긴급정지							45 31 0A
+// ─────────────────────────────────────────────────────────────
+
+#include "test.h"
+#include "main.h"
+#include "sec_convey.h"
+#include "stepper.h"
+#include "sensor.h"
+#include <string.h>
+#include "comm.h"
+
+extern UART_HandleTypeDef huart2;
+
+#define TEST_BUF_SIZE   8
+#define TEST_CONV_HZ    2500
+#define TEST_Z_STEPS    5000
+#define TEST_Z_HZ       2000
+
+static uint8_t test_rx_byte = 0;
+static uint8_t test_buf[TEST_BUF_SIZE] = {0};
+static uint8_t test_buf_idx = 0;
+static volatile bool test_cmd_ready = false;
+static uint8_t test_cmd_buf[TEST_BUF_SIZE] = {0};
+
+// ── 내부 함수 ────────────────────────────────
+static void Test_Send(const char *msg)
+{
+    HAL_UART_Transmit(&huart2, (uint8_t *)msg,  strlen(msg), 100);
+    HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", 2, 100);
+}
+
+static void Test_Process(uint8_t *buf)
+{
+    // C1: 컨베이어 구동
+    if (buf[0] == 'C' && buf[1] == '1') {
+        Conveyor_Enable(true);
+        Conveyor_SetDir(true);
+        Conveyor_StartHz(TEST_CONV_HZ);
+        Test_Send("[OK] Conveyor START");
+    }
+    // C0: 컨베이어 정지
+    else if (buf[0] == 'C' && buf[1] == '0') {
+        Conveyor_Stop();
+        Conveyor_Enable(false);
+        Test_Send("[OK] Conveyor STOP");
+    }
+    // ZF: Z축 CW (호밍 방향)
+    else if (buf[0] == 'Z' && buf[1] == 'F') {
+        Z_MoveSteps(+TEST_Z_STEPS, TEST_Z_HZ);
+        Test_Send("[OK] Z CW (forward)");
+    }
+    // ZB: Z축 CCW (복귀 방향)
+    else if (buf[0] == 'Z' && buf[1] == 'B') {
+        Z_MoveSteps(-TEST_Z_STEPS, TEST_Z_HZ);
+        Test_Send("[OK] Z CCW (back)");
+    }
+    // ZS: Z축 즉시 정지
+    else if (buf[0] == 'Z' && buf[1] == 'S') {
+        Z_Stop();
+        Test_Send("[OK] Z STOP");
+    }
+    // IR: 적외선 센서 상태
+    else if (buf[0] == 'I' && buf[1] == 'R') {
+        if (IR_Detected())
+            Test_Send("[IR] DETECTED");
+        else
+            Test_Send("[IR] not detected");
+    }
+    // LM: 리밋스위치 상태
+    else if (buf[0] == 'L' && buf[1] == 'M') {
+        if (Z_LimitHit())
+            Test_Send("[LIM] HIT");
+        else
+            Test_Send("[LIM] not hit");
+    }
+    // E1: 긴급정지
+    else if (buf[0] == 'E' && buf[1] == '1') {
+        Conveyor_Stop();
+        Conveyor_Enable(false);
+        Z_Stop();
+        Test_Send("[ESTOP] ALL STOP");
+    }
+    // 알 수 없는 커맨드
+    else {
+        Test_Send("[ERR] unknown cmd");
+    }
+}
+
+// ── UART 수신 콜백 (main.c에서 호출) ────────
+void Test_RxCallback(void)
+{
+    if (test_rx_byte == '\n') {
+        test_buf[test_buf_idx] = '\0';
+        memcpy(test_cmd_buf, test_buf, TEST_BUF_SIZE);
+        test_cmd_ready = true;
+        test_buf_idx = 0;
+    } else if (test_rx_byte == '\r') {
+        // 무시
+    } else if (test_buf_idx < TEST_BUF_SIZE - 1) {
+        test_buf[test_buf_idx++] = test_rx_byte;
+    } else {
+        test_buf_idx = 0;
+    }
+    HAL_UART_Receive_IT(&huart2, &test_rx_byte, 1);
+}
+
+// ── 초기화 ───────────────────────────────────
+void Test_Init(void)
+{
+    HAL_UART_Receive_IT(&huart2, &test_rx_byte, 1);
+    Test_Send("=== TEST MODE ===");
+    Test_Send("C1  Conveyor START");
+    Test_Send("C0  Conveyor STOP");
+    Test_Send("ZF  Z CW  +5000step");
+    Test_Send("ZB  Z CCW -5000step");
+    Test_Send("ZS  Z STOP");
+    Test_Send("IR  IR sensor state");
+    Test_Send("LM  Limit switch state");
+    Test_Send("E1  ESTOP");
+    Test_Send("=================");
+}
+
+// ── 메인 루프에서 호출 ───────────────────────
+void Test_Run(void)
+{
+    if (!test_cmd_ready) return;
+    test_cmd_ready = false;
+    Test_Process(test_cmd_buf);
+}

@@ -7,6 +7,7 @@ void FirstConvey_Reset(void);
 void FirstConvey_Task(void);
 bool FirstConvey_IsStopped(void);
 
+void FirstConvey_SetIrEnabled(bool en);
 void FirstConvey_MoveDistance(float mm);
 bool FirstConvey_IsMoveDone(void);
 void FirstConvey_ForceStop(void);

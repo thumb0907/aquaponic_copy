@@ -18,7 +18,6 @@ void Sequence_EStop(void);
 void Sequence_ResetError(void);
 
 
-
 SystemState Sequence_GetState(void);
 bool Sequence_IsError(void);
 

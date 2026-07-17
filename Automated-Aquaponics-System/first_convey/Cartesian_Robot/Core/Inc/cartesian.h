@@ -28,6 +28,7 @@ bool Cartesian_IsHomingError(void);   // 추가
 void Cartesian_limit(uint16_t GPIO_Pin);
 
 void Cartesian_ResetSequence(void);
+void Cartesian_PrepareCycleAfterHoming(void);
 bool Cartesian_IsCycleDone(void);
 
 CartesianStage Cartesian_GetStage(void);

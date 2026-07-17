@@ -473,7 +473,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 #else
     // TEST_MODE=0: 라즈베리파이가 USART2에 연결
     if (huart->Instance == USART2) Comm_Rasp_RxCallback();
-    if (huart->Instance == USART1) Comm_Arduino_RxCallback();
 #endif
 }
 /* USER CODE END 4 */

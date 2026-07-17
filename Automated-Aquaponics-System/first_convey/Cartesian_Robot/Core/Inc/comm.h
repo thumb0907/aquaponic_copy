@@ -41,6 +41,7 @@
 #define PID_C2F   0x0F   // conveyor2 flag
 #define PID_ESTOP 0x10   // 긴급정지
 #define PID_RESET 0x11   // 전체 리셋
+#define PID_HMF   0x12   // scara homing flag
 
 /* ── STM1 → 라파1 상태 보고 ID ──────────────── */
 #define PID_STATE 0x20   // 상태 보고  1바이트

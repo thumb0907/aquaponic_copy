@@ -10,7 +10,7 @@
 //   XF  (58 46 0A)  X축 + 이동 (1000스텝)
 //   XB  (58 42 0A)  X축 - 이동 (1000스텝)
 //   XS  (58 53 0A)  X축 정지
-//   ZF  (5A 46 0A)  Z축 + 이동 (1000스텝)
+//   ZF  (5A 46 0A)  Z축 + 이동 (1000스텝) 아래로
 //   ZB  (5A 42 0A)  Z축 - 이동 (1000스텝)
 //   ZS  (5A 53 0A)  Z축 정지
 //   HM  (48 4D 0A)  홈잉 시작
@@ -41,9 +41,9 @@ extern UART_HandleTypeDef huart2;
 
 #define TEST_BUF_SIZE   8
 #define TEST_X_STEPS    2000
-#define TEST_Z_STEPS    2000
 #define TEST_X_HZ       1400
-#define TEST_Z_HZ       2600
+#define TEST_Z_STEPS    10000
+#define TEST_Z_HZ       8000
 
 static uint8_t test_rx_byte  = 0;
 static uint8_t test_buf[TEST_BUF_SIZE]     = {0};
@@ -68,6 +68,8 @@ static void Test_Process(uint8_t *buf)
     // ── 개별 동작 커맨드 ─────────────────────
     if (buf[0] == 'C' && buf[1] == '1') {
         FirstConvey_Reset();
+        FirstConvey_SetIrEnabled(false);
+        FirstConvey_Task();  // 실제 PWM 시작
         Test_Send("[OK] Conveyor START");
         return;
     }

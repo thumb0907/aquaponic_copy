@@ -134,7 +134,7 @@ void Sequence_Task(void)
             else if (Cartesian_IsHomingDone()) {
                 Comm_SendDone(DONE_HOMING);
 
-                Cartesian_ResetSequence();
+                Cartesian_PrepareCycleAfterHoming();
                 FirstConvey_Reset();
                 prev_cart_stage = CART_STAGE_UNKNOWN;
 

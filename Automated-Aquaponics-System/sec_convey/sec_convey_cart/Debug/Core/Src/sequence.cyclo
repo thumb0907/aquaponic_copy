@@ -1,6 +1,6 @@
-../Core/Src/sequence.c:68:13:Handle_Timeout	1
-../Core/Src/sequence.c:79:13:Do_EStop	1
-../Core/Src/sequence.c:89:13:Do_Reset	1
-../Core/Src/sequence.c:102:6:Sequence_OnLimitHit	4
-../Core/Src/sequence.c:112:6:Sequence_Init	1
-../Core/Src/sequence.c:126:6:App_Run	1
+../Core/Src/sequence.c:68:14:Handle_Timeout	1
+../Core/Src/sequence.c:79:14:Do_EStop	1
+../Core/Src/sequence.c:89:14:Do_Reset	1
+../Core/Src/sequence.c:102:7:Sequence_OnLimitHit	4
+../Core/Src/sequence.c:112:7:Sequence_Init	1
+../Core/Src/sequence.c:126:7:App_Run	30
