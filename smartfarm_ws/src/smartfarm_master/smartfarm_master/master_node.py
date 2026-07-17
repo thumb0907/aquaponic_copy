@@ -1206,7 +1206,7 @@ class MasterNode(Node):
         self._send_scara(make_flag_u8(PID_HMF, self.flags['hmf']))
 
     def _broadcast_flags_to_stm2(self):
-        self._send_binary_pi2(make_flag_u8(PID_FF, self.flags['ff']))
+        #self._send_binary_pi2(make_flag_u8(PID_FF, self.flags['ff']))
         self._send_binary_pi2(make_flag_u16(PID_WCNT, self.flags['wcnt']))
         self._send_binary_pi2(make_flag_u8(PID_WLF, self.flags['wlf']))
         self._send_binary_pi2(make_flag_u8(PID_WRF, self.flags['wrf']))
@@ -1484,6 +1484,17 @@ class MasterNode(Node):
                 # 완료 결과를 기존 호환 플래그로 재전송
                 self._broadcast_all_flags()
 
+            # 수경실 트레이가 2번 컨베이어에 실제로 놓인 경우에만
+            # STM2 사이클 시작 명령을 한 번 전송
+            if completed_job['type'] == JOB_WATER_TO_VIB_AND_C2:
+                self._send_stm2(
+                    make_flag_u8(PID_FF, 1)
+                )
+
+                self.get_logger().info(
+                    f'STM2 사이클 시작 FF=1 전송: '
+                    f'job_id={completed_job["job_id"]}'
+                )
             # 1번 컨베이어 트레이를 SCARA가 가져갔으므로
             # STM1에도 CRF=0을 직접 전달
             if completed_job['type'] == JOB_C1_TO_NURSERY:
