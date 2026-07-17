@@ -424,9 +424,11 @@ class MasterNode(Node):
         # ── 공통 ──────────────────────────────
         self.emergency = False
         self.device_estop = {
-            'stm1': False,
-            'scara': False,
-        }
+        'stm1': False,
+        'scara': False,
+        'stm2': False,
+        'manip': False,
+    }
 
         # ── YOLO 모델 ─────────────────────────
         print('[YOLO] 모델 로딩 중...')
@@ -1726,7 +1728,14 @@ class MasterNode(Node):
             
 
             # ── STM2 상태 수신 ────────────────────────────
-            if line == 'STM2:PC:STATE:CONVEY_RUN':
+            if line == 'STM2:PC:STATE:IDLE':
+                self.stm2_state = 'idle'
+
+                self.get_logger().info(
+                    '[STM2] IDLE 상태 확인'
+                )
+
+            elif line == 'STM2:PC:STATE:CONVEY_RUN':
                 self.stm2_state = 'convey_run'
             elif line == 'STM2:PC:STATE:IR_DETECTED':
                 self.stm2_state = 'ir_detected'
@@ -1972,22 +1981,45 @@ class MasterNode(Node):
         if cmd in ('EMERGENCY', 'EMERGENCY_ALL'):
             with self.state_lock:
                 self.emergency = True
+
                 self.start_flag = False
                 self.stm_state = 'error'
+                self.stm2_state = 'error'
                 self.scara_prehome_sent = False
 
-                # STM1/SCARA 관련 플래그 정리
+                # 새 자동 작업 생성 중지
+                self.pending_scara_jobs.clear()
+
+                # 물리 위치를 확신할 수 없으므로
+                # active 작업만 해제하고 슬롯 예약 상태는 유지한다.
+                self.active_scara_job = None
+                self.active_manip_job = None
+                self.seed_target_slot = None
+
+                # 시작 및 busy 플래그 초기화
                 self.flags['c1f'] = 0
                 self.flags['ssf'] = 0
                 self.flags['smf'] = 0
                 self.flags['crf'] = 0
                 self.flags['hmf'] = 0
+                self.flags['ff'] = 0
+                self.flags['hf'] = 0
 
                 self.device_estop['stm1'] = True
                 self.device_estop['scara'] = True
+                self.device_estop['stm2'] = True
+                self.device_estop['manip'] = True
 
-            self._send_estop_stm1_scara()
-            self.get_logger().warn('EMERGENCY_ALL: STM1 + SCARA 정지')
+                if self.demo_mode:
+                    self.demo_phase = DEMO_ERROR
+
+            # state_lock 밖에서 실제 장치에 전송
+            self._send_estop_all()
+
+            self.get_logger().warn(
+                'EMERGENCY_ALL: '
+                'STM1 + SCARA + STM2 + MANIP 정지 요청'
+            )
             return
 
         # ─────────────────────────────
@@ -1996,27 +2028,46 @@ class MasterNode(Node):
         elif cmd in ('RESET', 'RESET_ALL'):
             with self.state_lock:
                 self.emergency = False
+
                 self.start_flag = False
                 self.stm_state = 'idle'
+                self.stm2_state = 'idle'
                 self.scara_prehome_sent = False
+
                 self.stable_cnt = 0
                 self.no_tray_cnt = 0
                 self.cam1_detect_label = 'none'
                 self.cam1_last_conf = 0.0
 
-                # 우선 STM1/SCARA 관련 플래그만 초기화
+                self.pending_scara_jobs.clear()
+                self.active_scara_job = None
+                self.active_manip_job = None
+                self.seed_target_slot = None
+
                 self.flags['c1f'] = 0
                 self.flags['ssf'] = 0
                 self.flags['smf'] = 0
                 self.flags['crf'] = 0
                 self.flags['hmf'] = 0
+                self.flags['ff'] = 0
+                self.flags['hf'] = 0
 
                 self.device_estop['stm1'] = False
                 self.device_estop['scara'] = False
+                self.device_estop['stm2'] = False
+                self.device_estop['manip'] = False
 
+                # 실제 트레이 위치를 확인하기 전까지
+                # 자동 데모 진행을 다시 시작하지 않는다.
+                if self.demo_mode:
+                    self.demo_phase = DEMO_ERROR
 
-            self._send_reset_stm1_scara()
-            self.get_logger().info('RESET_ALL: STM1 + SCARA 리셋')
+            self._send_reset_all()
+
+            self.get_logger().info(
+                'RESET_ALL 전송 완료: '
+                '실제 트레이 위치 확인 후 DEMO_RESET 필요'
+            )
             return
 
         # ─────────────────────────────
@@ -2127,6 +2178,53 @@ class MasterNode(Node):
     def _send_reset_scara(self):
         self._send_scara(make_reset())
 
+    def _send_estop_stm2(self):
+        """
+        Pi2를 통해 STM2로 긴급정지 전송.
+        대상 식별자 0x03은 _send_stm2()가 붙인다.
+        """
+        self._send_stm2(
+            make_estop()
+        )
+
+    def _send_reset_stm2(self):
+        """
+        Pi2를 통해 STM2로 리셋 전송.
+        """
+        self._send_stm2(
+            make_reset()
+        )
+
+    def _send_estop_manip(self):
+        """
+        바이너리 펌웨어가 활성화된 경우에만
+        매니퓰레이터로 긴급정지를 전송한다.
+        """
+        if MANIP_HARVEST_ENABLED:
+            self._send_manip(
+                make_estop()
+            )
+        else:
+            self.get_logger().warn(
+                '매니퓰레이터 ESTOP 전송 생략: '
+                'MANIP_HARVEST_ENABLED=False'
+            )
+
+    def _send_reset_manip(self):
+        """
+        바이너리 펌웨어가 활성화된 경우에만
+        매니퓰레이터로 리셋을 전송한다.
+        """
+        if MANIP_HARVEST_ENABLED:
+            self._send_manip(
+                make_reset()
+            )
+        else:
+            self.get_logger().warn(
+                '매니퓰레이터 RESET 전송 생략: '
+                'MANIP_HARVEST_ENABLED=False'
+            )
+
     def _send_estop_stm1_scara(self):
         self._send_estop_stm1()
         self._send_estop_scara()
@@ -2134,6 +2232,17 @@ class MasterNode(Node):
     def _send_reset_stm1_scara(self):
         self._send_reset_stm1()
         self._send_reset_scara()
+    def _send_estop_all(self):
+        self._send_estop_stm1()
+        self._send_estop_scara()
+        self._send_estop_stm2()
+        self._send_estop_manip()
+
+    def _send_reset_all(self):
+        self._send_reset_stm1()
+        self._send_reset_scara()
+        self._send_reset_stm2()
+        self._send_reset_manip()
     # ══════════════════════════════════════════
     # 송신
     # ══════════════════════════════════════════
@@ -2256,6 +2365,8 @@ class MasterNode(Node):
                 f'emergency:{self.emergency},'
                 f'estop_stm1:{self.device_estop["stm1"]},'
                 f'estop_scara:{self.device_estop["scara"]},'
+                f'estop_stm2:{self.device_estop["stm2"]},'
+                f'estop_manip:{self.device_estop["manip"]},'
                 f'cam1_connected:{self.cam1_connected},'
                 f'cam1_status:{self.cam1_status},'
                 f'cam1_detect_label:{self.cam1_detect_label},'
@@ -2388,6 +2499,10 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                         and (now - node.last_tx) > COOLDOWN_SEC
                         and not node.emergency
                         and node.pi1_alive
+                        and (
+                            not node.demo_mode
+                            or node.demo_phase != DEMO_ERROR
+                        )
                     ):
                         target_slot = node._find_empty_slot_locked(
                             'nursery'
