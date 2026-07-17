@@ -187,6 +187,17 @@ JOB_NURSERY_TO_WATER = 0x02
 JOB_WATER_TO_VIB_AND_C2 = 0x03
 JOB_HOME = 0x04
 JOB_HARVEST = 0x05
+# 발표 데모 진행 단계
+DEMO_WAIT_FIRST_TRAY = 'WAIT_FIRST_TRAY'
+DEMO_SEEDING = 'SEEDING'
+DEMO_MOVING_C1_TO_NURSERY = 'MOVING_C1_TO_NURSERY'
+DEMO_WAIT_GERMINATED_TRAY = 'WAIT_GERMINATED_TRAY'
+DEMO_MOVING_NURSERY_TO_WATER = 'MOVING_NURSERY_TO_WATER'
+DEMO_WAIT_MATURE_TRAY = 'WAIT_MATURE_TRAY'
+DEMO_MOVING_WATER_TO_C2 = 'MOVING_WATER_TO_C2'
+DEMO_WAIT_HARVEST_COMPLETE = 'WAIT_HARVEST_COMPLETE'
+DEMO_COMPLETE = 'COMPLETE'
+DEMO_ERROR = 'ERROR'
 
 SLOT_NONE = 0x00
 SLOT_LEFT = 0x01
@@ -301,8 +312,15 @@ class MasterNode(Node):
         self.active_manip_job = None
         self.next_manip_job_id = 1
         # 발표 데모 진행 상태
+        #예를 들어 파종 트레이가 발아실 왼쪽에 들어가면: self.demo_seeded_nursery_slot = 'left' 이후 데모 스케줄러는 발아 완료 트레이를 오른쪽에서만 찾습니다.
         self.demo_mode = True
-        self.demo_phase = 'WAIT_FIRST_TRAY'
+        self.demo_phase = DEMO_WAIT_FIRST_TRAY
+        # 이번 데모에서 방금 파종한 트레이가 들어간 발아실 슬롯
+        # 미리 준비한 발아 완료 트레이를 선택할 때 제외한다.
+        self.demo_seeded_nursery_slot = None
+        # 이번 데모에서 발아실로부터 새로 옮겨진 수경실 슬롯
+        # 미리 준비한 성장 완료 트레이를 선택할 때 제외한다.
+        self.demo_growing_water_slot = None
         
         # ── STM1 상태 ─────────────────────────
         self.start_flag      = False
@@ -570,7 +588,88 @@ class MasterNode(Node):
             )
     # 자동 작업 선택 함수
     def _create_automatic_transfer_job_locked(self):
-        # 1. 수경실 READY 트레이 수확 경로
+        # ─────────────────────────────────────
+        # 1. 발표 데모 모드
+        # ─────────────────────────────────────
+        if self.demo_mode:
+
+            # 파종 트레이의 발아실 적재까지 완료된 상태
+            # → 반대쪽 발아 완료 트레이만 찾는다.
+            if self.demo_phase == DEMO_WAIT_GERMINATED_TRAY:
+                nursery_source = self._find_ready_slot_locked(
+                    'nursery',
+                    excluded_slot=self.demo_seeded_nursery_slot,
+                )
+
+                water_destination = self._find_empty_slot_locked(
+                    'water'
+                )
+
+                if (
+                    nursery_source is not None
+                    and water_destination is not None
+                ):
+                    queued = self._queue_nursery_to_water_locked(
+                        nursery_source,
+                        water_destination,
+                    )
+
+                    if queued:
+                        self.demo_phase = (
+                            DEMO_MOVING_NURSERY_TO_WATER
+                        )
+
+                        self.get_logger().info(
+                            f'데모 단계 변경: '
+                            f'{DEMO_WAIT_GERMINATED_TRAY} -> '
+                            f'{self.demo_phase}, '
+                            f'nursery={nursery_source}, '
+                            f'water={water_destination}'
+                        )
+
+                return
+
+            # 발아 완료 트레이를 수경실로 옮긴 상태
+            # → 새로 들어간 수경 트레이는 제외하고
+            #   반대쪽 성장 완료 트레이만 찾는다.
+            if self.demo_phase == DEMO_WAIT_MATURE_TRAY:
+                water_source = self._find_ready_slot_locked(
+                    'water',
+                    excluded_slot=self.demo_growing_water_slot,
+                )
+
+                if (
+                    water_source is not None
+                    and self.stm2_state == 'idle'
+                ):
+                    queued = self._queue_water_to_c2_locked(
+                        water_source
+                    )
+
+                    if queued:
+                        self.demo_phase = (
+                            DEMO_MOVING_WATER_TO_C2
+                        )
+
+                        self.get_logger().info(
+                            f'데모 단계 변경: '
+                            f'{DEMO_WAIT_MATURE_TRAY} -> '
+                            f'{self.demo_phase}, '
+                            f'water={water_source}'
+                        )
+
+                return
+
+            # WAIT_FIRST_TRAY, SEEDING, MOVING 계열 단계에서는
+            # 자동 SCARA 작업을 새로 생성하지 않는다.
+            return
+
+        # ─────────────────────────────────────
+        # 2. 일반 자동 모드
+        # 기존 우선순위를 그대로 유지한다.
+        # ─────────────────────────────────────
+
+        # 수경실 READY 트레이 우선
         water_source = self._find_ready_slot_locked('water')
 
         if (
@@ -584,7 +683,7 @@ class MasterNode(Node):
             if queued:
                 return
 
-        # 2. 발아실 READY 트레이를 수경실로 이동
+        # 발아실 READY → 수경실
         nursery_source = self._find_ready_slot_locked(
             'nursery'
         )
@@ -600,18 +699,25 @@ class MasterNode(Node):
                 nursery_source,
                 water_destination,
             )
-    def _find_ready_slot_locked(self, room_name):
+    def _find_ready_slot_locked(
+        self,
+        room_name: str,
+        excluded_slot: str | None = None,
+    ):
         slots = (
             self.nursery_slots
             if room_name == 'nursery'
             else self.water_slots
         )
 
-        if slots['left']['state'] == SLOT_READY:
-            return 'left'
+        # 기존과 동일하게 왼쪽 우선 검색하지만
+        # 데모에서 제외할 슬롯은 건너뛴다.
+        for slot_name in ('left', 'right'):
+            if slot_name == excluded_slot:
+                continue
 
-        if slots['right']['state'] == SLOT_READY:
-            return 'right'
+            if slots[slot_name]['state'] == SLOT_READY:
+                return slot_name
 
         return None
     def _queue_nursery_to_water_locked(
@@ -868,6 +974,20 @@ class MasterNode(Node):
 
             self.seed_target_slot = None
 
+            if self.demo_mode:
+                # 방금 파종한 트레이가 들어간 슬롯을 기억한다.
+                self.demo_seeded_nursery_slot = destination
+                self.demo_phase = (
+                    DEMO_WAIT_GERMINATED_TRAY
+                )
+
+                self.get_logger().info(
+                    f'데모 단계 변경: '
+                    f'{DEMO_MOVING_C1_TO_NURSERY} -> '
+                    f'{self.demo_phase}, '
+                    f'seeded_nursery={destination}'
+                )
+
             self.flags['ssf'] = 0
             self.flags['crf'] = 0
 
@@ -910,6 +1030,18 @@ class MasterNode(Node):
             water_destination['state'] = SLOT_GROWING
             water_destination['job_id'] = None
 
+            if self.demo_mode:
+                # 방금 옮겨진 성장 중 트레이의 수경 슬롯을 기억한다.
+                self.demo_growing_water_slot = destination
+                self.demo_phase = DEMO_WAIT_MATURE_TRAY
+
+                self.get_logger().info(
+                    f'데모 단계 변경: '
+                    f'{DEMO_MOVING_NURSERY_TO_WATER} -> '
+                    f'{self.demo_phase}, '
+                    f'growing_water={destination}'
+                )
+
         # ─────────────────────────────────────
         # 3. 수경실 → 진동부 → 2번 컨베이어
         # ─────────────────────────────────────
@@ -938,6 +1070,17 @@ class MasterNode(Node):
 
             # 이제 STM2 사이클을 시작할 수 있다.
             self.flags['ff'] = 1
+            if self.demo_mode:
+                self.demo_phase = (
+                    DEMO_WAIT_HARVEST_COMPLETE
+                )
+
+                self.get_logger().info(
+                    f'데모 단계 변경: '
+                    f'{DEMO_MOVING_WATER_TO_C2} -> '
+                    f'{self.demo_phase}, '
+                    f'ff={self.flags["ff"]}'
+                )
 
         else:
             self.get_logger().error(
@@ -1052,6 +1195,19 @@ class MasterNode(Node):
             elif line == 'STM1:PC:DONE:CYCLE1':
                 self.stm_state = 'waiting_scara'
                 target_slot = self.seed_target_slot
+
+                if self.demo_mode:
+                    self.demo_phase = (
+                        DEMO_MOVING_C1_TO_NURSERY
+                    )
+
+                    self.get_logger().info(
+                        f'데모 단계 변경: '
+                        f'{DEMO_SEEDING} -> '
+                        f'{self.demo_phase}, '
+                        f'destination={target_slot}, '
+                        f'job_id={job_id}'
+                    )
 
                 if target_slot is None:
                     self.get_logger().error(
@@ -1214,6 +1370,8 @@ class MasterNode(Node):
                 # 추가 자동 작업을 막는다.
                 self.emergency = True
                 self.device_estop['scara'] = True
+                if self.demo_mode:
+                    self.demo_phase = DEMO_ERROR
 
             self._send_estop_stm1_scara()
 
@@ -1302,6 +1460,20 @@ class MasterNode(Node):
                 self.stm2_state = 'eject_done'
             elif line == 'STM2:PC:DONE:CYCLE2':
                 self.stm2_state = 'idle'
+
+                if (
+                    self.demo_mode
+                    and self.demo_phase
+                    == DEMO_WAIT_HARVEST_COMPLETE
+                ):
+                    self.demo_phase = DEMO_COMPLETE
+
+                    self.get_logger().info(
+                        f'데모 단계 변경: '
+                        f'{DEMO_WAIT_HARVEST_COMPLETE} -> '
+                        f'{self.demo_phase}'
+                    )
+
                 self.get_logger().info('[STM2] 사이클 완료')
             elif line == 'STM2:PC:STATE:RESET_DONE':
                 self.stm2_state = 'idle'
@@ -1521,6 +1693,8 @@ class MasterNode(Node):
                 self.active_scara_job = None
                 self.active_manip_job = None
                 self.seed_target_slot = None
+                self.demo_seeded_nursery_slot = None
+                self.demo_growing_water_slot = None
 
                 for slot in self.nursery_slots.values():
                     slot['state'] = SLOT_EMPTY
@@ -1530,7 +1704,7 @@ class MasterNode(Node):
                     slot['state'] = SLOT_EMPTY
                     slot['job_id'] = None
 
-                self.demo_phase = 'WAIT_FIRST_TRAY'
+                self.demo_phase = DEMO_WAIT_FIRST_TRAY
 
                 self.flags['ssf'] = 0
                 self.flags['smf'] = 0
