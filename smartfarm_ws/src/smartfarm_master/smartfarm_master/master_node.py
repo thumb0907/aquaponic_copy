@@ -315,7 +315,7 @@ class MasterNode(Node):
         self.next_manip_job_id = 1
         # 발표 데모 진행 상태
         #예를 들어 파종 트레이가 발아실 왼쪽에 들어가면: self.demo_seeded_nursery_slot = 'left' 이후 데모 스케줄러는 발아 완료 트레이를 오른쪽에서만 찾습니다.
-        self.demo_mode = True
+        self.demo_mode = False
         self.demo_phase = DEMO_WAIT_FIRST_TRAY
         # 이번 데모에서 방금 파종한 트레이가 들어간 발아실 슬롯
         # 미리 준비한 발아 완료 트레이를 선택할 때 제외한다.
@@ -1286,18 +1286,18 @@ class MasterNode(Node):
                 self.stm_state = 'waiting_scara'
                 target_slot = self.seed_target_slot
 
-                if self.demo_mode:
-                    self.demo_phase = (
-                        DEMO_MOVING_C1_TO_NURSERY
-                    )
+                # if self.demo_mode:
+                #     self.demo_phase = (
+                #         DEMO_MOVING_C1_TO_NURSERY
+                #     )
 
-                    self.get_logger().info(
-                        f'데모 단계 변경: '
-                        f'{DEMO_SEEDING} -> '
-                        f'{self.demo_phase}, '
-                        f'destination={target_slot}, '
-                        f'job_id={job_id}'
-                    )
+                #     self.get_logger().info(
+                #         f'데모 단계 변경: '
+                #         f'{DEMO_SEEDING} -> '
+                #         f'{self.demo_phase}, '
+                #         f'destination={target_slot}, '
+                #         f'job_id={job_id}'
+                #     )
 
                 if target_slot is None:
                     self.get_logger().error(
