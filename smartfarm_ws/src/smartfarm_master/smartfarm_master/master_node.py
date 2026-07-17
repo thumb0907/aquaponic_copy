@@ -198,6 +198,8 @@ DEMO_MOVING_WATER_TO_C2 = 'MOVING_WATER_TO_C2'
 DEMO_WAIT_HARVEST_COMPLETE = 'WAIT_HARVEST_COMPLETE'
 DEMO_COMPLETE = 'COMPLETE'
 DEMO_ERROR = 'ERROR'
+# 매니퓰레이터 바이너리 펌웨어가 준비되기 전까지 False
+MANIP_HARVEST_ENABLED = False
 
 SLOT_NONE = 0x00
 SLOT_LEFT = 0x01
@@ -546,6 +548,58 @@ class MasterNode(Node):
         ])
 
         return make_frame(PID_ROBOT_JOB, data)
+    def _make_manip_job_frame(self, job):
+        """
+        매니퓰레이터 작업 프레임.
+
+        SCARA와 동일한 PID_ROBOT_JOB을 사용하며
+        수확 작업에는 좌우 슬롯이 없으므로
+        source와 destination은 SLOT_NONE이다.
+        """
+
+        data = bytes([
+            job['type'],
+            SLOT_NONE,
+            SLOT_NONE,
+            job['job_id'],
+        ])
+
+        return make_frame(PID_ROBOT_JOB, data)
+    def _start_manip_harvest_locked(self):
+        """
+        STM2가 HARVESTING 상태가 됐을 때
+        매니퓰레이터 수확 작업을 생성한다.
+
+        반드시 state_lock 상태에서 호출한다.
+        """
+
+        if self.active_manip_job is not None:
+            self.get_logger().warn(
+                f'매니퓰레이터 작업이 이미 실행 중: '
+                f'{self.active_manip_job}'
+            )
+            return None
+
+        job_id = self._next_manip_job_id_locked()
+
+        job = {
+            'job_id': job_id,
+            'type': JOB_HARVEST,
+            'source': None,
+            'destination': None,
+            'sent_at': time.time(),
+            'retry_count': 0,
+        }
+
+        self.active_manip_job = job
+        self.flags['hf'] = 0
+
+        self.get_logger().info(
+            f'매니퓰레이터 수확 작업 생성: '
+            f'job_id={job_id}'
+        )
+
+        return self._make_manip_job_frame(job)
     # 스케줄러 함수
     def _schedule_scara_jobs(self):
         frame_to_send = None
@@ -866,7 +920,7 @@ class MasterNode(Node):
                 f'2번 컨베이어 시작 요청이 이미 존재함: '
                 f'ff={self.flags["ff"]}'
             )
-            return False
+        return False
 
         # ─────────────────────────────────────
         # 4. 새로운 SCARA 작업 ID 생성
@@ -1161,6 +1215,15 @@ class MasterNode(Node):
             self.next_scara_job_id = 1
 
         return job_id
+    def _next_manip_job_id_locked(self):
+        job_id = self.next_manip_job_id
+
+        self.next_manip_job_id += 1
+
+        if self.next_manip_job_id > 255:
+            self.next_manip_job_id = 1
+
+        return job_id
     def _on_uart1(self, msg: String):
         line = msg.data.strip()
         self.get_logger().info(f'[STM1] {line}')
@@ -1415,7 +1478,119 @@ class MasterNode(Node):
                 f'error_code={error_code}'
             )
             return
+        # ─────────────────────────────────────
+        # 매니퓰레이터 수확 완료
+        # 형식: MANIP:PC:DONE:job_type:job_id
+        # ─────────────────────────────────────
+        if line.startswith('MANIP:PC:DONE:'):
+            parts = line.split(':')
 
+            if len(parts) != 5:
+                self.get_logger().error(
+                    f'잘못된 MANIP DONE 형식: {line}'
+                )
+                return
+
+            try:
+                reported_job_type = int(parts[3])
+                reported_job_id = int(parts[4])
+            except ValueError:
+                self.get_logger().error(
+                    f'MANIP DONE 숫자 변환 실패: {line}'
+                )
+                return
+
+            with self.state_lock:
+                job = self.active_manip_job
+
+                if job is None:
+                    self.get_logger().warn(
+                        f'실행 중 작업 없이 MANIP DONE 수신: '
+                        f'{line}'
+                    )
+                    return
+
+                if (
+                    job['type'] != reported_job_type
+                    or job['job_id'] != reported_job_id
+                    or reported_job_type != JOB_HARVEST
+                ):
+                    self.get_logger().warn(
+                        f'MANIP DONE 작업 불일치: '
+                        f'active={job}, '
+                        f'reported_type={reported_job_type}, '
+                        f'reported_job_id={reported_job_id}'
+                    )
+                    return
+
+                self.active_manip_job = None
+                self.flags['hf'] = 1
+
+            # 실제 수확이 완료된 뒤에만 STM2에 HF=1 전송
+            self._send_stm2(
+                make_flag_u8(PID_HF, 1)
+            )
+
+            self.get_logger().info(
+                f'매니퓰레이터 수확 완료: '
+                f'job_id={reported_job_id} '
+                f'→ STM2 HF=1 전송'
+            )
+            return  
+
+        # ─────────────────────────────────────
+        # 매니퓰레이터 작업 실패
+        # 형식: MANIP:PC:ERR:job_type:job_id:error_code
+        # ─────────────────────────────────────
+        if line.startswith('MANIP:PC:ERR:'):
+            parts = line.split(':')
+
+            if len(parts) != 6:
+                self.get_logger().error(
+                    f'잘못된 MANIP ERR 형식: {line}'
+                )
+                return
+
+            try:
+                reported_job_type = int(parts[3])
+                reported_job_id = int(parts[4])
+                error_code = int(parts[5])
+            except ValueError:
+                self.get_logger().error(
+                    f'MANIP ERR 숫자 변환 실패: {line}'
+                )
+                return
+
+            with self.state_lock:
+                job = self.active_manip_job
+
+                if (
+                    job is None
+                    or job['type'] != reported_job_type
+                    or job['job_id'] != reported_job_id
+                ):
+                    self.get_logger().warn(
+                        f'현재 작업과 일치하지 않는 '
+                        f'MANIP ERR: {line}'
+                    )
+                    return
+
+                self.active_manip_job = None
+                self.flags['hf'] = 0
+                self.stm2_state = 'error'
+                self.emergency = True
+
+                if self.demo_mode:
+                    self.demo_phase = DEMO_ERROR
+
+            # 오류 시 HF=1을 보내지 않는다.
+            # 실제 수확이 끝나지 않았으므로 STM2를 진행시키면 안 된다.
+            self.get_logger().error(
+                f'매니퓰레이터 수확 실패: '
+                f'job_id={reported_job_id}, '
+                f'error_code={error_code}'
+            )
+            return
         with self.state_lock:
             # ── 스카라 작업 완료 이벤트 ─────────────────────
             # if line == 'SCARA:PC:EVENT:PUT_TO_UV_DONE':
@@ -1450,11 +1625,11 @@ class MasterNode(Node):
             #         f'SCARA 2번 컨베이어 적재 완료 → wcnt={self.flags["wcnt"]}, ff=1, smf=0'
             #     )
             #     return
-            if line == 'SCARA:PC:EVENT:HARVEST_DONE':  # 스카라 프로토콜에 맞게 조정
-                self._set_flag('ff', 0)
-                self._send_stm2(make_flag_u8(PID_FF, 0))
-                self.get_logger().info('수확 완료 → STM2에 FF=0 전송')
-                return
+            # if line == 'SCARA:PC:EVENT:HARVEST_DONE':  # 스카라 프로토콜에 맞게 조정
+            #     self._set_flag('ff', 0)
+            #     self._send_stm2(make_flag_u8(PID_FF, 0))
+            #     self.get_logger().info('수확 완료 → STM2에 FF=0 전송')
+            #     return
             if line == 'SCARA:PC:EVENT:HOME_DONE':
                 self._set_flag('hmf', 0)
                 self.get_logger().info('스카라 사전 홈잉 완료 → HMF=0')
@@ -1467,11 +1642,11 @@ class MasterNode(Node):
                 self.get_logger().info('STM2 고정 완료 → ff=1')
                 return
 
-            if line == 'STM2:PC:EVENT:HARVEST_DONE':
-                self._set_flag('ff', 0)
-                self._broadcast_all_flags()
-                self.get_logger().info('STM2 수확 완료 → ff=0')
-                return
+            # if line == 'STM2:PC:EVENT:HARVEST_DONE':
+            #     self._set_flag('ff', 0)
+            #     self._broadcast_all_flags()
+            #     self.get_logger().info('STM2 수확 완료 → ff=0')
+            #     return
             
 
             # ── STM2 상태 수신 ────────────────────────────
@@ -1483,17 +1658,69 @@ class MasterNode(Node):
                 self.stm2_state = 'z_fix'
             elif line == 'STM2:PC:STATE:HARVESTING':
                 self.stm2_state = 'harvesting'
-                # 수확 시작 → 스카라/매니퓰에 지시
-                # (현재는 SKIP_COMM=1로 STM2가 자체 타이머로 처리하므로 일단 로그만)
-                self.get_logger().info('STM2 수확 중 — 스카라/매니퓰 수확 지시 필요')
+
+                if not MANIP_HARVEST_ENABLED:
+                    self.get_logger().info(
+                        'STM2 수확 단계 진입: '
+                        '현재 MANIP_HARVEST_ENABLED=False, '
+                        'STM2 SKIP_COMM 시뮬레이션 사용'
+                    )
+
+                else:
+                    manip_frame = (
+                        self._start_manip_harvest_locked()
+                    )
+
+                    if manip_frame is not None:
+                        self._send_manip(manip_frame)
+
+                        self.get_logger().info(
+                            f'매니퓰레이터 수확 명령 전송: '
+                            f'{self.active_manip_job}'
+                        )
 
             elif line == 'STM2:PC:STATE:EJECTING':
                 self.stm2_state = 'ejecting'
             elif line == 'STM2:PC:STATE:EJECT_DONE':   
                 self.stm2_state = 'eject_done'
             elif line == 'STM2:PC:DONE:CYCLE2':
+                # ─────────────────────────────
+                # 1. STM2 동작 상태 초기화
+                # ─────────────────────────────
                 self.stm2_state = 'idle'
 
+                # ─────────────────────────────
+                # 2. Master가 보관하는 사이클 플래그 초기화
+                # ─────────────────────────────
+                previous_ff = self.flags['ff']
+                previous_hf = self.flags['hf']
+
+                self.flags['ff'] = 0
+                self.flags['hf'] = 0
+
+                # ─────────────────────────────
+                # 3. 남아 있는 매니퓰레이터 작업 검사
+                # ─────────────────────────────
+                if self.active_manip_job is not None:
+                    self.get_logger().warn(
+                        f'STM2 사이클은 완료됐지만 '
+                        f'매니퓰레이터 작업이 남아 있음: '
+                        f'{self.active_manip_job}'
+                    )
+
+                    # 다음 수확을 막지 않도록 논리 작업 정리
+                    self.active_manip_job = None
+
+                # ─────────────────────────────
+                # 4. STM2에도 FF=0 재전송
+                # ─────────────────────────────
+                self._send_stm2(
+                    make_flag_u8(PID_FF, 0)
+                )
+
+                # ─────────────────────────────
+                # 5. 발표 데모 완료 처리
+                # ─────────────────────────────
                 if (
                     self.demo_mode
                     and self.demo_phase
@@ -1507,7 +1734,20 @@ class MasterNode(Node):
                         f'{self.demo_phase}'
                     )
 
-                self.get_logger().info('[STM2] 사이클 완료')
+                # ─────────────────────────────
+                # 6. 최종 상태 로그
+                # ─────────────────────────────
+                self.get_logger().info(
+                    f'[STM2] 사이클 완료: '
+                    f'stm2_state={self.stm2_state}, '
+                    f'ff={previous_ff}->'
+                    f'{self.flags["ff"]}, '
+                    f'hf={previous_hf}->'
+                    f'{self.flags["hf"]}, '
+                    f'demo_phase={self.demo_phase}'
+                )
+
+                return
             elif line == 'STM2:PC:STATE:RESET_DONE':
                 self.stm2_state = 'idle'
             elif line == 'STM2:PC:STATE:ESTOP':
@@ -1739,9 +1979,6 @@ class MasterNode(Node):
 
                 self.demo_phase = DEMO_WAIT_FIRST_TRAY
                 self.demo_primary_seed_job_id = None
-                self.demo_seeded_nursery_slot = None
-                self.demo_growing_water_slot = None
-                self.demo_phase = DEMO_WAIT_FIRST_TRAY
                 self.flags['ssf'] = 0
                 self.flags['smf'] = 0
                 self.flags['crf'] = 0
