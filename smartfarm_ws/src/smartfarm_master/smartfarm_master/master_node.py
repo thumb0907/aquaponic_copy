@@ -321,7 +321,10 @@ class MasterNode(Node):
         # 이번 데모에서 발아실로부터 새로 옮겨진 수경실 슬롯
         # 미리 준비한 성장 완료 트레이를 선택할 때 제외한다.
         self.demo_growing_water_slot = None
-        
+        # 발표 흐름을 진행시키는 첫 번째 파종 작업 ID
+        # 이후 추가 파종 작업은 demo_phase를 변경하지 않는다.
+        self.demo_primary_seed_job_id = None
+
         # ── STM1 상태 ─────────────────────────
         self.start_flag      = False
         self.stm_state       = 'idle'
@@ -974,20 +977,30 @@ class MasterNode(Node):
 
             self.seed_target_slot = None
 
-            if self.demo_mode:
-                # 방금 파종한 트레이가 들어간 슬롯을 기억한다.
+            # 최초 파종 작업이 완료된 경우에만
+            # 발표 데모의 다음 단계로 이동한다.
+            if (
+                self.demo_mode
+                and job_id == self.demo_primary_seed_job_id
+            ):
                 self.demo_seeded_nursery_slot = destination
                 self.demo_phase = (
                     DEMO_WAIT_GERMINATED_TRAY
                 )
 
                 self.get_logger().info(
-                    f'데모 단계 변경: '
-                    f'{DEMO_MOVING_C1_TO_NURSERY} -> '
-                    f'{self.demo_phase}, '
-                    f'seeded_nursery={destination}'
+                    f'데모 첫 파종 트레이 적재 완료: '
+                    f'job_id={job_id}, '
+                    f'seeded_nursery={destination}, '
+                    f'demo_phase={self.demo_phase}'
                 )
-
+            else:
+                self.get_logger().info(
+                    f'추가 파종 트레이 적재 완료: '
+                    f'job_id={job_id}, '
+                    f'nursery={destination}, '
+                    f'demo_phase={self.demo_phase}'
+                )
             self.flags['ssf'] = 0
             self.flags['crf'] = 0
 
@@ -1230,10 +1243,30 @@ class MasterNode(Node):
                 self.nursery_slots[target_slot]['job_id'] = job_id
                 self.pending_scara_jobs.append(job)
 
-                self.get_logger().info(
-                    f'C1_TO_NURSERY 작업 대기: '
-                    f'job_id={job_id}, destination={target_slot}'
-                )
+                # 최초 파종 작업만 발표 흐름의 기준 작업으로 지정
+                if (
+                    self.demo_mode
+                    and self.demo_primary_seed_job_id is None
+                    and self.demo_phase == DEMO_SEEDING
+                ):
+                    self.demo_primary_seed_job_id = job_id
+                    self.demo_phase = (
+                        DEMO_MOVING_C1_TO_NURSERY
+                    )
+
+                    self.get_logger().info(
+                        f'데모 첫 파종 작업 등록: '
+                        f'job_id={job_id}, '
+                        f'destination={target_slot}, '
+                        f'demo_phase={self.demo_phase}'
+                    )
+                else:
+                    self.get_logger().info(
+                        f'추가 파종 SCARA 작업 등록: '
+                        f'job_id={job_id}, '
+                        f'destination={target_slot}, '
+                        f'demo_phase={self.demo_phase}'
+                    )
             elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
                 self.start_flag = False
@@ -1705,7 +1738,10 @@ class MasterNode(Node):
                     slot['job_id'] = None
 
                 self.demo_phase = DEMO_WAIT_FIRST_TRAY
-
+                self.demo_primary_seed_job_id = None
+                self.demo_seeded_nursery_slot = None
+                self.demo_growing_water_slot = None
+                self.demo_phase = DEMO_WAIT_FIRST_TRAY
                 self.flags['ssf'] = 0
                 self.flags['smf'] = 0
                 self.flags['crf'] = 0
@@ -2001,6 +2037,25 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                             node.last_tx = now
                             node.stable_cnt = 0
                             node._set_flag('c1f', 1)
+                            
+                            if (
+                                node.demo_mode
+                                and node.demo_phase == DEMO_WAIT_FIRST_TRAY
+                            ):
+                                node.demo_phase = DEMO_SEEDING
+
+                                node.get_logger().info(
+                                    f'데모 첫 파종 시작: '
+                                    f'{DEMO_WAIT_FIRST_TRAY} -> '
+                                    f'{node.demo_phase}, '
+                                    f'nursery_target={target_slot}'
+                                )
+                            else:
+                                node.get_logger().info(
+                                    f'추가 파종 시작: '
+                                    f'nursery_target={target_slot}, '
+                                    f'demo_phase={node.demo_phase}'
+                                )
 
                             reserved_slot = target_slot
                             send_now = True
