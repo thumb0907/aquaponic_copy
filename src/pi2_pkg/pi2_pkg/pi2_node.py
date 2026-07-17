@@ -405,71 +405,71 @@ class Pi2Node(Node):
         self.pub_uart.publish(msg)
         self.get_logger().info(f'SCARA→PC: {msg.data}')
 
-        def publish_manip_frame(self, pid: int, data: bytes):
-            """
-            매니퓰레이터 바이너리 프레임을
-            Master가 처리할 문자열로 변환한다.
-            """
+    def publish_manip_frame(self, pid: int, data: bytes):
+        """
+        매니퓰레이터 바이너리 프레임을
+        Master가 처리할 문자열로 변환한다.
+        """
 
-            msg = String()
+        msg = String()
 
-            if pid == PID_STATE:
-                if len(data) >= 2:
-                    state_code = data[0]
-                    job_id = data[1]
+        if pid == PID_STATE:
+            if len(data) >= 2:
+                state_code = data[0]
+                job_id = data[1]
 
-                    msg.data = (
-                        f'MANIP:PC:STATE:'
-                        f'{state_code}:{job_id}'
-                    )
-                else:
-                    msg.data = (
-                        f'MANIP:PC:MALFORMED:STATE:'
-                        f'{data.hex()}'
-                    )
-
-            elif pid == PID_DONE:
-                if len(data) >= 2:
-                    job_type = data[0]
-                    job_id = data[1]
-
-                    msg.data = (
-                        f'MANIP:PC:DONE:'
-                        f'{job_type}:{job_id}'
-                    )
-                else:
-                    msg.data = (
-                        f'MANIP:PC:MALFORMED:DONE:'
-                        f'{data.hex()}'
-                    )
-
-            elif pid == PID_ERR:
-                if len(data) >= 3:
-                    job_type = data[0]
-                    job_id = data[1]
-                    error_code = data[2]
-
-                    msg.data = (
-                        f'MANIP:PC:ERR:'
-                        f'{job_type}:{job_id}:{error_code}'
-                    )
-                else:
-                    msg.data = (
-                        f'MANIP:PC:MALFORMED:ERR:'
-                        f'{data.hex()}'
-                    )
-
+                msg.data = (
+                    f'MANIP:PC:STATE:'
+                    f'{state_code}:{job_id}'
+                )
             else:
                 msg.data = (
-                    f'MANIP:PC:RAW:'
-                    f'{pid:02X}:{data.hex()}'
+                    f'MANIP:PC:MALFORMED:STATE:'
+                    f'{data.hex()}'
                 )
 
-            self.pub_uart.publish(msg)
+        elif pid == PID_DONE:
+            if len(data) >= 2:
+                job_type = data[0]
+                job_id = data[1]
 
-            self.get_logger().info(
-                f'MANIP→PC: {msg.data}'
+                msg.data = (
+                    f'MANIP:PC:DONE:'
+                    f'{job_type}:{job_id}'
+                )
+            else:
+                msg.data = (
+                    f'MANIP:PC:MALFORMED:DONE:'
+                    f'{data.hex()}'
+                )
+
+        elif pid == PID_ERR:
+            if len(data) >= 3:
+                job_type = data[0]
+                job_id = data[1]
+                error_code = data[2]
+
+                msg.data = (
+                    f'MANIP:PC:ERR:'
+                    f'{job_type}:{job_id}:{error_code}'
+                )
+            else:
+                msg.data = (
+                    f'MANIP:PC:MALFORMED:ERR:'
+                    f'{data.hex()}'
+                )
+
+        else:
+            msg.data = (
+                f'MANIP:PC:RAW:'
+                f'{pid:02X}:{data.hex()}'
             )
+
+        self.pub_uart.publish(msg)
+
+        self.get_logger().info(
+            f'MANIP→PC: {msg.data}'
+        )
 
     # ══════════════════════════════════════════
     # Heartbeat

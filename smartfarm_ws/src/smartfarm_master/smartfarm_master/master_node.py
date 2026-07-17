@@ -934,7 +934,7 @@ class MasterNode(Node):
                 f'2번 컨베이어 시작 요청이 이미 존재함: '
                 f'ff={self.flags["ff"]}'
             )
-        return False
+            return False
 
         # ─────────────────────────────────────
         # 4. 새로운 SCARA 작업 ID 생성
