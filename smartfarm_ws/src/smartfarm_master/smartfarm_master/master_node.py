@@ -2775,11 +2775,17 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     now = time.time()
     send_event = False
     flag_name = 'wlf' if position == 'left' else 'wrf'
-    pid = PID_WLF if position == 'left' else PID_WRF
 
     with node.state_lock:
         st = node.water_state[position]
+        logical_slot = node.water_slots[position]
 
+        # _sync_slot_flags_locked() 호출 전 값
+        previous_flag = node.flags[flag_name]
+
+        # ─────────────────────────────────────
+        # 1. 카메라 판정 안정화
+        # ─────────────────────────────────────
         if growth_done:
             st['stable_cnt'] += 1
             st['lost_cnt'] = 0
@@ -2788,9 +2794,16 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
         else:
             st['stable_cnt'] = 0
             st['lost_cnt'] += 1
-            st['last_label'] = 'growing' if green_ratio > 0.03 else 'none'
+            st['last_label'] = (
+                'growing'
+                if green_ratio > 0.03
+                else 'none'
+            )
             st['last_score'] = green_ratio
 
+        # ─────────────────────────────────────
+        # 2. 성장 완료 확정
+        # ─────────────────────────────────────
         if (
             st['stable_cnt'] >= WATER_STABLE_FRAMES
             and now - st['last_tx'] > WATER_COOLDOWN_SEC
@@ -2798,24 +2811,81 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
             st['last_tx'] = now
             st['stable_cnt'] = 0
 
-            if node.flags[flag_name] == 0:
-                node._set_flag(flag_name, 1)
-                send_event = True
+            # 일반 슬롯만 READY로 변경한다.
+            #
+            # RESERVED_IN:
+            # SCARA가 트레이를 가져오는 중
+            #
+            # RESERVED_OUT:
+            # SCARA가 트레이를 꺼내는 중
+            #
+            # 두 예약 상태는 카메라가 덮어쓰면 안 된다.
+            if logical_slot['state'] in (
+                SLOT_UNKNOWN,
+                SLOT_EMPTY,
+                SLOT_OCCUPIED,
+                SLOT_GROWING,
+            ):
+                previous_state = logical_slot['state']
+
+                logical_slot['state'] = SLOT_READY
+                logical_slot['job_id'] = None
+
                 node.get_logger().info(
-                    f'[Water {position}] growth done -> '
-                    f'{flag_name.upper()}=1, '
+                    f'[Water {position}] 성장 완료 확정: '
+                    f'{previous_state} -> {SLOT_READY}, '
                     f'green_ratio={green_ratio:.3f}, '
                     f'largest_area={largest_area:.1f}'
                 )
 
-        if st['lost_cnt'] >= WATER_LOST_FRAMES:
-            if node.flags[flag_name] != 0:
-                node._set_flag(flag_name, 0)
-                send_event = True
-                node.get_logger().info(
-                    f'[Water {position}] plant lost -> {flag_name.upper()}=0'
+            elif logical_slot['state'] in (
+                SLOT_RESERVED_IN,
+                SLOT_RESERVED_OUT,
+            ):
+                node.get_logger().debug(
+                    f'[Water {position}] 성장 완료가 감지됐지만 '
+                    f'슬롯 예약 중이므로 상태 유지: '
+                    f'state={logical_slot["state"]}, '
+                    f'job_id={logical_slot["job_id"]}'
                 )
 
+        # ─────────────────────────────────────
+        # 3. 성장 신호 소실 처리
+        # ─────────────────────────────────────
+        if st['lost_cnt'] == WATER_LOST_FRAMES:
+            node.get_logger().debug(
+                f'[Water {position}] 성장 신호 소실: '
+                f'logical_state={logical_slot["state"]}'
+            )
+
+            # 여기서 water_slots를 EMPTY로 변경하지 않는다.
+            #
+            # 수경실 카메라는 트레이를 인식하지 못하기 때문에
+            # 성장 신호가 없다는 사실만으로 빈 슬롯이라고
+            # 판단할 수 없다.
+            #
+            # 실제 EMPTY 변경은 SCARA 완료 처리 함수의
+            # JOB_WATER_TO_VIB_AND_C2 완료 시점에 수행한다.
+
+        # ─────────────────────────────────────
+        # 4. 논리 슬롯 → 기존 플래그 변환
+        # ─────────────────────────────────────
+        node._sync_slot_flags_locked()
+
+        current_flag = node.flags[flag_name]
+
+        if previous_flag != current_flag:
+            send_event = True
+
+            node.get_logger().info(
+                f'[Water {position}] '
+                f'{flag_name.upper()} 변경: '
+                f'{previous_flag} -> {current_flag}, '
+                f'slot_state={logical_slot["state"]}, '
+                f'wcnt={node.flags["wcnt"]}'
+            )
+
+    # 상태가 실제로 변했을 때만 SCARA와 STM2에 재배포
     if send_event:
         node._broadcast_all_flags()
 #수경재배실 카메라
