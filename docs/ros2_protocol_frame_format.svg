@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760">
+  <defs>
+    <style>
+      .bg { fill: #f7f9fb; }
+      .title { font: 700 34px "Malgun Gothic", "Segoe UI", Arial, sans-serif; fill: #17202a; }
+      .h1 { font: 700 23px "Malgun Gothic", "Segoe UI", Arial, sans-serif; fill: #17202a; }
+      .h2 { font: 700 18px "Malgun Gothic", "Segoe UI", Arial, sans-serif; fill: #17202a; }
+      .txt { font: 15px "Malgun Gothic", "Segoe UI", Arial, sans-serif; fill: #263442; }
+      .mono { font: 700 16px Consolas, "Malgun Gothic", monospace; fill: #17202a; }
+      .small { font: 13px "Malgun Gothic", "Segoe UI", Arial, sans-serif; fill: #445160; }
+      .box { stroke: #2f4050; stroke-width: 2; rx: 8; }
+      .b1 { fill: #d8ecff; }
+      .b2 { fill: #e8f7e8; }
+      .b3 { fill: #fff0c8; }
+      .b4 { fill: #fde5df; }
+      .b5 { fill: #ece8ff; }
+      .panel { fill: #ffffff; stroke: #c8d1dc; stroke-width: 2; rx: 10; }
+      .wire { stroke: #3c4c5c; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #7357c5; stroke-width: 3; fill: none; stroke-dasharray: 9 6; marker-end: url(#arrowPurple); }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#3c4c5c"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#7357c5"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1400" height="760"/>
+  <text class="title" x="60" y="60">ROS2 UART Protocol Frame Format</text>
+  <text class="txt" x="60" y="92">master_node.py의 make_frame()과 STM comm.c가 공유하는 바이너리 프레임이다. ROS2 Topic payload는 UInt8MultiArray로 이 바이트 배열을 담는다.</text>
+
+  <rect class="panel" x="55" y="125" width="1290" height="245"/>
+  <text class="h1" x="85" y="165">Base Frame</text>
+  <rect class="box b1" x="110" y="205" width="170" height="90"/>
+  <text class="mono" x="160" y="240">SOF</text>
+  <text class="mono" x="150" y="270">0xAA</text>
+  <rect class="box b2" x="280" y="205" width="190" height="90"/>
+  <text class="mono" x="360" y="240">ID</text>
+  <text class="small" x="314" y="270">PID_SSF, PID_CRF...</text>
+  <rect class="box b3" x="470" y="205" width="170" height="90"/>
+  <text class="mono" x="535" y="240">LEN</text>
+  <text class="small" x="515" y="270">data bytes</text>
+  <rect class="box b4" x="640" y="205" width="410" height="90"/>
+  <text class="mono" x="810" y="240">DATA</text>
+  <text class="small" x="742" y="270">0, 1, 2... LEN bytes</text>
+  <rect class="box b5" x="1050" y="205" width="190" height="90"/>
+  <text class="mono" x="1125" y="240">CHK</text>
+  <text class="small" x="1080" y="270">(ID + LEN + DATA) &amp; 0xFF</text>
+  <path class="dash" d="M190 320 L1145 320"/>
+  <text class="mono" x="480" y="345">총 길이 = 4 + LEN bytes</text>
+
+  <rect class="panel" x="55" y="400" width="610" height="275"/>
+  <text class="h1" x="85" y="440">Example 1: C1F=1 command to STM1</text>
+  <text class="txt" x="85" y="475">PC master_node → /pi1/uart_cmd → Pi1 → STM1</text>
+  <text class="mono" x="85" y="515">PID_C1F = 0x0E, DATA = [0x01]</text>
+  <rect class="box b1" x="85" y="545" width="88" height="58"/><text class="mono" x="110" y="582">AA</text>
+  <rect class="box b2" x="173" y="545" width="88" height="58"/><text class="mono" x="198" y="582">0E</text>
+  <rect class="box b3" x="261" y="545" width="88" height="58"/><text class="mono" x="286" y="582">01</text>
+  <rect class="box b4" x="349" y="545" width="88" height="58"/><text class="mono" x="374" y="582">01</text>
+  <rect class="box b5" x="437" y="545" width="88" height="58"/><text class="mono" x="462" y="582">10</text>
+  <text class="small" x="85" y="635">CHK = 0x0E + 0x01 + 0x01 = 0x10</text>
+
+  <rect class="panel" x="735" y="400" width="610" height="275"/>
+  <text class="h1" x="765" y="440">Example 2: Pi2 target routing</text>
+  <text class="txt" x="765" y="475">/pi2/uart_cmd는 앞에 target byte를 붙여 장치를 선택한다.</text>
+  <rect class="box b2" x="765" y="515" width="150" height="64"/>
+  <text class="mono" x="805" y="552">0x01</text>
+  <text class="small" x="785" y="574">SCARA</text>
+  <rect class="box b4" x="915" y="515" width="320" height="64"/>
+  <text class="mono" x="970" y="552">AA 01 01 01 03</text>
+  <text class="small" x="985" y="574">inner UART frame</text>
+  <path class="wire" d="M840 600 C910 640, 1030 640, 1110 600"/>
+  <text class="small" x="900" y="662">Pi2 strips target byte, writes payload to selected serial port.</text>
+  <text class="txt" x="765" y="705">STM2 fallback: payload starting with SOF(0xAA) can be sent without target byte.</text>
+</svg>
