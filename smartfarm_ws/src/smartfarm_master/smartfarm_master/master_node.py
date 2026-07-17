@@ -798,6 +798,174 @@ class MasterNode(Node):
 
         return True
 
+    def _complete_scara_job_locked(
+        self,
+        reported_job_type: int,
+        reported_job_id: int,
+    ):
+        """
+        SCARA 완료 응답을 현재 active 작업과 비교하고
+        논리 슬롯 상태를 최종 확정한다.
+
+        반드시 state_lock을 잡은 상태에서 호출한다.
+        """
+
+        job = self.active_scara_job
+
+        # 현재 실행 중인 작업 자체가 없음
+        if job is None:
+            self.get_logger().warn(
+                f'실행 중 작업 없이 SCARA 완료 수신: '
+                f'type={reported_job_type}, '
+                f'job_id={reported_job_id}'
+            )
+            return None
+
+        # 이전 작업의 늦은 응답 또는 잘못된 응답 차단
+        if (
+            job['job_id'] != reported_job_id
+            or job['type'] != reported_job_type
+        ):
+            self.get_logger().warn(
+                f'SCARA 완료 작업 불일치: '
+                f'active_type={job["type"]}, '
+                f'active_job_id={job["job_id"]}, '
+                f'reported_type={reported_job_type}, '
+                f'reported_job_id={reported_job_id}'
+            )
+            return None
+
+        job_type = job['type']
+        source = job['source']
+        destination = job['destination']
+        job_id = job['job_id']
+
+        # ─────────────────────────────────────
+        # 1. 1번 컨베이어 → 발아실
+        # ─────────────────────────────────────
+        if job_type == JOB_C1_TO_NURSERY:
+            if destination not in self.nursery_slots:
+                self.get_logger().error(
+                    f'C1_TO_NURSERY 목적 슬롯 오류: '
+                    f'{destination}'
+                )
+                return None
+
+            destination_slot = self.nursery_slots[destination]
+
+            if destination_slot['job_id'] != job_id:
+                self.get_logger().error(
+                    f'발아실 예약 job_id 불일치: '
+                    f'slot={destination}, '
+                    f'slot_job_id={destination_slot["job_id"]}, '
+                    f'done_job_id={job_id}'
+                )
+                return None
+
+            # SCARA가 실제로 트레이를 내려놓았으므로 점유 확정
+            destination_slot['state'] = SLOT_OCCUPIED
+            destination_slot['job_id'] = None
+
+            self.seed_target_slot = None
+
+            self.flags['ssf'] = 0
+            self.flags['crf'] = 0
+
+        # ─────────────────────────────────────
+        # 2. 발아실 → 수경재배실
+        # ─────────────────────────────────────
+        elif job_type == JOB_NURSERY_TO_WATER:
+            if (
+                source not in self.nursery_slots
+                or destination not in self.water_slots
+            ):
+                self.get_logger().error(
+                    f'NURSERY_TO_WATER 슬롯 오류: '
+                    f'source={source}, '
+                    f'destination={destination}'
+                )
+                return None
+
+            nursery_source = self.nursery_slots[source]
+            water_destination = self.water_slots[destination]
+
+            if (
+                nursery_source['job_id'] != job_id
+                or water_destination['job_id'] != job_id
+            ):
+                self.get_logger().error(
+                    f'NURSERY_TO_WATER 예약 job_id 불일치: '
+                    f'job_id={job_id}, '
+                    f'nursery_job_id={nursery_source["job_id"]}, '
+                    f'water_job_id={water_destination["job_id"]}'
+                )
+                return None
+
+            # 발아실에서는 빠졌으므로 EMPTY
+            nursery_source['state'] = SLOT_EMPTY
+            nursery_source['job_id'] = None
+
+            # 수경실은 트레이 감지가 불가능하므로
+            # SCARA 완료 응답으로 논리 점유를 확정
+            water_destination['state'] = SLOT_GROWING
+            water_destination['job_id'] = None
+
+        # ─────────────────────────────────────
+        # 3. 수경실 → 진동부 → 2번 컨베이어
+        # ─────────────────────────────────────
+        elif job_type == JOB_WATER_TO_VIB_AND_C2:
+            if source not in self.water_slots:
+                self.get_logger().error(
+                    f'WATER_TO_C2 출발 슬롯 오류: {source}'
+                )
+                return None
+
+            water_source = self.water_slots[source]
+
+            if water_source['job_id'] != job_id:
+                self.get_logger().error(
+                    f'수경실 예약 job_id 불일치: '
+                    f'slot={source}, '
+                    f'slot_job_id={water_source["job_id"]}, '
+                    f'done_job_id={job_id}'
+                )
+                return None
+
+            # SCARA가 2번 컨베이어에 놓았으므로
+            # 수경실 논리 슬롯은 비워준다.
+            water_source['state'] = SLOT_EMPTY
+            water_source['job_id'] = None
+
+            # 이제 STM2 사이클을 시작할 수 있다.
+            self.flags['ff'] = 1
+
+        else:
+            self.get_logger().error(
+                f'지원하지 않는 SCARA 완료 작업: '
+                f'type={job_type}, job_id={job_id}'
+            )
+            return None
+
+        # 공통 완료 처리
+        self.active_scara_job = None
+        self.flags['smf'] = 0
+
+        # UV/WCNT/ULF/URF/WLF/WRF 재계산
+        self._sync_slot_flags_locked()
+
+        self.get_logger().info(
+            f'SCARA 작업 상태 확정: '
+            f'type={job_type}, '
+            f'job_id={job_id}, '
+            f'source={source}, '
+            f'destination={destination}, '
+            f'uv={self.flags["uv"]}, '
+            f'wcnt={self.flags["wcnt"]}, '
+            f'ff={self.flags["ff"]}'
+        )
+
+        return job.copy()
+
     # 플래그 공유 및 재배포
     def _broadcast_flags_to_scara(self):
         self._send_scara(make_flag_u8(PID_SSF, self.flags['ssf']))
@@ -952,40 +1120,145 @@ class MasterNode(Node):
                         self.get_logger().info(f'스카라 플래그 동기화: {k}={v}')
             return
         
+        # ─────────────────────────────────────
+        # SCARA 작업 완료
+        # 형식: SCARA:PC:DONE:job_type:job_id
+        # ─────────────────────────────────────
+        if line.startswith('SCARA:PC:DONE:'):
+            parts = line.split(':')
+
+            if len(parts) != 5:
+                self.get_logger().error(
+                    f'잘못된 SCARA DONE 형식: {line}'
+                )
+                return
+
+            try:
+                reported_job_type = int(parts[3])
+                reported_job_id = int(parts[4])
+            except ValueError:
+                self.get_logger().error(
+                    f'SCARA DONE 숫자 변환 실패: {line}'
+                )
+                return
+
+            with self.state_lock:
+                completed_job = self._complete_scara_job_locked(
+                    reported_job_type,
+                    reported_job_id,
+                )
+
+                if completed_job is None:
+                    return
+
+                # 완료 결과를 기존 호환 플래그로 재전송
+                self._broadcast_all_flags()
+
+            # 1번 컨베이어 트레이를 SCARA가 가져갔으므로
+            # STM1에도 CRF=0을 직접 전달
+            if completed_job['type'] == JOB_C1_TO_NURSERY:
+                self._send_binary(
+                    make_flag_u8(PID_CRF, 0)
+                )
+
+            self.get_logger().info(
+                f'SCARA DONE 처리 완료: '
+                f'type={reported_job_type}, '
+                f'job_id={reported_job_id}'
+            )
+            return
+
+        # ─────────────────────────────────────
+        # SCARA 작업 오류
+        # 형식: SCARA:PC:ERR:job_type:job_id:error_code
+        # ─────────────────────────────────────
+        if line.startswith('SCARA:PC:ERR:'):
+            parts = line.split(':')
+
+            if len(parts) != 6:
+                self.get_logger().error(
+                    f'잘못된 SCARA ERR 형식: {line}'
+                )
+                return
+
+            try:
+                reported_job_type = int(parts[3])
+                reported_job_id = int(parts[4])
+                error_code = int(parts[5])
+            except ValueError:
+                self.get_logger().error(
+                    f'SCARA ERR 숫자 변환 실패: {line}'
+                )
+                return
+
+            with self.state_lock:
+                job = self.active_scara_job
+
+                if (
+                    job is None
+                    or job['type'] != reported_job_type
+                    or job['job_id'] != reported_job_id
+                ):
+                    self.get_logger().warn(
+                        f'현재 작업과 일치하지 않는 SCARA ERR: {line}'
+                    )
+                    return
+
+                # 실패 시 실제 트레이 위치를 확신할 수 없으므로
+                # 슬롯 예약 상태는 자동으로 변경하지 않는다.
+                self.active_scara_job = None
+                self.flags['smf'] = 0
+                self.flags['ssf'] = 0
+                self.flags['crf'] = 0
+
+                # 추가 자동 작업을 막는다.
+                self.emergency = True
+                self.device_estop['scara'] = True
+
+            self._send_estop_stm1_scara()
+
+            self.get_logger().error(
+                f'SCARA 작업 실패: '
+                f'type={reported_job_type}, '
+                f'job_id={reported_job_id}, '
+                f'error_code={error_code}'
+            )
+            return
+
         with self.state_lock:
             # ── 스카라 작업 완료 이벤트 ─────────────────────
-            if line == 'SCARA:PC:EVENT:PUT_TO_UV_DONE':
-                self._set_flag('smf', 0)
-                self._set_flag('ssf', 0)
-                self._set_flag('crf', 0)
+            # if line == 'SCARA:PC:EVENT:PUT_TO_UV_DONE':
+            #     self._set_flag('smf', 0)
+            #     self._set_flag('ssf', 0)
+            #     self._set_flag('crf', 0)
 
                 
-                self._broadcast_all_flags()
-                self.get_logger().info(
-                    f'SCARA UV 적재 완료 → uv={self.flags["uv"]}, smf=0, ssf=0, crf=0'
-                )
-                return
+            #     self._broadcast_all_flags()
+            #     self.get_logger().info(
+            #         f'SCARA UV 적재 완료 → uv={self.flags["uv"]}, smf=0, ssf=0, crf=0'
+            #     )
+            #     return
 
-            if line == 'SCARA:PC:EVENT:MOVE_UV_TO_WATER_DONE':
-                self._set_flag('smf', 0)
+            # if line == 'SCARA:PC:EVENT:MOVE_UV_TO_WATER_DONE':
+            #     self._set_flag('smf', 0)
                 
-                self._inc_flag('wcnt', +1, 0, 2)
-                self._broadcast_all_flags()
-                self.get_logger().info(
-                    f'SCARA 수경 이동 완료 → uv는 카메라 기준 유지, '
-                    f'wcnt={self.flags["wcnt"]}, smf=0'
-                )
-                return
+            #     self._inc_flag('wcnt', +1, 0, 2)
+            #     self._broadcast_all_flags()
+            #     self.get_logger().info(
+            #         f'SCARA 수경 이동 완료 → uv는 카메라 기준 유지, '
+            #         f'wcnt={self.flags["wcnt"]}, smf=0'
+            #     )
+            #     return
 
-            if line == 'SCARA:PC:EVENT:MOVE_WATER_TO_CONVEY2_DONE':
-                self._set_flag('smf', 0)
-                self._inc_flag('wcnt', -1, 0, 2)
-                self._set_flag('ff', 1)
-                self._broadcast_all_flags()
-                self.get_logger().info(
-                    f'SCARA 2번 컨베이어 적재 완료 → wcnt={self.flags["wcnt"]}, ff=1, smf=0'
-                )
-                return
+            # if line == 'SCARA:PC:EVENT:MOVE_WATER_TO_CONVEY2_DONE':
+            #     self._set_flag('smf', 0)
+            #     self._inc_flag('wcnt', -1, 0, 2)
+            #     self._set_flag('ff', 1)
+            #     self._broadcast_all_flags()
+            #     self.get_logger().info(
+            #         f'SCARA 2번 컨베이어 적재 완료 → wcnt={self.flags["wcnt"]}, ff=1, smf=0'
+            #     )
+            #     return
             if line == 'SCARA:PC:EVENT:HARVEST_DONE':  # 스카라 프로토콜에 맞게 조정
                 self._set_flag('ff', 0)
                 self._send_stm2(make_flag_u8(PID_FF, 0))

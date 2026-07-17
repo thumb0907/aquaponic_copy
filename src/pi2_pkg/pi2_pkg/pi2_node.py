@@ -354,6 +354,37 @@ class Pi2Node(Node):
             val      = data[0] if data else 0
             msg.data = f'SCARA:PC:STATE:{SCARA_STATE_STR.get(val, f"UNKNOWN_{val:02X}")}'
 
+        elif pid == PID_DONE:
+            if len(data) >= 2:
+                job_type = data[0]
+                job_id = data[1]
+
+                msg.data = (
+                    f'SCARA:PC:DONE:'
+                    f'{job_type}:{job_id}'
+                )
+            else:
+                msg.data = (
+                    f'SCARA:PC:MALFORMED:DONE:'
+                    f'{data.hex()}'
+                )
+
+        elif pid == PID_ERR:
+            if len(data) >= 3:
+                job_type = data[0]
+                job_id = data[1]
+                error_code = data[2]
+
+                msg.data = (
+                    f'SCARA:PC:ERR:'
+                    f'{job_type}:{job_id}:{error_code}'
+                )
+            else:
+                msg.data = (
+                    f'SCARA:PC:MALFORMED:ERR:'
+                    f'{data.hex()}'
+                )
+
         elif pid in PID_NAME:
             name = PID_NAME[pid]
             # UV는 sendU16()으로 2바이트 전송됨
