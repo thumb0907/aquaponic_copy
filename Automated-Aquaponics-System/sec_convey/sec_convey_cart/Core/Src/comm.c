@@ -52,21 +52,42 @@ static void send_frame(uint8_t id, uint8_t len, const uint8_t *data)
 /* ── 수신 프레임 처리 ─────────────────────── */
 static void process_frame(uint8_t id, uint8_t len, uint8_t *data)
 {
-    if (len == 0) return;
-
     switch (id) {
+        /*
+         * FF와 HF는 DATA 1바이트가 반드시 필요하다.
+         * 길이가 잘못된 프레임에서는 data[0]을 읽지 않는다.
+         */
         case PID_FF:
-            g_ff = data[0];          // 0 또는 1 그대로 저장
+            if (len == 1) {
+                g_ff = data[0];
+            }
             break;
+
         case PID_HF:
-            if (data[0] == 1) g_hf = true;
+            if (len == 1 && data[0] == 1) {
+                g_hf = true;
+            }
             break;
+
+        /*
+         * ESTOP과 RESET은 기존 프로토콜대로
+         * DATA가 없는 길이 0 프레임이다.
+         *
+         * ESTOP: AA 10 00 10
+         * RESET: AA 11 00 11
+         */
         case PID_ESTOP:
-            g_estop = true;
+            if (len == 0) {
+                g_estop = true;
+            }
             break;
+
         case PID_RESET:
-            g_reset = true;          // Do_Reset()에서 클리어
+            if (len == 0) {
+                g_reset = true;
+            }
             break;
+
         default:
             break;
     }
@@ -94,9 +115,24 @@ void Comm_Rasp_RxCallback(void)
             break;
 
         case RX_WAIT_LEN:
-            g_rx_len   = b;
-            g_rx_idx   = 0;
-            g_rx_state = (g_rx_len == 0) ? RX_WAIT_CHK : RX_WAIT_DATA;
+            g_rx_len = b;
+            g_rx_idx = 0;
+
+            /*
+             * 수신 길이가 버퍼보다 크면 즉시 프레임을 폐기한다.
+             *
+             * 이 검사가 없으면 g_rx_idx는 최대 16에서 멈추고
+             * g_rx_len이 17 이상일 때 RX_WAIT_CHK로 넘어가지 못한다.
+             */
+            if (g_rx_len > COMM_MAX_DATA_LEN) {
+                g_rx_state = RX_WAIT_SOF;
+            }
+            else if (g_rx_len == 0) {
+                g_rx_state = RX_WAIT_CHK;
+            }
+            else {
+                g_rx_state = RX_WAIT_DATA;
+            }
             break;
 
         case RX_WAIT_DATA:
