@@ -91,6 +91,8 @@ MIN_BOX_RATIO = 0.25
 CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
 NURSERY_LEFT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_left_calib.npz'
 NURSERY_RIGHT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/uv_right_calib.npz'
+WATER_LEFT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
+WATER_RIGHT_CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
 
 # 발아실 카메라 / 모델 (pi1)
 NURSERY_TRAY_MODEL_PATH = '/home/thumb/aquaponic_copy/tray2/sprout_tray_best.pt'
@@ -100,7 +102,8 @@ NURSERY_RIGHT_STREAM_PORT = 5002
 
 #NURSERY_MIN_CONF = 0.2     # YOLO conf 최소값, 이게 트레이일 확률이 20%이상이어야 박스를 그림
 NURSERY_TRAY_CONF = 0.35
-# 초록색 새싹
+
+# 초록색 새싹 (hsv)
 NURSERY_LOWER_GREEN = np.array([35, 60, 70], dtype=np.uint8)
 NURSERY_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
 
@@ -109,7 +112,7 @@ NURSERY_LOWER_YELLOW = np.array([20, 55, 110], dtype=np.uint8)
 NURSERY_UPPER_YELLOW = np.array([42, 220, 255], dtype=np.uint8)
 
 # 새싹으로 인정할 최소/최대 면적
-NURSERY_MIN_SPROUT_AREA = 35
+NURSERY_MIN_SPROUT_AREA = 15
 NURSERY_MAX_SPROUT_AREA = 20000
 
 # 작은 노이즈 제거용
@@ -176,6 +179,32 @@ PID_ESTOP = 0x10
 PID_RESET = 0x11
 PID_HMF   = 0x12
 
+#로봇 작업 PID, 작업 종류, 슬롯 코드
+PID_ROBOT_JOB = 0x13
+
+JOB_C1_TO_NURSERY = 0x01
+JOB_NURSERY_TO_WATER = 0x02
+JOB_WATER_TO_VIB_AND_C2 = 0x03
+JOB_HOME = 0x04
+JOB_HARVEST = 0x05
+
+SLOT_NONE = 0x00
+SLOT_LEFT = 0x01
+SLOT_RIGHT = 0x02
+
+SLOT_CODE = {
+    None: SLOT_NONE,
+    'left': SLOT_LEFT,
+    'right': SLOT_RIGHT,
+}
+
+SLOT_UNKNOWN = 'unknown'
+SLOT_EMPTY = 'empty'
+SLOT_RESERVED_IN = 'reserved_in'
+SLOT_OCCUPIED = 'occupied'
+SLOT_GROWING = 'growing'
+SLOT_READY = 'ready'
+SLOT_RESERVED_OUT = 'reserved_out'
 
 def make_frame(pid: int, data: bytes = b'') -> list:
     """바이너리 프레임 생성 [SOF, ID, LEN, DATA..., CHK]"""
@@ -209,10 +238,11 @@ class MasterNode(Node):
     def __init__(self):
         super().__init__('master_node')
         
-        self.state_lock = threading.Lock()
+        self.state_lock = threading.RLock()
         self.yolo_lock = threading.Lock()
 
         self.yolo_device = 0 if torch.cuda.is_available() else 'cpu'
+        self.create_timer(0.1, self._schedule_scara_jobs)
 
         print('[Torch check]')
         print('torch cuda available:', torch.cuda.is_available())
@@ -240,6 +270,40 @@ class MasterNode(Node):
             'hmf':  0,
         }
 
+        self.nursery_slots = {
+            'left': {
+                'state': SLOT_UNKNOWN,
+                'job_id': None,
+            },
+            'right': {
+                'state': SLOT_UNKNOWN,
+                'job_id': None,
+            },
+        }
+
+        self.water_slots = {
+            'left': {
+                'state': SLOT_UNKNOWN,
+                'job_id': None,
+            },
+            'right': {
+                'state': SLOT_UNKNOWN,
+                'job_id': None,
+            },
+        }
+        # 첫 컨베이어 파종 트레이가 들어갈 예약 위치
+        self.seed_target_slot = None
+        # 스카라 작업 관리
+        self.pending_scara_jobs = []
+        self.active_scara_job = None
+        self.next_scara_job_id = 1
+        # 매니퓰레이터 작업 관리
+        self.active_manip_job = None
+        self.next_manip_job_id = 1
+        # 발표 데모 진행 상태
+        self.demo_mode = True
+        self.demo_phase = 'WAIT_FIRST_TRAY'
+        
         # ── STM1 상태 ─────────────────────────
         self.start_flag      = False
         self.stm_state       = 'idle'
@@ -401,7 +465,147 @@ class MasterNode(Node):
             v = max_v
 
         self.flags[name] = v
-    
+    #호환 플래그를 다시 계산하는 함수
+    def _sync_slot_flags_locked(self):
+        occupied_states = {
+            SLOT_RESERVED_IN,
+            SLOT_OCCUPIED,
+            SLOT_GROWING,
+            SLOT_READY,
+            SLOT_RESERVED_OUT,
+        }
+
+        self.flags['uv'] = sum(
+            1
+            for slot in self.nursery_slots.values()
+            if slot['state'] in occupied_states
+        )
+
+        self.flags['wcnt'] = sum(
+            1
+            for slot in self.water_slots.values()
+            if slot['state'] in occupied_states
+        )
+
+        self.flags['ulf'] = int(
+            self.nursery_slots['left']['state'] == SLOT_READY
+        )
+        self.flags['urf'] = int(
+            self.nursery_slots['right']['state'] == SLOT_READY
+        )
+
+        self.flags['wlf'] = int(
+            self.water_slots['left']['state'] == SLOT_READY
+        )
+        self.flags['wrf'] = int(
+            self.water_slots['right']['state'] == SLOT_READY
+        )
+    # 빈 슬롯 선택 함수 
+    def _find_empty_slot_locked(self, room_name: str):
+        slots = (
+            self.nursery_slots
+            if room_name == 'nursery'
+            else self.water_slots
+        )
+
+        if slots['left']['state'] == SLOT_EMPTY:
+            return 'left'
+
+        if slots['right']['state'] == SLOT_EMPTY:
+            return 'right'
+
+        return None
+    #작업 프레임 생성 함수
+    def _make_scara_job_frame(self, job):
+        data = bytes([
+            job['type'],
+            SLOT_CODE[job['source']],
+            SLOT_CODE[job['destination']],
+            job['job_id'],
+        ])
+
+        return make_frame(PID_ROBOT_JOB, data)
+    # 스케줄러 함수
+    def _schedule_scara_jobs(self):
+        frame_to_send = None
+
+        with self.state_lock:
+            if self.emergency:
+                return
+
+            if not self.pi2_alive:
+                return
+
+            if self.active_scara_job is not None:
+                return
+
+            if not self.pending_scara_jobs:
+                self._create_automatic_transfer_job_locked()
+
+            if not self.pending_scara_jobs:
+                return
+
+            job = self.pending_scara_jobs.pop(0)
+
+            self.active_scara_job = job
+            self.flags['smf'] = 1
+
+            if job['type'] == JOB_C1_TO_NURSERY:
+                self.flags['ssf'] = 1
+                self.flags['crf'] = 1
+
+            job['sent_at'] = time.time()
+            frame_to_send = self._make_scara_job_frame(job)
+
+        if frame_to_send is not None:
+            self._send_scara(frame_to_send)
+
+            if job['type'] == JOB_C1_TO_NURSERY:
+                self._send_binary(
+                    make_flag_u8(PID_CRF, 1)
+                )
+
+            self.get_logger().info(
+                f'SCARA 작업 전송: {job}'
+            )
+    # 자동 작업 선택 함수
+    def _create_automatic_transfer_job_locked(self):
+        # 1. 수경실 READY 트레이 수확 경로
+        water_source = self._find_ready_slot_locked('water')
+
+        if (
+            water_source is not None
+            and self.stm2_state == 'idle'
+        ):
+            self._queue_water_to_c2_locked(water_source)
+            return
+
+        # 2. 발아실 READY 트레이를 수경실로 이동
+        nursery_source = self._find_ready_slot_locked('nursery')
+        water_destination = self._find_empty_slot_locked('water')
+
+        if (
+            nursery_source is not None
+            and water_destination is not None
+        ):
+            self._queue_nursery_to_water_locked(
+                nursery_source,
+                water_destination,
+            )
+    def _find_ready_slot_locked(self, room_name):
+        slots = (
+            self.nursery_slots
+            if room_name == 'nursery'
+            else self.water_slots
+        )
+
+        if slots['left']['state'] == SLOT_READY:
+            return 'left'
+
+        if slots['right']['state'] == SLOT_READY:
+            return 'right'
+
+        return None
     # 플래그 공유 및 재배포
     def _broadcast_flags_to_scara(self):
         self._send_scara(make_flag_u8(PID_SSF, self.flags['ssf']))
@@ -432,6 +636,15 @@ class MasterNode(Node):
     # ══════════════════════════════════════════
     # STM1 상태 수신
     # ══════════════════════════════════════════
+    # 작업 ID 생성 함수
+    def _next_scara_job_id_locked(self):
+        job_id = self.next_scara_job_id
+
+        self.next_scara_job_id += 1
+        if self.next_scara_job_id > 255:
+            self.next_scara_job_id = 1
+
+        return job_id
     def _on_uart1(self, msg: String):
         line = msg.data.strip()
         self.get_logger().info(f'[STM1] {line}')
@@ -477,25 +690,33 @@ class MasterNode(Node):
                 self.start_flag = False
                 self.get_logger().warn('[STM1] ESTOP')
             elif line == 'STM1:PC:DONE:CYCLE1':
-                self.stm_state = 'waiting_scara'
+                target_slot = self.seed_target_slot
 
-                # 스카라 유휴 + UV실 자리가 있을 때만 시작 허용
-                if self.flags['smf'] == 0 and self.flags['uv'] < 2:
-                    self._set_flag('ssf', 1)
-                    self._set_flag('crf', 1)
+                if target_slot is None:
+                    self.get_logger().error(
+                        '파종 완료됐지만 예약된 발아실 슬롯이 없음'
+                    )
+                    self.stm_state = 'error'
+                    return
 
-                    # 스카라 시작 지시
-                    self._send_scara(make_flag_u8(PID_SSF, 1))
-                    self._send_scara(make_flag_u8(PID_CRF, 1))
-                    self._send_binary(make_flag_u8(PID_CRF, 1))
-                    
-                    self.get_logger().info(
-                        f'파종 완료 → SSF=1, CRF=1 승인 (smf={self.flags["smf"]}, uv={self.flags["uv"]})'
-                    )
-                else:
-                    self.get_logger().warn(
-                        f'파종 완료지만 스카라 busy 또는 UV full: smf={self.flags["smf"]}, uv={self.flags["uv"]}'
-                    )
+                job_id = self._next_scara_job_id_locked()
+
+                job = {
+                    'job_id': job_id,
+                    'type': JOB_C1_TO_NURSERY,
+                    'source': None,
+                    'destination': target_slot,
+                    'sent_at': 0.0,
+                    'retry_count': 0,
+                }
+
+                self.nursery_slots[target_slot]['job_id'] = job_id
+                self.pending_scara_jobs.append(job)
+
+                self.get_logger().info(
+                    f'C1_TO_NURSERY 작업 대기: '
+                    f'job_id={job_id}, destination={target_slot}'
+                )
             elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
                 self.start_flag = False
@@ -821,6 +1042,42 @@ class MasterNode(Node):
             self._send_reset_scara()
             self.get_logger().info('RESET_SCARA')
             return
+        # 데모용 초기화 명령
+        elif cmd == 'DEMO_RESET':
+            with self.state_lock:
+                if self.active_scara_job is not None:
+                    self.get_logger().warn(
+                        'SCARA 작업 중에는 DEMO_RESET 불가'
+                    )
+                    return
+
+                self.pending_scara_jobs.clear()
+                self.active_scara_job = None
+                self.active_manip_job = None
+                self.seed_target_slot = None
+
+                for slot in self.nursery_slots.values():
+                    slot['state'] = SLOT_EMPTY
+                    slot['job_id'] = None
+
+                for slot in self.water_slots.values():
+                    slot['state'] = SLOT_EMPTY
+                    slot['job_id'] = None
+
+                self.demo_phase = 'WAIT_FIRST_TRAY'
+
+                self.flags['ssf'] = 0
+                self.flags['smf'] = 0
+                self.flags['crf'] = 0
+                self.flags['ff'] = 0
+                self.flags['hf'] = 0
+
+                self._sync_slot_flags_locked()
+
+            self.get_logger().info(
+                'DEMO_RESET 완료: 실제 설비도 비어 있는지 확인 필요'
+            )
+            return
 
         else:
             self.get_logger().warn(f'알 수 없는 명령: {cmd}')
@@ -947,6 +1204,16 @@ class MasterNode(Node):
     # ══════════════════════════════════════════
     def _publish_monitor(self):
         with self.state_lock:
+            active_scara_job_id = (
+                self.active_scara_job['job_id']
+                if self.active_scara_job is not None
+                else 0
+            )
+            active_manip_job_id = (
+                self.active_manip_job['job_id']
+                if self.active_manip_job is not None
+                else 0
+            )
             status = (
                 f'start_flag:{self.start_flag},'
                 f'stm_state:{self.stm_state},'
@@ -967,6 +1234,14 @@ class MasterNode(Node):
                 f'nursery_right_label:{self.nursery_state["right"]["last_label"]},'
                 f'nursery_right_conf:{self.nursery_state["right"]["last_conf"]:.2f},'
                 f'nursery_right_stable:{self.nursery_state["right"]["stable_cnt"]}'
+
+                f'nursery_left_slot:{self.nursery_slots["left"]["state"]},'
+                f'nursery_right_slot:{self.nursery_slots["right"]["state"]},'
+                f'water_left_slot:{self.water_slots["left"]["state"]},'
+                f'water_right_slot:{self.water_slots["right"]["state"]},'
+                f'active_scara_job:{active_scara_job_id},'
+                f'active_manip_job:{active_manip_job_id},'
+                f'demo_phase:{self.demo_phase}'
             )
             flags_str = ','.join(
                 f'{k}:{v}' for k, v in self.flags.items()
@@ -1008,6 +1283,7 @@ def process_frame(node: MasterNode, frame: np.ndarray):
 
     disp     = frame.copy()
     send_now = False
+    reserved_slot = None
     now      = time.time()
 
     if best is None:
@@ -1052,29 +1328,65 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                     node.cam1_last_bbox_ts   = now
                     node.cam1_last_conf_hold = conf
 
-                    # 조건 충족 시 SSF=1 전송
+                                        # 트레이가 안정적으로 감지되면
+                    # 발아실 빈 슬롯을 먼저 예약한 후 C1F=1 전송
                     if (
-                        node.stable_cnt  >= STABLE_FRAMES
+                        node.stable_cnt >= STABLE_FRAMES
                         and not node.start_flag
+                        and node.seed_target_slot is None
                         and node.stm_state == 'idle'
                         and (now - node.last_tx) > COOLDOWN_SEC
                         and not node.emergency
                         and node.pi1_alive
                     ):
-                        node.start_flag   = True
-                        node.last_tx      = now
-                        node.stable_cnt   = 0
-                        node._set_flag('c1f', 1)
-                        send_now = True
+                        target_slot = node._find_empty_slot_locked(
+                            'nursery'
+                        )
+
+                        if target_slot is not None:
+                            # C1F를 보내기 전에 슬롯부터 예약한다.
+                            # 그래야 다음 카메라 프레임이 같은 슬롯을
+                            # 중복으로 선택하지 않는다.
+                            node.nursery_slots[target_slot]['state'] = (
+                                SLOT_RESERVED_IN
+                            )
+                            node.nursery_slots[target_slot]['job_id'] = None
+
+                            node.seed_target_slot = target_slot
+
+                            # RESERVED_IN도 UV 점유 개수에 포함
+                            node._sync_slot_flags_locked()
+
+                            node.start_flag = True
+                            node.last_tx = now
+                            node.stable_cnt = 0
+                            node._set_flag('c1f', 1)
+
+                            reserved_slot = target_slot
+                            send_now = True
+
+                        else:
+                            # 빈 슬롯이 없을 때 매 프레임마다 로그가
+                            # 출력되지 않도록 최초 임계점에서만 경고
+                            if node.stable_cnt == STABLE_FRAMES:
+                                node.get_logger().warn(
+                                    '트레이 감지됐지만 '
+                                    '발아실 예약 가능한 슬롯 없음'
+                                )
                 else:
                     node.stable_cnt   = 0
                     node.no_tray_cnt += 1
 
-    if send_now:
-        msg      = UInt8MultiArray()
-        msg.data = make_flag_u8(PID_C1F, 1)
-        node.pub_pi1.publish(msg)
-        node.get_logger().info('트레이 감지 → C1F=1 전송')
+        if send_now:
+            msg = UInt8MultiArray()
+            msg.data = make_flag_u8(PID_C1F, 1)
+            node.pub_pi1.publish(msg)
+
+            node.get_logger().info(
+                f'트레이 감지 → '
+                f'발아실 {reserved_slot} 예약 → '
+                f'C1F=1 전송'
+            )
 
     # ── 화면 오버레이 ─────────────────────────
     with node.state_lock:
@@ -1633,12 +1945,23 @@ def process_nursery_frame(
     flag_name = None
 
     # ─────────────────────────────────────────
-    # 7. 상태 및 플래그 처리
-    # ─────────────────────────────────────────
+# 7. 카메라 관측값과 논리 슬롯 상태 처리
+# ─────────────────────────────────────────
     with node.state_lock:
+        # 카메라 관측 상태
         st = node.nursery_state[position]
 
-        # 트레이 점유 판단
+        # 마스터가 관리하는 논리 슬롯 상태
+        logical_slot = node.nursery_slots[position]
+
+        previous_slot_state = logical_slot['state']
+        previous_uv = node.flags['uv']
+        previous_ulf = node.flags['ulf']
+        previous_urf = node.flags['urf']
+
+        # ─────────────────────────────────────
+        # 7-1. 트레이 카메라 관측 카운터
+        # ─────────────────────────────────────
         if tray_detected:
             st['tray_seen_cnt'] += 1
             st['tray_lost_cnt'] = 0
@@ -1646,23 +1969,49 @@ def process_nursery_frame(
             st['tray_lost_cnt'] += 1
             st['tray_seen_cnt'] = 0
 
+        # ─────────────────────────────────────
+        # 7-2. 트레이 점유 확정
+        # ─────────────────────────────────────
         if st['tray_seen_cnt'] >= TRAY_OCCUPY_FRAMES:
             st['occupied'] = 1
 
+            # 사람이 직접 트레이를 놓은 경우
+            # EMPTY/UNKNOWN에서 OCCUPIED로 등록
+            if logical_slot['state'] in (
+                SLOT_EMPTY,
+                SLOT_UNKNOWN,
+            ):
+                logical_slot['state'] = SLOT_OCCUPIED
+                logical_slot['job_id'] = None
+
+            # RESERVED_IN은 그대로 둔다.
+            # SCARA 완료 이벤트가 와야 OCCUPIED로 확정한다.
+
+        # ─────────────────────────────────────
+        # 7-3. 트레이 소실 확정
+        # ─────────────────────────────────────
         if st['tray_lost_cnt'] >= TRAY_LOST_FRAMES:
             st['occupied'] = 0
 
-            if position == 'left':
-                if node.flags['ulf'] != 0:
-                    node._set_flag('ulf', 0)
-                    send_event = True
-            else:
-                if node.flags['urf'] != 0:
-                    node._set_flag('urf', 0)
-                    send_event = True
+            # 일반 점유 트레이가 사라진 경우에만 EMPTY
+            if logical_slot['state'] in (
+                SLOT_OCCUPIED,
+                SLOT_READY,
+            ):
+                logical_slot['state'] = SLOT_EMPTY
+                logical_slot['job_id'] = None
 
+            # RESERVED_IN:
+            # 아직 SCARA가 트레이를 가져오는 중일 수 있으므로 유지
+            #
+            # RESERVED_OUT:
+            # SCARA가 트레이를 들고 이동 중일 수 있으므로 유지
+            #
+            # 두 상태 모두 카메라만 보고 EMPTY로 만들지 않는다.
 
-        # 발아 완료 판단
+        # ─────────────────────────────────────
+        # 7-4. 발아 진행 상태 표시
+        # ─────────────────────────────────────
         if tray_detected and sprout_done_detected:
             st['stable_cnt'] += 1
             st['last_label'] = 'sprout_done'
@@ -1683,7 +2032,9 @@ def process_nursery_frame(
                 st['last_label'] = 'sprout_growing'
                 st['last_conf'] = sprout_progress
 
-        # 안정 프레임 수 충족 시 ULF 또는 URF 설정
+        # ─────────────────────────────────────
+        # 7-5. 발아 완료 확정
+        # ─────────────────────────────────────
         if (
             st['stable_cnt'] >= NURSERY_STABLE_FRAMES
             and now - st['last_tx'] > NURSERY_COOLDOWN_SEC
@@ -1691,32 +2042,54 @@ def process_nursery_frame(
             st['last_tx'] = now
             st['stable_cnt'] = 0
 
-            if position == 'left':
-                if node.flags['ulf'] == 0:
-                    node._set_flag('ulf', 1)
-                    flag_name = 'ULF'
-                    send_event = True
-            else:
-                if node.flags['urf'] == 0:
-                    node._set_flag('urf', 1)
-                    flag_name = 'URF'
-                    send_event = True
+            # 트레이 감지 + 발아 완료를 모두 확인했으므로
+            # READY 상태로 변경
+            if logical_slot['state'] in (
+                SLOT_EMPTY,
+                SLOT_UNKNOWN,
+                SLOT_OCCUPIED,
+            ):
+                logical_slot['state'] = SLOT_READY
+                logical_slot['job_id'] = None
 
-        # 좌/우 점유 상태 합산
-        new_uv = (
-            int(node.nursery_state['left']['occupied'])
-            + int(node.nursery_state['right']['occupied'])
-        )
+            # RESERVED_IN은 SCARA 완료 전이므로 변경하지 않는다.
+            # RESERVED_OUT도 이동 중이므로 변경하지 않는다.
 
-        if node.flags['uv'] != new_uv:
-            node._set_flag('uv', new_uv)
-            send_event = True
+        # ─────────────────────────────────────
+        # 7-6. 논리 슬롯을 기존 플래그로 변환
+        # ─────────────────────────────────────
+        node._sync_slot_flags_locked()
 
-        stable = st['stable_cnt']
-        label = st['last_label']
-
+        new_uv = node.flags['uv']
         ulf_value = node.flags['ulf']
         urf_value = node.flags['urf']
+
+        # ─────────────────────────────────────
+        # 7-7. 외부 전송 필요 여부 판단
+        # ─────────────────────────────────────
+        uv_changed = previous_uv != new_uv
+        ulf_changed = previous_ulf != ulf_value
+        urf_changed = previous_urf != urf_value
+
+        if uv_changed or ulf_changed or urf_changed:
+            send_event = True
+
+        if ulf_changed and ulf_value == 1:
+            flag_name = 'ULF'
+
+        elif urf_changed and urf_value == 1:
+            flag_name = 'URF'
+
+        # ─────────────────────────────────────
+        # 7-8. 상태 변화 로그
+        # ─────────────────────────────────────
+        if previous_slot_state != logical_slot['state']:
+            node.get_logger().info(
+                f'[Nursery {position}] '
+                f'slot state: '
+                f'{previous_slot_state} '
+                f'-> {logical_slot["state"]}'
+            )
 
         if send_event:
             if flag_name is not None:
@@ -1729,29 +2102,15 @@ def process_nursery_frame(
             else:
                 node.get_logger().info(
                     f'[Nursery {position}] '
-                    f'UV changed -> uv={new_uv}'
+                    f'flag changed: '
+                    f'UV={new_uv}, '
+                    f'ULF={ulf_value}, '
+                    f'URF={urf_value}'
                 )
-    if send_event and NURSERY_SEND_FLAGS:
-        node._send_scara(
-            make_flag_u8(
-                PID_ULF,
-                ulf_value
-            )
-        )
 
-        node._send_scara(
-            make_flag_u8(
-                PID_URF,
-                urf_value
-            )
-        )
-
-        node._send_scara(
-            make_flag_u16(
-                PID_UV,
-                new_uv
-            )
-        )
+        stable = st['stable_cnt']
+        label = st['last_label']
+        slot_state = logical_slot['state']
 
     # ─────────────────────────────────────────
     # 8. 로그 출력
@@ -1763,7 +2122,8 @@ def process_nursery_frame(
         f'progress={sprout_progress:.2f}, '
         f'done={sprout_done_detected}, '
         f'stable={stable}, '
-        f'label={label}'
+        f'label={label}, '
+        f'slot={slot_state}'
     )
 
     # ─────────────────────────────────────────
@@ -1993,7 +2353,21 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     if send_event:
         node._broadcast_all_flags()
 #수경재배실 카메라
-def water_video_receive_loop(node: MasterNode, stream_port: int, position: str):
+def water_video_receive_loop(node: MasterNode, stream_port: int, position: str, calib_path: str | None = None):
+    K = None
+    dist = None
+    map1, map2 = None, None
+
+    if calib_path is not None:
+        try:
+            calib = np.load(calib_path)
+            K = calib['camera_matrix']
+            dist = calib['dist_coeffs']
+            print(f'[Water Calib {position}] 로드 완료: {calib_path}')
+        except Exception as e:
+            print(f'[Water Calib {position}] 로드 실패: {e}')
+            K = None
+            dist = None
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(('0.0.0.0', stream_port))
@@ -2046,6 +2420,19 @@ def water_video_receive_loop(node: MasterNode, stream_port: int, position: str):
 
                 if frame is None:
                     continue
+                
+                if K is not None and dist is not None:
+                    if map1 is None:
+                        h, w = frame.shape[:2]
+                        newK, _ = cv2.getOptimalNewCameraMatrix(
+                            K, dist, (w, h), 0, (w, h)
+                        )
+                        map1, map2 = cv2.initUndistortRectifyMap(
+                            K, dist, None, newK, (w, h), cv2.CV_16SC2
+                        )
+                        print(f'[Water Calib {position}] 왜곡 보정 맵 초기화 완료')
+
+                    frame = cv2.remap(frame, map1, map2, cv2.INTER_LINEAR)
 
                 cv2.putText(
                     frame,
@@ -2185,13 +2572,12 @@ def main(args=None):
     ).start()
     threading.Thread(
         target=water_video_receive_loop,
-        args=(node, WATER_LEFT_STREAM_PORT, 'left'),
+        args=(node, WATER_LEFT_STREAM_PORT, 'left', WATER_LEFT_CALIB_PATH),
         daemon=True
     ).start()
-
     threading.Thread(
         target=water_video_receive_loop,
-        args=(node, WATER_RIGHT_STREAM_PORT, 'right'),
+        args=(node, WATER_RIGHT_STREAM_PORT, 'right', WATER_RIGHT_CALIB_PATH),
         daemon=True
     ).start()
 

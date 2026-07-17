@@ -85,8 +85,8 @@ STM2_STATE_STR = {
     0x04: 'Z_FIX',
     0x05: 'HARVESTING',
     0x06: 'EJECTING',
-    0x07: 'ESTOP',
-    0x08: 'EJECT_DONE',
+    0x07: 'EJECT_DONE',
+    0x08: 'ESTOP',
 }
 # STM2 완료 코드 → 문자열 (master_node의 'CYCLE2' 비교와 반드시 일치해야 함)
 STM2_DONE_STR = {
