@@ -349,6 +349,18 @@ class MasterNode(Node):
         self.pi3_last_hb     = 0.0
         self.pi3_alive_prev  = False
 
+        # 외부 장치가 보고한 값은 Master 제어값과 분리한다.
+        # 실제 자동 제어에는 사용하지 않고 통신 확인용으로만 사용한다.
+        self.pi2_reported_flags = {
+            key: None
+            for key in self.flags
+        }
+
+        self.scara_reported_flags = {
+            key: None
+            for key in self.flags
+        }
+
         # 센서 캐시 — None이면 아직 수신 안 된 것, 모니터 publish에 포함
         self.sensor_cache: dict[str, float | None] = {
             'TDS':        None,   # TDS (ppm)
@@ -1355,21 +1367,85 @@ class MasterNode(Node):
 
         # 스카라가 CRF=0 전송 → STM1 초기화 트리거
         if line == 'SCARA:PC:FLAG:CRF:0':
-            self.get_logger().info('스카라 CRF=0 → STM1에 CRF=0 전달')
-            self._send_binary(make_flag_u8(PID_CRF, 0))
             with self.state_lock:
-                self._set_flag('crf', 0)
+                self.scara_reported_flags['crf'] = 0
+
+                active_job = self.active_scara_job
+
+                # 현재 C1 → 발아실 작업 중일 때만
+                # CRF=0을 유효한 보고로 인정한다.
+                accept_crf_zero = (
+                    active_job is not None
+                    and active_job['type']
+                    == JOB_C1_TO_NURSERY
+                )
+
+            if not accept_crf_zero:
+                self.get_logger().warn(
+                    f'현재 C1_TO_NURSERY 작업이 아닌데 '
+                    f'SCARA CRF=0 수신 — 제어에는 반영하지 않음, '
+                    f'active_job={active_job}'
+                )
+                return
+
+            self._send_binary(
+                make_flag_u8(PID_CRF, 0)
+            )
+
+            with self.state_lock:
+                self.flags['crf'] = 0
+
+            self.get_logger().info(
+                '유효한 SCARA CRF=0 '
+                '→ STM1에 CRF=0 전달'
+            )
             return
 
         if line.startswith('SCARA:PC:FLAG:'):
-            parts = line.split(':')   # ['SCARA','PC','FLAG','UV','2']
-            if len(parts) == 5:
-                k = parts[3].lower()  # 'uv', 'smf' 등
+            parts = line.split(':')
+
+            if len(parts) != 5:
+                self.get_logger().warn(
+                    f'잘못된 SCARA FLAG 형식: {line}'
+                )
+                return
+
+            k = parts[3].lower()
+
+            try:
                 v = int(parts[4])
-                with self.state_lock:
-                    if k in self.flags:
-                        self.flags[k] = v
-                        self.get_logger().info(f'스카라 플래그 동기화: {k}={v}')
+            except ValueError:
+                self.get_logger().warn(
+                    f'SCARA FLAG 숫자 변환 실패: {line}'
+                )
+                return
+
+            with self.state_lock:
+                if k not in self.flags:
+                    self.get_logger().warn(
+                        f'알 수 없는 SCARA 플래그: {k}'
+                    )
+                    return
+
+                # 보고값만 저장한다.
+                # self.flags는 절대 변경하지 않는다.
+                self.scara_reported_flags[k] = v
+
+                master_value = self.flags[k]
+
+            if master_value != v:
+                self.get_logger().warn(
+                    f'SCARA 플래그 보고 불일치: '
+                    f'{k}, '
+                    f'master={master_value}, '
+                    f'scara_report={v}'
+                )
+            else:
+                self.get_logger().debug(
+                    f'SCARA 플래그 보고 일치: '
+                    f'{k}={v}'
+                )
+
             return
         
         # ─────────────────────────────────────
@@ -1768,17 +1844,60 @@ class MasterNode(Node):
     # 작업 완료 이벤트(EVENT) 기반으로만 PC가 flags를 갱신하도록 정리할 것.
     # ══════════════════════════════════════════
     def _on_pi2_flag(self, msg: String):
-        """Pi2에서 오는 플래그 업데이트 — 형식: FLAG:SMF:1"""
-        line  = msg.data.strip()
+        """
+        Pi2 장치 플래그 보고 수신.
+
+        형식:
+            FLAG:SMF:1
+
+        이 값은 통신 확인용으로만 저장하며
+        Master의 self.flags를 직접 변경하지 않는다.
+        """
+
+        line = msg.data.strip()
         parts = line.split(':')
 
+        if len(parts) != 3 or parts[0] != 'FLAG':
+            self.get_logger().warn(
+                f'잘못된 Pi2 FLAG 형식: {line}'
+            )
+            return
+
+        k = parts[1].lower()
+
+        try:
+            v = int(parts[2])
+        except ValueError:
+            self.get_logger().warn(
+                f'Pi2 FLAG 숫자 변환 실패: {line}'
+            )
+            return
+
         with self.state_lock:
-            if len(parts) == 3 and parts[0] == 'FLAG':
-                k = parts[1].lower()
-                v = int(parts[2])
-                if k in self.flags:
-                    self.flags[k] = v
-                    self.get_logger().info(f'Pi2 플래그: {k}={v}')
+            if k not in self.flags:
+                self.get_logger().warn(
+                    f'알 수 없는 Pi2 플래그: {k}'
+                )
+                return
+
+            # 외부 보고값만 저장
+            self.pi2_reported_flags[k] = v
+
+            # Master 기준값은 읽기만 한다.
+            master_value = self.flags[k]
+
+        if master_value != v:
+            self.get_logger().warn(
+                f'Pi2 플래그 보고 불일치: '
+                f'{k}, '
+                f'master={master_value}, '
+                f'pi2_report={v}'
+            )
+        else:
+            self.get_logger().debug(
+                f'Pi2 플래그 보고 일치: '
+                f'{k}={v}'
+            )
 
     # ══════════════════════════════════════════
     # Heartbeat + 카메라 상태 판정
@@ -2159,6 +2278,17 @@ class MasterNode(Node):
             flags_str = ','.join(
                 f'{k}:{v}' for k, v in self.flags.items()
             )
+            pi2_reported_str = ','.join(
+                f'pi2_reported_{k}:{v}'
+                for k, v in self.pi2_reported_flags.items()
+                if v is not None
+            )
+
+            scara_reported_str = ','.join(
+                f'scara_reported_{k}:{v}'
+                for k, v in self.scara_reported_flags.items()
+                if v is not None
+            )
             # 수신된 센서값만 포함 (None은 제외)
             sensor_str = ','.join(
                 f'sensor_{k.lower()}:{v:.2f}'
@@ -2167,6 +2297,13 @@ class MasterNode(Node):
             )
         msg = String()
         parts = [status, flags_str]
+
+        if pi2_reported_str:
+            parts.append(pi2_reported_str)
+
+        if scara_reported_str:
+            parts.append(scara_reported_str)
+
         if sensor_str:
             parts.append(sensor_str)
         msg.data = ','.join(parts)
