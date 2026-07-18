@@ -628,6 +628,7 @@ class MasterNode(Node):
     # 스케줄러 함수
     def _schedule_scara_jobs(self):
         command_frame = None
+        selector_frame = None
         job = None
 
         with self.state_lock:
@@ -658,12 +659,37 @@ class MasterNode(Node):
                 self.flags['ssf'] = 1
                 self.flags['crf'] = 1
 
+                destination = job['destination']
+
+                # SCARA sect1 목적지 선택 규칙
+                # uv=1: 왼쪽 발아실
+                # uv=0: 오른쪽 발아실
+                if destination == 'left':
+                    scara_uv_selector = 1
+
+                elif destination == 'right':
+                    scara_uv_selector = 0
+
+                else:
+                    self.get_logger().error(
+                        f'잘못된 발아실 목적지: {destination}'
+                    )
+                    self.active_scara_job = None
+                    self.flags['smf'] = 0
+                    self.flags['ssf'] = 0
+                    self.flags['crf'] = 0
+                    return
+
+                selector_frame = make_flag_u16(
+                    PID_UV,
+                    scara_uv_selector,
+                )
+
                 command_frame = make_flag_u8(
                     PID_SSF,
                     1,
                 )
-
-            # 발아실 -> 생장실
+            # 발아실 -> 수경배재실
             elif job_type == JOB_NURSERY_TO_WATER:
                 self.flags['uef'] = 1
 
@@ -672,7 +698,7 @@ class MasterNode(Node):
                     1,
                 )
 
-            # 생장실 -> 진동부 -> 2번 컨베이어
+            # 수경재배실 -> 진동부 -> 2번 컨베이어
             elif job_type == JOB_WATER_TO_VIB_AND_C2:
                 self.flags['wef'] = 1
 
@@ -694,13 +720,16 @@ class MasterNode(Node):
         if command_frame is None:
             return
 
-        # SCARA가 UV, 좌우 슬롯 상태를 먼저 받게 함
+        # SCARA 참고 상태값 전송
         self._broadcast_flags_to_scara()
 
-        # 마지막에 동작 시작 플래그 전송
+        # sect1 작업이면 목적지 선택값을 먼저 전송
+        if selector_frame is not None:
+            self._send_scara(selector_frame)
+
+        # 반드시 목적지 선택값 다음에 동작 트리거 전송
         self._send_scara(command_frame)
 
-        # C1 트레이는 SCARA가 가져갈 예정이므로 STM1에 CRF=1
         if job['type'] == JOB_C1_TO_NURSERY:
             self._send_binary(
                 make_flag_u8(PID_CRF, 1)
@@ -1246,11 +1275,11 @@ class MasterNode(Node):
     def _broadcast_flags_to_scara(self):
     # SCARA가 참고하는 상태값만 방송한다.
     # SSF/CRF/UEF/WEF/HMF는 동작 트리거이므로 여기서 보내지 않는다.
+        # self._send_scara(
+        #     make_flag_u16(PID_UV, self.flags['uv'])
+        # )
         self._send_scara(
-            make_flag_u16(PID_UV, self.flags['uv'])
-        )
-        self._send_scara(
-            make_flag_u16(PID_WCNT, self.flags['wcnt'])
+            make_flag_u8(PID_WCNT, self.flags['wcnt'])
         )
 
         self._send_scara(
