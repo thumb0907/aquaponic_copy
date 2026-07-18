@@ -76,6 +76,10 @@ class MonitorNode(Node):
             'c1f':  0,
             'c2f':  0,
             'hmf':  0,
+            's2f':       0,
+            's3f':       0,
+            'scara_src': 0,
+            'scara_dst': 0,
         }
 
         self.pi1_last_hb = 0.0
@@ -296,6 +300,10 @@ class MonitorNode(Node):
         self._print_flag('smf',  '스카라 동작 중')
         self._print_flag('crf',  '직교로봇 리셋 명령')
         self._print_flag('hmf',  '스카라 사전 홈잉')
+        self._print_flag('s2f', '스카라 sect2 시작')
+        self._print_flag('s3f', '스카라 sect3 시작')
+        self._print_flag('scara_src', '스카라 출발 슬롯')
+        self._print_flag('scara_dst', '스카라 도착 슬롯')
         print()
 
         # UV실

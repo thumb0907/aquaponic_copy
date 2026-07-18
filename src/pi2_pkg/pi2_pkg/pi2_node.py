@@ -73,6 +73,11 @@ PID_ESTOP = 0x10
 PID_RESET = 0x11
 PID_HMF   = 0x12
 
+PID_S2F       = 0x14
+PID_S3F       = 0x15
+PID_SCARA_SRC = 0x16
+PID_SCARA_DST = 0x17
+
 PID_STATE = 0x20
 PID_DONE  = 0x21
 PID_ERR   = 0x22
@@ -111,12 +116,30 @@ SCARA_STATE_STR = {
 }
 
 PID_NAME = {
-    PID_SSF: 'SSF', PID_SMF: 'SMF', PID_CRF: 'CRF',
-    PID_UV:  'UV',  PID_ULF: 'ULF', PID_URF: 'URF',
-    PID_WCNT:'WCNT',PID_WLF: 'WLF', PID_WRF: 'WRF',
-    PID_FF:  'FF',  PID_UEF: 'UEF', PID_WEF: 'WEF',
-    PID_HF:  'HF',  PID_C1F: 'C1F', PID_C2F: 'C2F',
+    PID_SSF: 'SSF',
+    PID_SMF: 'SMF',
+    PID_CRF: 'CRF',
+
+    PID_UV:  'UV',
+    PID_ULF: 'ULF',
+    PID_URF: 'URF',
+
+    PID_WCNT: 'WCNT',
+    PID_WLF:  'WLF',
+    PID_WRF:  'WRF',
+
+    PID_FF:  'FF',
+    PID_UEF: 'UEF',
+    PID_WEF: 'WEF',
+    PID_HF:  'HF',
+    PID_C1F: 'C1F',
+    PID_C2F: 'C2F',
     PID_HMF: 'HMF',
+
+    PID_S2F:       'S2F',
+    PID_S3F:       'S3F',
+    PID_SCARA_SRC: 'SCARA_SRC',
+    PID_SCARA_DST: 'SCARA_DST',
 }
 
 

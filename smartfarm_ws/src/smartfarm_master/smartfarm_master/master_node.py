@@ -193,6 +193,12 @@ PID_ESTOP = 0x10
 PID_RESET = 0x11
 PID_HMF   = 0x12
 
+# SCARA sect2 / sect3 플래그 프로토콜
+PID_S2F = 0x14
+PID_S3F = 0x15
+PID_SCARA_SRC = 0x16
+PID_SCARA_DST = 0x17
+
 #로봇 작업 PID, 작업 종류, 슬롯 코드
 PID_ROBOT_JOB = 0x13
 
@@ -295,6 +301,10 @@ class MasterNode(Node):
             'c1f':  0,
             'c2f':  0,
             'hmf':  0,
+            's2f':       0,
+            's3f':       0,
+            'scara_src': SLOT_NONE,
+            'scara_dst': SLOT_NONE,
         }
 
         self.nursery_slots = {
@@ -641,7 +651,7 @@ class MasterNode(Node):
     # 스케줄러 함수
     def _schedule_scara_jobs(self):
         command_frame = None
-        selector_frame = None
+        selector_frames = []
         job = None
 
         with self.state_lock:
@@ -693,9 +703,11 @@ class MasterNode(Node):
                     self.flags['crf'] = 0
                     return
 
-                selector_frame = make_flag_u16(
-                    PID_UV,
-                    scara_uv_selector,
+                selector_frames.append(
+                    make_flag_u16(
+                        PID_UV,
+                        scara_uv_selector,
+                    )
                 )
 
                 command_frame = make_flag_u8(
@@ -704,28 +716,102 @@ class MasterNode(Node):
                 )
             # 발아실 -> 수경배재실
             elif job_type == JOB_NURSERY_TO_WATER:
-                self.get_logger().warn(
-                    'NURSERY_TO_WATER 명령 프로토콜 미연결'
-                )
-                self.active_scara_job = None
-                self.flags['smf'] = 0
+                source = job['source']
+                destination = job['destination']
 
-                # 다시 대기열 앞에 넣어서 작업을 잃지 않음
-                self.pending_scara_jobs.insert(0, job)
-                return
+                if source not in self.nursery_slots:
+                    self.get_logger().error(
+                        f'sect2 출발 슬롯 오류: {source}'
+                    )
+                    self.active_scara_job = None
+                    self.flags['smf'] = 0
+                    return
+
+                if destination not in self.water_slots:
+                    self.get_logger().error(
+                        f'sect2 도착 슬롯 오류: {destination}'
+                    )
+                    self.active_scara_job = None
+                    self.flags['smf'] = 0
+                    return
+
+                source_code = SLOT_CODE[source]
+                destination_code = SLOT_CODE[destination]
+
+                self.flags['s2f'] = 1
+                self.flags['scara_src'] = source_code
+                self.flags['scara_dst'] = destination_code
+
+                # 반드시 위치값을 시작 플래그보다 먼저 전송한다.
+                selector_frames.append(
+                    make_flag_u8(
+                        PID_SCARA_SRC,
+                        source_code,
+                    )
+                )
+
+                selector_frames.append(
+                    make_flag_u8(
+                        PID_SCARA_DST,
+                        destination_code,
+                    )
+                )
+
+                # 위치 전송 이후 마지막에 sect2 시작
+                command_frame = make_flag_u8(
+                    PID_S2F,
+                    1,
+                )
+
+                self.get_logger().info(
+                    f'SCARA sect2 명령 준비: '
+                    f'job_id={job["job_id"]}, '
+                    f'nursery={source} -> water={destination}'
+                )
 
             # 수경재배실 -> 진동부 -> 2번 컨베이어
             elif job_type == JOB_WATER_TO_VIB_AND_C2:
-                self.get_logger().warn(
-                    'WATER_TO_VIB_AND_C2 명령 프로토콜 미연결'
+                source = job['source']
+
+                if source not in self.water_slots:
+                    self.get_logger().error(
+                        f'sect3 출발 슬롯 오류: {source}'
+                    )
+                    self.active_scara_job = None
+                    self.flags['smf'] = 0
+                    return
+
+                source_code = SLOT_CODE[source]
+
+                self.flags['s3f'] = 1
+                self.flags['scara_src'] = source_code
+                self.flags['scara_dst'] = SLOT_NONE
+
+                selector_frames.append(
+                    make_flag_u8(
+                        PID_SCARA_SRC,
+                        source_code,
+                    )
                 )
 
-                self.active_scara_job = None
-                self.flags['smf'] = 0
+                # sect3의 도착지는 진동부/C2로 고정
+                selector_frames.append(
+                    make_flag_u8(
+                        PID_SCARA_DST,
+                        SLOT_NONE,
+                    )
+                )
 
-                self.pending_scara_jobs.insert(0, job)
-                return
+                command_frame = make_flag_u8(
+                    PID_S3F,
+                    1,
+                )
 
+                self.get_logger().info(
+                    f'SCARA sect3 명령 준비: '
+                    f'job_id={job["job_id"]}, '
+                    f'water={source} -> vibration -> conveyor2'
+                )
             else:
                 self.get_logger().error(
                     f'지원하지 않는 SCARA 작업: {job}'
@@ -743,7 +829,7 @@ class MasterNode(Node):
         self._broadcast_flags_to_scara()
 
         # sect1 작업이면 목적지 선택값을 먼저 전송
-        if selector_frame is not None:
+        for selector_frame in selector_frames:
             self._send_scara(selector_frame)
 
         # 반드시 목적지 선택값 다음에 동작 트리거 전송
@@ -1300,6 +1386,14 @@ class MasterNode(Node):
         # 공통 완료 처리
         self.active_scara_job = None
         self.flags['smf'] = 0
+        self.flags['scara_src'] = SLOT_NONE
+        self.flags['scara_dst'] = SLOT_NONE
+
+        if job_type == JOB_NURSERY_TO_WATER:
+            self.flags['s2f'] = 0
+
+        elif job_type == JOB_WATER_TO_VIB_AND_C2:
+            self.flags['s3f'] = 0
 
         # UV/WCNT/ULF/URF/WLF/WRF 재계산
         self._sync_slot_flags_locked()
@@ -1564,6 +1658,16 @@ class MasterNode(Node):
                 JOB_C1_TO_NURSERY,
                 'ssf',
             ),
+
+            'SCARA:PC:FLAG:S2F:0': (
+                JOB_NURSERY_TO_WATER,
+                's2f',
+            ),
+
+            'SCARA:PC:FLAG:S3F:0': (
+                JOB_WATER_TO_VIB_AND_C2,
+                's3f',
+            ),
         }
 
         if line in flag_done_map:
@@ -1575,6 +1679,7 @@ class MasterNode(Node):
                 if (
                     active_job is None
                     or active_job['type'] != expected_job_type
+                    or self.flags[flag_name] != 1
                 ):
                     self.get_logger().warn(
                         f'현재 작업과 맞지 않는 SCARA 완료 플래그: '
@@ -2287,6 +2392,10 @@ class MasterNode(Node):
                 self.flags['hmf'] = 0
                 self.flags['ff'] = 0
                 self.flags['hf'] = 0
+                self.flags['s2f'] = 0
+                self.flags['s3f'] = 0
+                self.flags['scara_src'] = SLOT_NONE
+                self.flags['scara_dst'] = SLOT_NONE
 
                 self.device_estop['stm1'] = True
                 self.device_estop['scara'] = True
@@ -2334,7 +2443,10 @@ class MasterNode(Node):
                 self.flags['hmf'] = 0
                 self.flags['ff'] = 0
                 self.flags['hf'] = 0
-
+                self.flags['s2f'] = 0
+                self.flags['s3f'] = 0
+                self.flags['scara_src'] = SLOT_NONE
+                self.flags['scara_dst'] = SLOT_NONE
                 self.device_estop['stm1'] = False
                 self.device_estop['scara'] = False
                 self.device_estop['stm2'] = False
@@ -2390,6 +2502,10 @@ class MasterNode(Node):
                 self.flags['crf'] = 0
                 self.flags['hmf'] = 0
                 self.device_estop['scara'] = True
+                self.flags['s2f'] = 0
+                self.flags['s3f'] = 0
+                self.flags['scara_src'] = SLOT_NONE
+                self.flags['scara_dst'] = SLOT_NONE
 
             self._send_estop_scara()
             self.get_logger().warn('EMERGENCY_SCARA')
@@ -2401,6 +2517,10 @@ class MasterNode(Node):
                 self.flags['smf'] = 0
                 self.flags['crf'] = 0
                 self.flags['hmf'] = 0
+                self.flags['s2f'] = 0
+                self.flags['s3f'] = 0
+                self.flags['scara_src'] = SLOT_NONE
+                self.flags['scara_dst'] = SLOT_NONE
                 self.device_estop['scara'] = False
 
             self._send_reset_scara()
@@ -2437,6 +2557,10 @@ class MasterNode(Node):
                 self.flags['crf'] = 0
                 self.flags['ff'] = 0
                 self.flags['hf'] = 0
+                self.flags['s2f'] = 0
+                self.flags['s3f'] = 0
+                self.flags['scara_src'] = SLOT_NONE
+                self.flags['scara_dst'] = SLOT_NONE
 
                 self._sync_slot_flags_locked()
 

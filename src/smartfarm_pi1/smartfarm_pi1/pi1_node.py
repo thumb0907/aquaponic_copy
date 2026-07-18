@@ -262,7 +262,10 @@ class Pi1Node(Node):
         self.get_logger().info(f'STM1→PC: {msg.data}')
 
     def _heartbeat(self):
-        msg      = String()
+        if self.ser is None or not self.ser.is_open:
+            return
+
+        msg = String()
         msg.data = 'pi1'
         self.pub_hb.publish(msg)
 
