@@ -231,6 +231,10 @@ void sect1(void) {
     uv++;
   }
   
+  // 정상 완료 신호를 먼저 보내 Master가 active job을 확정 종료하게 한다.
+  setSsf(0);
+  sendSsf();
+
   setSmf(0); // 스카라 구동 끝
   sendSmf();
   
@@ -242,6 +246,8 @@ void sect1(void) {
 void sect2(void) {
   if (!sect2_started) {
     sect2_started = true;
+    setSmf(1);
+    sendSmf();
     startScaraMotion();
   }
   moveRail(3000,0);   
@@ -251,6 +257,13 @@ void sect2(void) {
   enc_reset_j3();
   move_j3_wait(30);
 
+  // 발아실 -> 수경재배실 적재가 정상 완료된 뒤에만 완료 회신
+  setS2f(0);
+  sendS2f();
+
+  setSmf(0);
+  sendSmf();
+
   sect2_started = false;
   currentPath = PATH_IDLE;
 }
@@ -259,6 +272,8 @@ void sect3(void) {
   switch (sect3_step) {
     case SECT3_STEP_IDLE:
       sect3_started = true;
+      setSmf(1);
+      sendSmf();
       step_command_issued = false;
       sect3_step = SECT3_STEP_INIT;
       break;
@@ -278,8 +293,8 @@ void sect3(void) {
 
     case SECT3_STEP_START_HARVEST:
       if (!step_command_issued) {
-        setFf(1); //sbc에 전송
-        sendFf();
+        // STM2 FF=1은 S3F=0을 받은 Master가 전송한다.
+        // SCARA가 FF를 직접 보내면 시작 주체가 둘이 되므로 여기서는 보내지 않는다.
         step_command_issued = true;
       }
 
@@ -292,6 +307,13 @@ void sect3(void) {
 
 
     case SECT3_STEP_DONE:
+      // 진동부를 거쳐 C2에 트레이를 내려놓은 뒤에만 완료 회신
+      setS3f(0);
+      sendS3f();
+
+      setSmf(0);
+      sendSmf();
+
       sect3_started = false;
       sect3_step = SECT3_STEP_IDLE;
       currentPath = PATH_IDLE;
@@ -304,11 +326,13 @@ void sect3(void) {
 void pathTask(void) {
   uint8_t hm  = getHm();
   uint8_t ssf = getSsf();
-  uint8_t crf = getCrf();
+  uint8_t s2f = getS2f();
+  uint8_t s3f = getS3f();
 
   uint8_t prev_hm  = getPrevHm();
   uint8_t prev_ssf = getPrevSsf();
-  uint8_t prev_crf = getPrevCrf();
+  uint8_t prev_s2f = getPrevS2f();
+  uint8_t prev_s3f = getPrevS3f();
   // -------------------------
   // ssf 상승에지: 0 -> 1
   // 스카라 시작 섹션 진입
@@ -340,25 +364,17 @@ void pathTask(void) {
   }
 
 
-  if (prev_crf == 0 && crf == 1) {
+  // S2F 상승에지: 발아실 -> 수경재배실
+  if (prev_s2f == 0 && s2f == 1) {
     if (currentPath == PATH_IDLE) {
       currentPath = PATH_SECT2;
     }
   }
 
-
-  
-  // -------------------------
-  // crf 하강에지: 1 -> 0
-  // 필요 시 초기화 정지
-  // -------------------------
-  if (prev_crf == 1 && crf == 0) {
-    //stopCartesianReset();
-
-    sect2_started = false;
-
-    if (currentPath == PATH_SECT2) {
-      currentPath = PATH_IDLE;
+  // S3F 상승에지: 수경재배실 -> 진동부 -> C2
+  if (prev_s3f == 0 && s3f == 1) {
+    if (currentPath == PATH_IDLE) {
+      currentPath = PATH_SECT3;
     }
   }
 

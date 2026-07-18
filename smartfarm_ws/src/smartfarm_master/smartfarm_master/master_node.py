@@ -171,6 +171,11 @@ WATER_COOLDOWN_SEC = 3.0
 SCARA_SECT2_ENABLED = False
 SCARA_SECT3_ENABLED = False
 
+# 자동 재전송은 실제 중복 동작 위험이 있으므로 하지 않고 오류 상태로 전환한다.
+SCARA_JOB_TIMEOUT_SEC = 180.0
+SCARA_PREHOME_TIMEOUT_SEC = 90.0
+STM2_START_TIMEOUT_SEC = 10.0
+
 # ── 프로토콜 상수 (comm.h / Serial.h 와 동일) ──
 SOF = 0xAA
 
@@ -356,6 +361,8 @@ class MasterNode(Node):
         # 실제 STM1 상태를 받기 전까지 idle로 가정하지 않는다.
         self.stm_state = 'unknown'
         self.scara_prehome_sent = False # 이번 사이클에서 스카라 사전 홈잉을 보냈는지
+        self.scara_prehome_done = False # HMF=0 완료 응답까지 받았는지
+        self.scara_prehome_sent_at = 0.0
         # 노드 시작 후 컨트롤러 자동 리셋 관리
         self.startup_reset_sent = False
         self.startup_nodes_ready_since = None  
@@ -367,10 +374,17 @@ class MasterNode(Node):
         self.pi1_alive_prev  = False  # 연결/끊김 변화 감지용
 
         # ── STM2 상태 ─────────────────────────
-        self.stm2_state      = 'idle'
+        # 실제 STM2 상태 보고를 받기 전까지 사용 가능한 것으로 가정하지 않는다.
+        self.stm2_state      = 'unknown'
         self.pi2_alive       = False
         self.pi2_last_hb     = 0.0
         self.pi2_alive_prev  = False  # 연결/끊김 변화 감지용
+        self.pi2_device_links = {
+            'scara': False,
+            'stm2': False,
+            'manip': False,
+        }
+        self.stm2_start_requested_at = 0.0
 
         # ── Pi3 / STM3 (수경재배실 센서허브) ──
         self.pi3_alive       = False
@@ -492,6 +506,9 @@ class MasterNode(Node):
         self.create_subscription(
             String, '/pi2/flag_update',
             self._on_pi2_flag, 10)
+        self.create_subscription(
+            String, '/pi2/device_status',
+            self._on_pi2_device_status, 10)
         # Pi3 — STM3 상태 수신
         self.create_subscription(
             String, '/pi3/uart_response',
@@ -510,6 +527,8 @@ class MasterNode(Node):
         self.create_timer(1.0, self._check_heartbeat)
         self.create_timer(0.5, self._publish_monitor)
         self.create_timer(0.5, self._startup_reset_once)
+        self.create_timer(0.2, self._retry_scara_prehome)
+        self.create_timer(0.5, self._check_comm_watchdogs)
 
         self.get_logger().info('Master 노드 시작')
 
@@ -536,6 +555,145 @@ class MasterNode(Node):
             self.stm2_state == 'harvesting'
             or self.active_manip_job is not None
         )
+
+    def _try_send_scara_prehome_locked(self) -> bool:
+        """파종 사이클 중 SCARA가 비는 순간 HMF를 한 번만 전송한다."""
+        if self.stm_state not in (
+            'seeding',
+            'ejecting',
+            'waiting_scara',
+        ):
+            return False
+
+        if self.scara_prehome_sent or self.scara_prehome_done:
+            return False
+
+        if self.active_scara_job is not None or self.flags['smf'] != 0:
+            return False
+
+        target_slot = self.seed_target_slot
+        if (
+            target_slot is None
+            or target_slot not in self.nursery_slots
+            or self.nursery_slots[target_slot]['state']
+            != SLOT_RESERVED_IN
+        ):
+            return False
+
+        if (
+            self.flags['hmf'] != 0
+            or self.emergency
+            or not self.pi2_alive
+            or not self.pi2_device_links['scara']
+        ):
+            return False
+
+        self.scara_prehome_sent = True
+        self.scara_prehome_sent_at = time.time()
+        self.flags['hmf'] = 1
+        self._send_scara(make_flag_u8(PID_HMF, 1))
+
+        self.get_logger().info(
+            f'SCARA 사전 홈잉 HMF=1 전송: target={target_slot}'
+        )
+        return True
+
+    def _retry_scara_prehome(self):
+        """SEEDING 순간 SCARA가 바빴던 경우 유휴 상태에서 다시 시도한다."""
+        with self.state_lock:
+            self._try_send_scara_prehome_locked()
+
+    def _check_comm_watchdogs(self):
+        """응답 유실이나 UART 단절 시 중복 재전송 없이 안전 정지한다."""
+        now = time.time()
+        scara_fault = None
+        stm2_fault = None
+
+        with self.state_lock:
+            if self.emergency:
+                return
+
+            job = self.active_scara_job
+            if job is not None:
+                if (
+                    not self.pi2_alive
+                    or not self.pi2_device_links['scara']
+                ):
+                    scara_fault = 'SCARA 작업 중 UART 연결 끊김'
+                elif (
+                    job['sent_at'] > 0
+                    and now - job['sent_at'] > SCARA_JOB_TIMEOUT_SEC
+                ):
+                    scara_fault = (
+                        f'SCARA 작업 완료 타임아웃: job={job}'
+                    )
+
+            if (
+                scara_fault is None
+                and self.scara_prehome_sent
+                and not self.scara_prehome_done
+            ):
+                if (
+                    not self.pi2_alive
+                    or not self.pi2_device_links['scara']
+                ):
+                    scara_fault = 'SCARA 사전 홈잉 중 UART 연결 끊김'
+                elif (
+                    self.scara_prehome_sent_at > 0
+                    and now - self.scara_prehome_sent_at
+                    > SCARA_PREHOME_TIMEOUT_SEC
+                ):
+                    scara_fault = 'SCARA 사전 홈잉 완료 타임아웃'
+
+            if (
+                self.flags['ff'] == 1
+                and self.stm2_start_requested_at > 0
+            ):
+                if (
+                    not self.pi2_alive
+                    or not self.pi2_device_links['stm2']
+                ):
+                    stm2_fault = 'STM2 시작 요청 후 UART 연결 끊김'
+                elif (
+                    self.stm2_state in ('idle', 'unknown')
+                    and now - self.stm2_start_requested_at
+                    > STM2_START_TIMEOUT_SEC
+                ):
+                    stm2_fault = 'STM2 FF=1 시작 응답 타임아웃'
+
+            if scara_fault is not None:
+                self.emergency = True
+                self.device_estop['stm1'] = True
+                self.device_estop['scara'] = True
+                self.active_scara_job = None
+                self.flags['ssf'] = 0
+                self.flags['s2f'] = 0
+                self.flags['s3f'] = 0
+                self.flags['smf'] = 0
+                self.flags['hmf'] = 0
+                self.scara_prehome_sent = False
+                self.scara_prehome_done = False
+                self.scara_prehome_sent_at = 0.0
+
+            if stm2_fault is not None:
+                self.emergency = True
+                self.device_estop['stm2'] = True
+                self.stm2_state = 'error'
+                self.stm2_start_requested_at = 0.0
+
+            if (
+                (scara_fault is not None or stm2_fault is not None)
+                and self.demo_mode
+            ):
+                self.demo_phase = DEMO_ERROR
+
+        if scara_fault is not None:
+            self._send_estop_stm1_scara()
+            self.get_logger().error(scara_fault)
+
+        if stm2_fault is not None:
+            self._send_estop_stm2()
+            self.get_logger().error(stm2_fault)
     #호환 플래그를 다시 계산하는 함수
     def _sync_slot_flags_locked(self):
         occupied_states = {
@@ -621,6 +779,15 @@ class MasterNode(Node):
         반드시 state_lock 상태에서 호출한다.
         """
 
+        if (
+            not self.pi2_alive
+            or not self.pi2_device_links['manip']
+        ):
+            self.get_logger().error(
+                '매니퓰레이터 UART 미연결: 수확 작업 생성 불가'
+            )
+            return None
+
         if self.active_manip_job is not None:
             self.get_logger().warn(
                 f'매니퓰레이터 작업이 이미 실행 중: '
@@ -661,6 +828,9 @@ class MasterNode(Node):
             if not self.pi2_alive:
                 return
 
+            if not self.pi2_device_links['scara']:
+                return
+
             if self.active_scara_job is not None:
                 return
 
@@ -668,6 +838,22 @@ class MasterNode(Node):
                 self._create_automatic_transfer_job_locked()
 
             if not self.pending_scara_jobs:
+                return
+
+            next_job = self.pending_scara_jobs[0]
+            if (
+                next_job['type'] == JOB_C1_TO_NURSERY
+                and not self.scara_prehome_done
+            ):
+                return
+
+            if (
+                next_job['type'] == JOB_WATER_TO_VIB_AND_C2
+                and (
+                    not self.pi2_device_links['stm2']
+                    or self.stm2_state != 'idle'
+                )
+            ):
                 return
 
             job = self.pending_scara_jobs.pop(0)
@@ -1118,6 +1304,12 @@ class MasterNode(Node):
             )
             return False
 
+        if not self.pi2_device_links['stm2']:
+            self.get_logger().warn(
+                '2번 컨베이어 UART 미연결: sect3 작업 생성 생략'
+            )
+            return False
+
         # FF=1이면 이미 STM2 시작 요청이 살아 있는 상태
         if self.flags['ff'] != 0:
             self.get_logger().warn(
@@ -1364,6 +1556,7 @@ class MasterNode(Node):
 
             # 이제 STM2 사이클을 시작할 수 있다.
             self.flags['ff'] = 1
+            self.stm2_start_requested_at = time.time()
             if self.demo_mode:
                 self.demo_phase = (
                     DEMO_WAIT_HARVEST_COMPLETE
@@ -1479,35 +1672,22 @@ class MasterNode(Node):
             if line == 'STM1:PC:STATE:HOMING':
                 self.stm_state = 'homing'
                 self.scara_prehome_sent = False
+                self.scara_prehome_done = False
+                self.scara_prehome_sent_at = 0.0
 
             elif line == 'STM1:PC:STATE:RUN_CONVEYOR1':
                 self.stm_state = 'running'
             elif line == 'STM1:PC:STATE:SEEDING':
                 self.stm_state = 'seeding'
-                
-                if (
-                    not self.scara_prehome_sent
-                    and self.flags['smf'] == 0
-                    and self.seed_target_slot is not None
-                    and self.nursery_slots[
-                        self.seed_target_slot
-                    ]['state'] == SLOT_RESERVED_IN
-                    and self.flags['hmf'] == 0
-                    and not self.emergency
-                    and self.pi2_alive
-                ):
-                    # HMF 전송
-                    self.scara_prehome_sent = True
-                    self._set_flag('hmf', 1)
-                    self._send_scara(make_flag_u8(PID_HMF, 1))
-                    self.get_logger().info('STM1 파종 시작 → 스카라 사전 홈잉 HMF=1 전송')
-                else:
+
+                if not self._try_send_scara_prehome_locked():
                     self.get_logger().warn(
-                        f'스카라 사전 홈잉 생략: '
+                        f'스카라 사전 홈잉 대기 또는 이미 완료: '
                         f'sent={self.scara_prehome_sent}, '
+                        f'done={self.scara_prehome_done}, '
                         f'smf={self.flags["smf"]}, '
-                        f'uv={self.flags["uv"]}, '
                         f'hmf={self.flags["hmf"]}, '
+                        f'scara_link={self.pi2_device_links["scara"]}, '
                         f'pi2_alive={self.pi2_alive}, '
                         f'emergency={self.emergency}'
                     )
@@ -1585,6 +1765,8 @@ class MasterNode(Node):
                 self.stm_state  = 'idle'
                 self.start_flag = False
                 self.scara_prehome_sent = False
+                self.scara_prehome_done = False
+                self.scara_prehome_sent_at = 0.0
                 self._set_flag('c1f', 0)
                 self._set_flag('hmf', 0) 
             elif line.startswith('STM1:PC:ERR:'):
@@ -1642,9 +1824,20 @@ class MasterNode(Node):
                 # SCARA 사전 홈 완료
         if line == 'SCARA:PC:FLAG:HMF:0':
             with self.state_lock:
+                if (
+                    not self.scara_prehome_sent
+                    or self.flags['hmf'] != 1
+                ):
+                    self.get_logger().warn(
+                        '요청 중이 아닌 SCARA HMF=0 수신 → 무시'
+                    )
+                    return
+
                 self.scara_reported_flags['hmf'] = 0
                 self.flags['hmf'] = 0
                 self.flags['smf'] = 0
+                self.scara_prehome_done = True
+                self.scara_prehome_sent_at = 0.0
                 #self.scara_prehome_sent = False
 
             self.get_logger().info(
@@ -2013,6 +2206,16 @@ class MasterNode(Node):
             )
             return
         with self.state_lock:
+            if line in (
+                'STM2:PC:STATE:CONVEY_RUN',
+                'STM2:PC:STATE:IR_DETECTED',
+                'STM2:PC:STATE:Z_FIX',
+                'STM2:PC:STATE:HARVESTING',
+                'STM2:PC:STATE:EJECTING',
+                'STM2:PC:STATE:EJECT_DONE',
+            ):
+                self.stm2_start_requested_at = 0.0
+
             # ── 스카라 작업 완료 이벤트 ─────────────────────
             # if line == 'SCARA:PC:EVENT:PUT_TO_UV_DONE':
             #     self._set_flag('smf', 0)
@@ -2106,6 +2309,18 @@ class MasterNode(Node):
                             f'매니퓰레이터 수확 명령 전송: '
                             f'{self.active_manip_job}'
                         )
+                    else:
+                        self.emergency = True
+                        self.stm2_state = 'error'
+                        self.device_estop['stm2'] = True
+                        self.device_estop['manip'] = True
+                        if self.demo_mode:
+                            self.demo_phase = DEMO_ERROR
+                        self._send_estop_stm2()
+                        self.get_logger().error(
+                            '매니퓰레이터 작업 생성 실패 '
+                            '→ STM2 안전 정지'
+                        )
 
             elif line == 'STM2:PC:STATE:EJECTING':
                 self.stm2_state = 'ejecting'
@@ -2116,6 +2331,7 @@ class MasterNode(Node):
                 # 1. STM2 동작 상태 초기화
                 # ─────────────────────────────
                 self.stm2_state = 'idle'
+                self.stm2_start_requested_at = 0.0
 
                 # ─────────────────────────────
                 # 2. Master가 보관하는 사이클 플래그 초기화
@@ -2178,11 +2394,14 @@ class MasterNode(Node):
                 return
             elif line == 'STM2:PC:STATE:RESET_DONE':
                 self.stm2_state = 'idle'
+                self.stm2_start_requested_at = 0.0
             elif line == 'STM2:PC:STATE:ESTOP':
                 self.stm2_state = 'error'
+                self.stm2_start_requested_at = 0.0
                 self.get_logger().warn('[STM2] ESTOP')
             elif line.startswith('STM2:PC:ERR:'):
                 self.stm2_state = 'error'
+                self.stm2_start_requested_at = 0.0
                 self.get_logger().error(line)
             elif line.startswith('STM2:PI2:ACK:'):
                 self.get_logger().info(f'ACK: {line}')
@@ -2195,6 +2414,66 @@ class MasterNode(Node):
     # 최종 구조에서는 /pi2/flag_update 로 전역 플래그를 직접 덮어쓰지 않고,
     # 작업 완료 이벤트(EVENT) 기반으로만 PC가 flags를 갱신하도록 정리할 것.
     # ══════════════════════════════════════════
+    def _on_pi2_device_status(self, msg: String):
+        """Pi2가 보고한 SCARA/STM2/MANIP UART 연결 상태를 저장한다."""
+        updates = {}
+        reset_stm2_on_connect = False
+
+        for item in msg.data.split(','):
+            if ':' not in item:
+                continue
+
+            name, value_text = item.split(':', 1)
+            key = name.strip().lower()
+
+            if key not in self.pi2_device_links:
+                continue
+
+            try:
+                updates[key] = bool(int(value_text.strip()))
+            except ValueError:
+                self.get_logger().warn(
+                    f'Pi2 장치 연결 상태 파싱 실패: {item}'
+                )
+
+        if not updates:
+            return
+
+        with self.state_lock:
+            previous = self.pi2_device_links.copy()
+            self.pi2_device_links.update(updates)
+
+            if not self.pi2_device_links['stm2']:
+                self.stm2_state = 'unknown'
+            elif (
+                not previous['stm2']
+                and self.flags['ff'] == 0
+                and self.active_manip_job is None
+            ):
+                # STM2는 부팅 시 STATE 보고가 이미 지나갔을 수 있으므로
+                # 연결 직후 RESET을 보내 IDLE 응답을 다시 받는다.
+                reset_stm2_on_connect = True
+
+        for key, connected in updates.items():
+            if previous[key] == connected:
+                continue
+
+            log = (
+                self.get_logger().info
+                if connected
+                else self.get_logger().warn
+            )
+            log(
+                f'[Pi2/{key.upper()}] '
+                f'{"연결됨" if connected else "연결 끊김"}'
+            )
+
+        if reset_stm2_on_connect:
+            self._send_reset_stm2()
+            self.get_logger().info(
+                'STM2 UART 연결 확인 → 상태 동기화 RESET 전송'
+            )
+
     def _on_pi2_flag(self, msg: String):
         """
         Pi2 장치 플래그 보고 수신.
@@ -2264,8 +2543,12 @@ class MasterNode(Node):
             if self.startup_reset_sent:
                 return
 
-            # STM1을 담당하는 Pi1과 SCARA를 담당하는 Pi2가 모두 필요하다.
-            if not self.pi1_alive or not self.pi2_alive:
+            # Pi 노드뿐 아니라 실제 SCARA UART 연결까지 확인한다.
+            if (
+                not self.pi1_alive
+                or not self.pi2_alive
+                or not self.pi2_device_links['scara']
+            ):
                 self.startup_nodes_ready_since = None
                 return
 
@@ -2282,7 +2565,8 @@ class MasterNode(Node):
             if self.startup_nodes_ready_since is None:
                 self.startup_nodes_ready_since = now
                 self.get_logger().info(
-                    'Pi1/Pi2 연결 확인 → 2초 후 STM1/SCARA 초기 리셋'
+                    'Pi1/SCARA UART 연결 확인 '
+                    '→ 2초 후 STM1/SCARA 초기 리셋'
                 )
                 return
 
@@ -2341,6 +2625,12 @@ class MasterNode(Node):
             self.pi2_alive_prev = pi2_now
             self.pi3_alive_prev = pi3_now
 
+            if not pi2_now:
+                self.pi2_device_links['scara'] = False
+                self.pi2_device_links['stm2'] = False
+                self.pi2_device_links['manip'] = False
+                self.stm2_state = 'unknown'
+
             # 카메라 상태 판정
             if not self.cam1_connected:
                 self.cam1_status = 'disconnected'
@@ -2363,6 +2653,67 @@ class MasterNode(Node):
     def _on_command(self, msg: String):
         cmd = msg.data.strip()
 
+        # 수경실은 트레이 존재를 인식할 수 없으므로 운용자가 초기 상태를 명시한다.
+        # 형식: SET_WATER_SLOT:left:empty
+        if cmd.upper().startswith('SET_WATER_SLOT:'):
+            parts = cmd.split(':')
+            if len(parts) != 3:
+                self.get_logger().warn(
+                    '수경 슬롯 명령 형식 오류: '
+                    'SET_WATER_SLOT:left|right:unknown|empty|growing|ready'
+                )
+                return
+
+            slot_name = parts[1].strip().lower()
+            requested_state = parts[2].strip().lower()
+            state_map = {
+                'unknown': SLOT_UNKNOWN,
+                'empty': SLOT_EMPTY,
+                'growing': SLOT_GROWING,
+                'occupied': SLOT_GROWING,
+                'ready': SLOT_READY,
+            }
+
+            if slot_name not in self.water_slots:
+                self.get_logger().warn(
+                    f'알 수 없는 수경 슬롯: {slot_name}'
+                )
+                return
+
+            if requested_state not in state_map:
+                self.get_logger().warn(
+                    f'알 수 없는 수경 슬롯 상태: {requested_state}'
+                )
+                return
+
+            with self.state_lock:
+                if (
+                    self.active_scara_job is not None
+                    or self.pending_scara_jobs
+                    or self.flags['ff'] != 0
+                    or self.stm2_state not in ('idle', 'unknown')
+                ):
+                    self.get_logger().warn(
+                        '자동 이송 또는 STM2 작업 중에는 '
+                        '수경 슬롯 상태를 수동 변경할 수 없음'
+                    )
+                    return
+
+                previous_state = self.water_slots[slot_name]['state']
+                self.water_slots[slot_name]['state'] = state_map[
+                    requested_state
+                ]
+                self.water_slots[slot_name]['job_id'] = None
+                self._sync_slot_flags_locked()
+
+            self._broadcast_all_flags()
+            self.get_logger().info(
+                f'수경 슬롯 수동 초기화: '
+                f'{slot_name} {previous_state} -> '
+                f'{state_map[requested_state]}'
+            )
+            return
+
         # ─────────────────────────────
         # 전체 긴급정지: STM1 + SCARA
         # ─────────────────────────────
@@ -2374,6 +2725,9 @@ class MasterNode(Node):
                 self.stm_state = 'error'
                 self.stm2_state = 'error'
                 self.scara_prehome_sent = False
+                self.scara_prehome_done = False
+                self.scara_prehome_sent_at = 0.0
+                self.stm2_start_requested_at = 0.0
 
                 # 새 자동 작업 생성 중지
                 self.pending_scara_jobs.clear()
@@ -2423,8 +2777,11 @@ class MasterNode(Node):
 
                 self.start_flag = False
                 self.stm_state = 'idle'
-                self.stm2_state = 'idle'
+                self.stm2_state = 'unknown'
+                self.stm2_start_requested_at = 0.0
                 self.scara_prehome_sent = False
+                self.scara_prehome_done = False
+                self.scara_prehome_sent_at = 0.0
 
                 self.stable_cnt = 0
                 self.no_tray_cnt = 0
@@ -2522,6 +2879,9 @@ class MasterNode(Node):
                 self.flags['scara_src'] = SLOT_NONE
                 self.flags['scara_dst'] = SLOT_NONE
                 self.device_estop['scara'] = False
+                self.scara_prehome_sent = False
+                self.scara_prehome_done = False
+                self.scara_prehome_sent_at = 0.0
 
             self._send_reset_scara()
             self.get_logger().info('RESET_SCARA')
@@ -2769,6 +3129,9 @@ class MasterNode(Node):
                 f'pi1_alive:{self.pi1_alive},'
                 f'pi2_alive:{self.pi2_alive},'
                 f'pi3_alive:{self.pi3_alive},'
+                f'scara_link:{self.pi2_device_links["scara"]},'
+                f'stm2_link:{self.pi2_device_links["stm2"]},'
+                f'manip_link:{self.pi2_device_links["manip"]},'
                 f'emergency:{self.emergency},'
                 f'estop_stm1:{self.device_estop["stm1"]},'
                 f'estop_scara:{self.device_estop["scara"]},'

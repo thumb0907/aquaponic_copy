@@ -46,6 +46,13 @@ class MonitorNode(Node):
             'pi1_alive':  False,
             'pi2_alive':  False,
             'pi3_alive':  False,
+            'scara_link': False,
+            'stm2_link': False,
+            'manip_link': False,
+            'nursery_left_slot': 'unknown',
+            'nursery_right_slot': 'unknown',
+            'water_left_slot': 'unknown',
+            'water_right_slot': 'unknown',
             'emergency':  False,
             'estop_stm1': False,
             'estop_scara': False,
@@ -250,6 +257,9 @@ class MonitorNode(Node):
         alive  = self.status.get('pi1_alive', False)
         alive2 = self.status.get('pi2_alive', False)
         alive3 = self.status.get('pi3_alive', False)
+        scara_link = self.status.get('scara_link', False)
+        stm2_link = self.status.get('stm2_link', False)
+        manip_link = self.status.get('manip_link', False)
         emg    = self.status.get('emergency', False)
         sf     = self.status.get('start_flag', False)
         st     = self.status.get('stm_state', 'idle')
@@ -264,6 +274,13 @@ class MonitorNode(Node):
         print(f'  Pi1 연결    :  {p1dot}')
         print(f'  Pi2 연결    :  {p2dot}')
         print(f'  Pi3 연결    :  {p3dot}')
+
+        scara_dot = f'{C.GREEN}● 연결됨{C.RESET}' if scara_link else f'{C.RED}● 끊김{C.RESET}'
+        stm2_dot = f'{C.GREEN}● 연결됨{C.RESET}' if stm2_link else f'{C.RED}● 끊김{C.RESET}'
+        manip_dot = f'{C.GREEN}● 연결됨{C.RESET}' if manip_link else f'{C.GRAY}○ 미연결{C.RESET}'
+        print(f'  SCARA UART  :  {scara_dot}')
+        print(f'  STM2 UART   :  {stm2_dot}')
+        print(f'  MANIP UART  :  {manip_dot}')
 
         emgdot = f'{C.RED}{C.BOLD}● ON{C.RESET}' if emg else f'{C.GRAY}○ OFF{C.RESET}'
         print(f'  긴급정지    :  {emgdot}')
@@ -302,8 +319,8 @@ class MonitorNode(Node):
         self._print_flag('hmf',  '스카라 사전 홈잉')
         self._print_flag('s2f', '스카라 sect2 시작')
         self._print_flag('s3f', '스카라 sect3 시작')
-        self._print_flag('scara_src', '스카라 출발 슬롯')
-        self._print_flag('scara_dst', '스카라 도착 슬롯')
+        self._print_slot_selector('scara_src', '스카라 출발 슬롯')
+        self._print_slot_selector('scara_dst', '스카라 도착 슬롯')
         print()
 
         # UV실
@@ -311,6 +328,10 @@ class MonitorNode(Node):
         self._print_flag('uv',   f'트레이 개수 (최대2)')
         self._print_flag('ulf',  '왼쪽 발아 완료')
         self._print_flag('urf',  '오른쪽 발아 완료')
+        print(
+            f'  논리 슬롯  : left={self.status["nursery_left_slot"]}, '
+            f'right={self.status["nursery_right_slot"]}'
+        )
         print()
 
         # 수경재배실
@@ -318,6 +339,10 @@ class MonitorNode(Node):
         self._print_flag('wcnt', '트레이 개수 (최대2)')
         self._print_flag('wlf',  '왼쪽 성장 완료')
         self._print_flag('wrf',  '오른쪽 성장 완료')
+        print(
+            f'  논리 슬롯  : left={self.status["water_left_slot"]}, '
+            f'right={self.status["water_right_slot"]}'
+        )
         print()
 
         # 수경재배실 센서 (STM3)
@@ -356,6 +381,19 @@ class MonitorNode(Node):
             dot = f'{C.GRAY}○ {val}{C.RESET}'
 
         print(f'  {key:<6}  ({desc:<22}) :  {dot}')
+
+    def _print_slot_selector(self, key: str, desc: str):
+        val = self.flags.get(key, 0)
+        label = {
+            0: 'none',
+            1: 'left',
+            2: 'right',
+        }.get(val, f'invalid({val})')
+        color = C.GREEN if val in (1, 2) else C.GRAY
+        print(
+            f'  {key:<10} ({desc:<22}) :  '
+            f'{color}● {label}{C.RESET}'
+        )
 
     def _print_sensor(self, key: str, label: str, unit: str):
         """센서값 한 줄 출력 — None이면 '수신 대기' 표시"""

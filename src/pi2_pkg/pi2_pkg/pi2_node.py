@@ -257,6 +257,8 @@ class Pi2Node(Node):
             String, '/system/heartbeat', 10)
         self.pub_flag = self.create_publisher(
             String, '/pi2/flag_update', 10)
+        self.pub_device_status = self.create_publisher(
+            String, '/pi2/device_status', 10)
 
         # ── Subscriber ────────────────────────
         # PC → Pi2 명령 수신 (앞 1바이트가 대상 식별자)
@@ -265,6 +267,7 @@ class Pi2Node(Node):
             self._on_uart_cmd, 10)
 
         self.create_timer(1.0, self._heartbeat)
+        self.create_timer(1.0, self._publish_device_status)
         self.get_logger().info('Pi2 노드 시작')
 
     # ══════════════════════════════════════════
@@ -319,6 +322,19 @@ class Pi2Node(Node):
                 f'→ {label}: {payload.hex()}')
         except Exception as e:
             self.get_logger().error(f'{label} 전송 실패: {e}')
+            self._mark_device_disconnected(label)
+
+    def _mark_device_disconnected(self, label: str):
+        """송수신 오류가 난 장치 핸들을 끊어 재연결 루프로 넘긴다."""
+        if label == 'SCARA':
+            _safe_close(self.ser_scara)
+            self.ser_scara = None
+        elif label == 'STM2':
+            _safe_close(self.ser_stm2)
+            self.ser_stm2 = None
+        elif label == 'MANIP':
+            _safe_close(self.ser_manip)
+            self.ser_manip = None
 
     # ══════════════════════════════════════════
     # 수신 프레임 → PC publish (STM2용)
@@ -502,6 +518,26 @@ class Pi2Node(Node):
         msg.data = 'pi2'
         self.pub_hb.publish(msg)
 
+    def _publish_device_status(self):
+        """Pi2 노드 생존과 별도로 각 UART 장치의 실제 연결 상태를 보고한다."""
+        scara_ok = int(
+            self.ser_scara is not None and self.ser_scara.is_open
+        )
+        stm2_ok = int(
+            self.ser_stm2 is not None and self.ser_stm2.is_open
+        )
+        manip_ok = int(
+            self.ser_manip is not None and self.ser_manip.is_open
+        )
+
+        msg = String()
+        msg.data = (
+            f'SCARA:{scara_ok},'
+            f'STM2:{stm2_ok},'
+            f'MANIP:{manip_ok}'
+        )
+        self.pub_device_status.publish(msg)
+
 
 # ══════════════════════════════════════════════
 # 장치별 수신 루프 (각각 별도 스레드로 실행)
@@ -524,10 +560,9 @@ def stm2_rx_loop(node: Pi2Node):
                 for pid, data in node.parser_stm2.pop_frames():
                     node.publish_stm2_frame(pid, data)
         except OSError:
-            _safe_close(node.ser_stm2)
-            node.ser_stm2 = None
+            node._mark_device_disconnected('STM2')
         except serial.SerialException:
-            node.ser_stm2 = None
+            node._mark_device_disconnected('STM2')
         time.sleep(0.02)
 
 
@@ -547,10 +582,9 @@ def scara_rx_loop(node: Pi2Node):
                 for pid, data in node.parser_scara.pop_frames():
                     node.publish_scara_frame(pid, data)
         except OSError:
-            _safe_close(node.ser_scara)
-            node.ser_scara = None
+            node._mark_device_disconnected('SCARA')
         except serial.SerialException:
-            node.ser_scara = None
+            node._mark_device_disconnected('SCARA')
         time.sleep(0.02)
 
 
@@ -575,10 +609,9 @@ def manip_rx_loop(node: Pi2Node):
                 for pid, data in node.parser_manip.pop_frames():
                     node.publish_manip_frame(pid, data)
         except OSError:
-            _safe_close(node.ser_manip)
-            node.ser_manip = None
+            node._mark_device_disconnected('MANIP')
         except serial.SerialException:
-            node.ser_manip = None
+            node._mark_device_disconnected('MANIP')
         time.sleep(0.02)
 
 
