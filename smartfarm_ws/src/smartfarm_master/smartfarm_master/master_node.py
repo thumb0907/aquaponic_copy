@@ -1385,15 +1385,19 @@ class MasterNode(Node):
                 self.stm_state = 'running'
             elif line == 'STM1:PC:STATE:SEEDING':
                 self.stm_state = 'seeding'
-                    # 직교로봇이 실제 파종 단계에 들어갔을 때 스카라 사전 홈잉 시작
+                
                 if (
                     not self.scara_prehome_sent
                     and self.flags['smf'] == 0
-                    and self.flags['uv'] < 2
+                    and self.seed_target_slot is not None
+                    and self.nursery_slots[
+                        self.seed_target_slot
+                    ]['state'] == SLOT_RESERVED_IN
                     and self.flags['hmf'] == 0
                     and not self.emergency
                     and self.pi2_alive
                 ):
+                    # HMF 전송
                     self.scara_prehome_sent = True
                     self._set_flag('hmf', 1)
                     self._send_scara(make_flag_u8(PID_HMF, 1))
@@ -1542,7 +1546,7 @@ class MasterNode(Node):
                 self.scara_reported_flags['hmf'] = 0
                 self.flags['hmf'] = 0
                 self.flags['smf'] = 0
-                self.scara_prehome_sent = False
+                #self.scara_prehome_sent = False
 
             self.get_logger().info(
                 'SCARA 사전 홈 완료: HMF=0'
@@ -3441,6 +3445,7 @@ def process_nursery_frame(
 
             # 일반 점유 트레이가 사라진 경우에만 EMPTY
             if logical_slot['state'] in (
+                SLOT_UNKNOWN,
                 SLOT_OCCUPIED,
                 SLOT_READY,
             ):
