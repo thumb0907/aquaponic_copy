@@ -891,9 +891,6 @@ class MasterNode(Node):
         source: str,
         destination: str,
     ) -> bool:
-
-        if not SCARA_SECT2_ENABLED:
-            return False
         """
         발아 완료 트레이를 발아실에서 수경실로 옮기는
         SCARA 작업을 생성한다.
@@ -901,6 +898,8 @@ class MasterNode(Node):
         이 함수는 반드시 state_lock을 잡은 상태에서 호출한다.
         """
 
+        if not SCARA_SECT2_ENABLED:
+            return False
         # ─────────────────────────────────────
         # 1. 슬롯 이름 검사
         # ─────────────────────────────────────
@@ -1169,6 +1168,14 @@ class MasterNode(Node):
                     f'nursery={destination}, '
                     f'demo_phase={self.demo_phase}'
                 )
+            # 수확 중 들어온 파종 트레이 처리가 실제 완료됨
+            if self.flags['uef'] == 1:
+                self.flags['uef'] = 0
+
+                self.get_logger().info(
+                    '수확 중 파종 작업 처리 완료: UEF=0'
+                )
+
             self.flags['ssf'] = 0
             self.flags['crf'] = 0
 
@@ -1412,7 +1419,15 @@ class MasterNode(Node):
             elif line == 'STM1:PC:DONE:CYCLE1':
                 self.stm_state = 'waiting_scara'
                 target_slot = self.seed_target_slot
-                # 수확 작업 중에 파종이 끝난 경우만 UEF=1
+
+                if target_slot is None:
+                    self.get_logger().error(
+                        '파종 완료지만 예약된 발아실 슬롯이 없음'
+                    )
+                    self.stm_state = 'error'
+                    return
+
+                # 유효한 발아실 목적지가 있을 때만 UEF 설정
                 if self._is_harvest_in_progress_locked():
                     if self.flags['uef'] == 0:
                         self.flags['uef'] = 1
@@ -1424,25 +1439,6 @@ class MasterNode(Node):
                         self.get_logger().info(
                             '수확 중 파종 완료: UEF=1'
                         )
-                # if self.demo_mode:
-                #     self.demo_phase = (
-                #         DEMO_MOVING_C1_TO_NURSERY
-                #     )
-
-                #     self.get_logger().info(
-                #         f'데모 단계 변경: '
-                #         f'{DEMO_SEEDING} -> '
-                #         f'{self.demo_phase}, '
-                #         f'destination={target_slot}, '
-                #         f'job_id={job_id}'
-                #     )
-
-                if target_slot is None:
-                    self.get_logger().error(
-                        '파종 완료됐지만 예약된 발아실 슬롯이 없음'
-                    )
-                    self.stm_state = 'error'
-                    return
 
                 job_id = self._next_scara_job_id_locked()
 
@@ -1615,16 +1611,16 @@ class MasterNode(Node):
                 f'{completed_job}'
             )
             return
-        # 수확 중 들어온 파종 트레이 처리 완료
-        if self.flags['uef'] == 1:
-            self.flags['uef'] = 0
+        # # 수확 중 들어온 파종 트레이 처리 완료
+        # if self.flags['uef'] == 1:
+        #     self.flags['uef'] = 0
 
-            self.get_logger().info(
-                '수확 중 파종 작업 처리 완료: UEF=0'
-            )
+        #     self.get_logger().info(
+        #         '수확 중 파종 작업 처리 완료: UEF=0'
+        #     )
 
-        self.flags['ssf'] = 0
-        self.flags['crf'] = 0
+        # self.flags['ssf'] = 0
+        # self.flags['crf'] = 0
         if line.startswith('SCARA:PC:FLAG:'):
             parts = line.split(':')
 
@@ -3573,8 +3569,8 @@ def process_nursery_frame(
         stable = st['stable_cnt']
         label = st['last_label']
         slot_state = logical_slot['state']
-        if send_event:
-            node._broadcast_all_flags()
+    if send_event:
+        node._broadcast_all_flags()
 
     # ─────────────────────────────────────────
     # 8. 로그 출력
