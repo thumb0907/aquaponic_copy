@@ -324,7 +324,7 @@ class MonitorNode(Node):
         # 수확
         print(f'{C.BOLD}  ── 수확 ──{C.RESET}')
         self._print_flag('ff',   '트레이 고정')
-        self._print_flag('hf',   '수확 진행 중')
+        self._print_flag('hf',   '수확 완료 응답')
         self._print_flag('uef',  '수확 중 파종 완료 이벤트')
         self._print_flag('wef',  '수확 중 발아 완료 이벤트')
         print()

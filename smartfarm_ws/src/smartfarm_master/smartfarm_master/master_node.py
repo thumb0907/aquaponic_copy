@@ -168,6 +168,9 @@ WATER_STABLE_FRAMES = 5
 WATER_LOST_FRAMES = 8
 WATER_COOLDOWN_SEC = 3.0
 
+SCARA_SECT2_ENABLED = False
+SCARA_SECT3_ENABLED = False
+
 # ── 프로토콜 상수 (comm.h / Serial.h 와 동일) ──
 SOF = 0xAA
 
@@ -513,6 +516,11 @@ class MasterNode(Node):
             v = max_v
 
         self.flags[name] = v
+    def _is_harvest_in_progress_locked(self) -> bool:
+        return (
+            self.stm2_state == 'harvesting'
+            or self.active_manip_job is not None
+        )
     #호환 플래그를 다시 계산하는 함수
     def _sync_slot_flags_locked(self):
         occupied_states = {
@@ -694,7 +702,6 @@ class MasterNode(Node):
                 self.get_logger().warn(
                     'NURSERY_TO_WATER 명령 프로토콜 미연결'
                 )
-
                 self.active_scara_job = None
                 self.flags['smf'] = 0
 
@@ -884,6 +891,9 @@ class MasterNode(Node):
         source: str,
         destination: str,
     ) -> bool:
+
+        if not SCARA_SECT2_ENABLED:
+            return False
         """
         발아 완료 트레이를 발아실에서 수경실로 옮기는
         SCARA 작업을 생성한다.
@@ -976,6 +986,8 @@ class MasterNode(Node):
         self,
         source: str,
     ) -> bool:
+        if not SCARA_SECT3_ENABLED:
+            return False
         """
         성장 완료 트레이를 수경실에서 꺼내
         진동부를 거쳐 2번 컨베이어로 옮기는
@@ -1175,12 +1187,12 @@ class MasterNode(Node):
                 )
                 return None
             # 수확 중 발생했던 발아 완료 이벤트 처리 완료
-            if self.flags['wef'] == 1:  
-                self.flags['wef'] = 0
+            # if self.flags['wef'] == 1:  
+            #     self.flags['wef'] = 0
 
-                self.get_logger().info(
-                    '수확 중 발아 이동 처리 완료: WEF=0'
-                )
+            #     self.get_logger().info(
+            #         '수확 중 발아 이동 처리 완료: WEF=0'
+            #     )
 
             nursery_source = self.nursery_slots[source]
             water_destination = self.water_slots[destination]
@@ -1205,6 +1217,14 @@ class MasterNode(Node):
             # SCARA 완료 응답으로 논리 점유를 확정
             water_destination['state'] = SLOT_GROWING
             water_destination['job_id'] = None
+
+            # 발아실 -> 수경재배실 이동이 실제 완료된 뒤 해제
+            if self.flags['wef'] == 1:
+                self.flags['wef'] = 0
+
+                self.get_logger().info(
+                    '수확 중 발아 이동 처리 완료: WEF=0'
+                )
 
             if self.demo_mode:
                 # 방금 옮겨진 성장 중 트레이의 수경 슬롯을 기억한다.
@@ -1392,13 +1412,18 @@ class MasterNode(Node):
             elif line == 'STM1:PC:DONE:CYCLE1':
                 self.stm_state = 'waiting_scara'
                 target_slot = self.seed_target_slot
-                    # 수확 작업 중에 파종이 끝난 경우만 UEF=1
-                if self.flags['hf'] == 1:
-                    self.flags['uef'] = 1
+                # 수확 작업 중에 파종이 끝난 경우만 UEF=1
+                if self._is_harvest_in_progress_locked():
+                    if self.flags['uef'] == 0:
+                        self.flags['uef'] = 1
 
-                    self.get_logger().info(
-                        '수확 중 파종 완료: UEF=1'
-                    )
+                        self._send_scara(
+                            make_flag_u8(PID_UEF, 1)
+                        )
+
+                        self.get_logger().info(
+                            '수확 중 파종 완료: UEF=1'
+                        )
                 # if self.demo_mode:
                 #     self.demo_phase = (
                 #         DEMO_MOVING_C1_TO_NURSERY
@@ -1590,13 +1615,16 @@ class MasterNode(Node):
                 f'{completed_job}'
             )
             return
-        # 수확 중 발생했던 파종 이벤트 처리 완료
+        # 수확 중 들어온 파종 트레이 처리 완료
         if self.flags['uef'] == 1:
             self.flags['uef'] = 0
 
             self.get_logger().info(
                 '수확 중 파종 작업 처리 완료: UEF=0'
             )
+
+        self.flags['ssf'] = 0
+        self.flags['crf'] = 0
         if line.startswith('SCARA:PC:FLAG:'):
             parts = line.split(':')
 
@@ -3463,9 +3491,10 @@ def process_nursery_frame(
         ):
             st['last_tx'] = now
             st['stable_cnt'] = 0
-
             # 트레이 감지 + 발아 완료를 모두 확인했으므로
             # READY 상태로 변경
+            became_ready = False
+
             if logical_slot['state'] in (
                 SLOT_EMPTY,
                 SLOT_UNKNOWN,
@@ -3473,17 +3502,21 @@ def process_nursery_frame(
             ):
                 logical_slot['state'] = SLOT_READY
                 logical_slot['job_id'] = None
-            # 수확 중에 발아 완료가 새로 감지된 경우
-            if node.flags['hf'] == 1:
+                became_ready = True
+
+            # 실제로 이번 프레임에서 READY로 전환됐고,
+            # 현재 수확 작업 중인 경우에만 WEF=1
+            if (
+                became_ready
+                and node._is_harvest_in_progress_locked()
+                and node.flags['wef'] == 0
+            ):
                 node.flags['wef'] = 1
 
                 node.get_logger().info(
                     f'수확 중 발아 완료: '
                     f'slot={position}, WEF=1'
                 )
-            # RESERVED_IN은 SCARA 완료 전이므로 변경하지 않는다.
-            # RESERVED_OUT도 이동 중이므로 변경하지 않는다.
-
         # ─────────────────────────────────────
         # 7-6. 논리 슬롯을 기존 플래그로 변환
         # ─────────────────────────────────────
@@ -3540,6 +3573,8 @@ def process_nursery_frame(
         stable = st['stable_cnt']
         label = st['last_label']
         slot_state = logical_slot['state']
+        if send_event:
+            node._broadcast_all_flags()
 
     # ─────────────────────────────────────────
     # 8. 로그 출력
