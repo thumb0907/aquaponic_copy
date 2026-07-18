@@ -342,9 +342,13 @@ class MasterNode(Node):
         self.demo_primary_seed_job_id = None
 
         # ── STM1 상태 ─────────────────────────
-        self.start_flag      = False
-        self.stm_state       = 'idle'
-        self.scara_prehome_sent = False   # 이번 사이클에서 스카라 사전 홈잉을 보냈는지
+        self.start_flag = False
+        # 실제 STM1 상태를 받기 전까지 idle로 가정하지 않는다.
+        self.stm_state = 'unknown'
+        self.scara_prehome_sent = False # 이번 사이클에서 스카라 사전 홈잉을 보냈는지
+        # 노드 시작 후 컨트롤러 자동 리셋 관리
+        self.startup_reset_sent = False
+        self.startup_nodes_ready_since = None  
         self.stable_cnt      = 0
         self.no_tray_cnt     = 0
         self.last_tx         = 0.0
@@ -495,6 +499,7 @@ class MasterNode(Node):
 
         self.create_timer(1.0, self._check_heartbeat)
         self.create_timer(0.5, self._publish_monitor)
+        self.create_timer(0.5, self._startup_reset_once)
 
         self.get_logger().info('Master 노드 시작')
 
@@ -2144,6 +2149,51 @@ class MasterNode(Node):
     # ══════════════════════════════════════════
     # Heartbeat + 카메라 상태 판정
     # ══════════════════════════════════════════
+    def _startup_reset_once(self):
+        """마스터 시작 후 Pi1/Pi2가 준비되면 STM1과 SCARA를 한 번만 리셋한다."""
+        now = time.time()
+        send_reset = False
+
+        with self.state_lock:
+            # 이미 이번 마스터 실행에서 리셋했으면 다시 실행하지 않는다.
+            if self.startup_reset_sent:
+                return
+
+            # STM1을 담당하는 Pi1과 SCARA를 담당하는 Pi2가 모두 필요하다.
+            if not self.pi1_alive or not self.pi2_alive:
+                self.startup_nodes_ready_since = None
+                return
+
+            # 작업이 이미 시작된 상태에서는 자동 리셋하지 않는다.
+            if (
+                self.start_flag
+                or self.seed_target_slot is not None
+                or self.active_scara_job is not None
+                or self.active_manip_job is not None
+            ):
+                return
+
+            # 두 노드가 모두 연결된 뒤 2초간 안정적으로 유지되는지 확인한다.
+            if self.startup_nodes_ready_since is None:
+                self.startup_nodes_ready_since = now
+                self.get_logger().info(
+                    'Pi1/Pi2 연결 확인 → 2초 후 STM1/SCARA 초기 리셋'
+                )
+                return
+
+            if now - self.startup_nodes_ready_since < 2.0:
+                return
+
+            # 전송하기 전에 True로 바꿔 중복 콜백을 막는다.
+            self.startup_reset_sent = True
+            send_reset = True
+
+        if send_reset:
+            self._send_reset_stm1_scara()
+
+            self.get_logger().info(
+                '노드 시작 초기화 → STM1 + SCARA RESET 최초 1회 전송'
+            )
     def _on_heartbeat(self, msg: String):
         now = time.time()
         with self.state_lock:
