@@ -251,11 +251,14 @@
 
 					/* 사이클 완료 → 라파2에 DONE_CYCLE2 송신 → IDLE로 복귀 */
 					case SEQ_CYCLE_DONE:
-						Comm_SendDone(DONE_CYCLE2);
-						z_limit_hit = false;
-						seq_state   = SEQ_CONVEY_RUN;
-						sys_state   = SYS_IDLE;
-						break;
+					    /* 사이클 도중 들어온 중복 FF 제거 */
+					    Comm_SetFf(0);
+
+					    Comm_SendDone(DONE_CYCLE2);
+					    z_limit_hit = false;
+					    seq_state   = SEQ_CONVEY_RUN;
+					    sys_state   = SYS_IDLE;
+					    break;
 
 					default:
 						break;
