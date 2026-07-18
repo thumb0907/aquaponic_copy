@@ -691,21 +691,28 @@ class MasterNode(Node):
                 )
             # 발아실 -> 수경배재실
             elif job_type == JOB_NURSERY_TO_WATER:
-                self.flags['uef'] = 1
-
-                command_frame = make_flag_u8(
-                    PID_UEF,
-                    1,
+                self.get_logger().warn(
+                    'NURSERY_TO_WATER 명령 프로토콜 미연결'
                 )
+
+                self.active_scara_job = None
+                self.flags['smf'] = 0
+
+                # 다시 대기열 앞에 넣어서 작업을 잃지 않음
+                self.pending_scara_jobs.insert(0, job)
+                return
 
             # 수경재배실 -> 진동부 -> 2번 컨베이어
             elif job_type == JOB_WATER_TO_VIB_AND_C2:
-                self.flags['wef'] = 1
-
-                command_frame = make_flag_u8(
-                    PID_WEF,
-                    1,
+                self.get_logger().warn(
+                    'WATER_TO_VIB_AND_C2 명령 프로토콜 미연결'
                 )
+
+                self.active_scara_job = None
+                self.flags['smf'] = 0
+
+                self.pending_scara_jobs.insert(0, job)
+                return
 
             else:
                 self.get_logger().error(
@@ -1167,6 +1174,13 @@ class MasterNode(Node):
                     f'destination={destination}'
                 )
                 return None
+            # 수확 중 발생했던 발아 완료 이벤트 처리 완료
+            if self.flags['wef'] == 1:  
+                self.flags['wef'] = 0
+
+                self.get_logger().info(
+                    '수확 중 발아 이동 처리 완료: WEF=0'
+                )
 
             nursery_source = self.nursery_slots[source]
             water_destination = self.water_slots[destination]
@@ -1273,11 +1287,6 @@ class MasterNode(Node):
 
     # 플래그 공유 및 재배포
     def _broadcast_flags_to_scara(self):
-    # SCARA가 참고하는 상태값만 방송한다.
-    # SSF/CRF/UEF/WEF/HMF는 동작 트리거이므로 여기서 보내지 않는다.
-        # self._send_scara(
-        #     make_flag_u16(PID_UV, self.flags['uv'])
-        # )
         self._send_scara(
             make_flag_u8(PID_WCNT, self.flags['wcnt'])
         )
@@ -1293,6 +1302,14 @@ class MasterNode(Node):
         )
         self._send_scara(
             make_flag_u8(PID_WRF, self.flags['wrf'])
+        )
+
+        # 수확 중 인터럽트 이벤트
+        self._send_scara(
+            make_flag_u8(PID_UEF, self.flags['uef'])
+        )
+        self._send_scara(
+            make_flag_u8(PID_WEF, self.flags['wef'])
         )
 
     def _broadcast_flags_to_stm2(self):
@@ -1375,7 +1392,13 @@ class MasterNode(Node):
             elif line == 'STM1:PC:DONE:CYCLE1':
                 self.stm_state = 'waiting_scara'
                 target_slot = self.seed_target_slot
+                    # 수확 작업 중에 파종이 끝난 경우만 UEF=1
+                if self.flags['hf'] == 1:
+                    self.flags['uef'] = 1
 
+                    self.get_logger().info(
+                        '수확 중 파종 완료: UEF=1'
+                    )
                 # if self.demo_mode:
                 #     self.demo_phase = (
                 #         DEMO_MOVING_C1_TO_NURSERY
@@ -1511,14 +1534,6 @@ class MasterNode(Node):
                 JOB_C1_TO_NURSERY,
                 'ssf',
             ),
-            'SCARA:PC:FLAG:UEF:0': (
-                JOB_NURSERY_TO_WATER,
-                'uef',
-            ),
-            'SCARA:PC:FLAG:WEF:0': (
-                JOB_WATER_TO_VIB_AND_C2,
-                'wef',
-            ),
         }
 
         if line in flag_done_map:
@@ -1575,6 +1590,13 @@ class MasterNode(Node):
                 f'{completed_job}'
             )
             return
+        # 수확 중 발생했던 파종 이벤트 처리 완료
+        if self.flags['uef'] == 1:
+            self.flags['uef'] = 0
+
+            self.get_logger().info(
+                '수확 중 파종 작업 처리 완료: UEF=0'
+            )
         if line.startswith('SCARA:PC:FLAG:'):
             parts = line.split(':')
 
@@ -3451,7 +3473,14 @@ def process_nursery_frame(
             ):
                 logical_slot['state'] = SLOT_READY
                 logical_slot['job_id'] = None
+            # 수확 중에 발아 완료가 새로 감지된 경우
+            if node.flags['hf'] == 1:
+                node.flags['wef'] = 1
 
+                node.get_logger().info(
+                    f'수확 중 발아 완료: '
+                    f'slot={position}, WEF=1'
+                )
             # RESERVED_IN은 SCARA 완료 전이므로 변경하지 않는다.
             # RESERVED_OUT도 이동 중이므로 변경하지 않는다.
 
