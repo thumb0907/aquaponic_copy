@@ -73,7 +73,7 @@ STABLE_FRAMES = 3
 COOLDOWN_SEC  = 2.0
 
 # 컨베이어 ROI (트레이 감지 유효 영역)
-ROI_X_MIN = 0.25
+ROI_X_MIN = 0.30
 ROI_X_MAX = 0.80
 ROI_Y_MIN = 0.05
 ROI_Y_MAX = 0.95
@@ -86,6 +86,17 @@ NURSERY_TRAY_MIN_BOX_RATIO = 0.5   # 트레이 박스가 화면 대비 최소 50
 
 # 박스 최소 크기 (화면 대비 비율)
 MIN_BOX_RATIO = 0.25
+
+NURSERY_CAMERA_CONFIG = {
+    'left': {
+        'roi': (0.13, 0.90, 0.17, 0.74),
+        'ignore': (0.36, 0.67),
+    },
+    'right': {
+        'roi': (0.02, 0.78, 0.08, 0.72),
+        'ignore': (0.40, 0.72),
+    },
+}
 
 # 캘리브레이션 파일
 CALIB_PATH = '/home/thumb/aquaponic_copy/smartfarm_ws/camera_calib.npz'
@@ -101,18 +112,18 @@ NURSERY_LEFT_STREAM_PORT = 5001
 NURSERY_RIGHT_STREAM_PORT = 5002
 
 #NURSERY_MIN_CONF = 0.2     # YOLO conf 최소값, 이게 트레이일 확률이 20%이상이어야 박스를 그림
-NURSERY_TRAY_CONF = 0.35
+NURSERY_TRAY_CONF = 0.70
 
 # 초록색 새싹 (hsv)
-NURSERY_LOWER_GREEN = np.array([35, 60, 70], dtype=np.uint8)
+NURSERY_LOWER_GREEN = np.array([38, 90, 90], dtype=np.uint8)
 NURSERY_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
 
 # 노란색·황록색 새싹
-NURSERY_LOWER_YELLOW = np.array([20, 55, 110], dtype=np.uint8)
+NURSERY_LOWER_YELLOW = np.array([22, 85, 130], dtype=np.uint8)
 NURSERY_UPPER_YELLOW = np.array([42, 220, 255], dtype=np.uint8)
 
 # 새싹으로 인정할 최소/최대 면적
-NURSERY_MIN_SPROUT_AREA = 15
+NURSERY_MIN_SPROUT_AREA = 45
 NURSERY_MAX_SPROUT_AREA = 20000
 
 # 작은 노이즈 제거용
@@ -122,8 +133,8 @@ NURSERY_OPEN_KERNEL_SIZE = 3
 NURSERY_CLOSE_KERNEL_SIZE = 3
 
 # 너무 작고 가느다란 영역 제거
-NURSERY_MIN_SPROUT_WIDTH = 6
-NURSERY_MIN_SPROUT_HEIGHT = 6
+NURSERY_MIN_SPROUT_WIDTH = 8
+NURSERY_MIN_SPROUT_HEIGHT = 8
 
 # 발아실 ROI 내부에서 가운데 흰색 영역 제외
 # ROI 내부 너비를 0~1로 봤을 때의 비율
@@ -616,7 +627,8 @@ class MasterNode(Node):
         return self._make_manip_job_frame(job)
     # 스케줄러 함수
     def _schedule_scara_jobs(self):
-        frame_to_send = None
+        command_frame = None
+        job = None
 
         with self.state_lock:
             if self.emergency:
@@ -639,24 +651,64 @@ class MasterNode(Node):
             self.active_scara_job = job
             self.flags['smf'] = 1
 
-            if job['type'] == JOB_C1_TO_NURSERY:
+            job_type = job['type']
+
+            # 1번 컨베이어 -> 발아실
+            if job_type == JOB_C1_TO_NURSERY:
                 self.flags['ssf'] = 1
                 self.flags['crf'] = 1
 
-            job['sent_at'] = time.time()
-            frame_to_send = self._make_scara_job_frame(job)
-
-        if frame_to_send is not None:
-            self._send_scara(frame_to_send)
-
-            if job['type'] == JOB_C1_TO_NURSERY:
-                self._send_binary(
-                    make_flag_u8(PID_CRF, 1)
+                command_frame = make_flag_u8(
+                    PID_SSF,
+                    1,
                 )
 
-            self.get_logger().info(
-                f'SCARA 작업 전송: {job}'
+            # 발아실 -> 생장실
+            elif job_type == JOB_NURSERY_TO_WATER:
+                self.flags['uef'] = 1
+
+                command_frame = make_flag_u8(
+                    PID_UEF,
+                    1,
+                )
+
+            # 생장실 -> 진동부 -> 2번 컨베이어
+            elif job_type == JOB_WATER_TO_VIB_AND_C2:
+                self.flags['wef'] = 1
+
+                command_frame = make_flag_u8(
+                    PID_WEF,
+                    1,
+                )
+
+            else:
+                self.get_logger().error(
+                    f'지원하지 않는 SCARA 작업: {job}'
+                )
+                self.active_scara_job = None
+                self.flags['smf'] = 0
+                return
+
+            job['sent_at'] = time.time()
+
+        if command_frame is None:
+            return
+
+        # SCARA가 UV, 좌우 슬롯 상태를 먼저 받게 함
+        self._broadcast_flags_to_scara()
+
+        # 마지막에 동작 시작 플래그 전송
+        self._send_scara(command_frame)
+
+        # C1 트레이는 SCARA가 가져갈 예정이므로 STM1에 CRF=1
+        if job['type'] == JOB_C1_TO_NURSERY:
+            self._send_binary(
+                make_flag_u8(PID_CRF, 1)
             )
+
+        self.get_logger().info(
+            f'SCARA 플래그 작업 전송: {job}'
+        )
     # 자동 작업 선택 함수
     def _create_automatic_transfer_job_locked(self):
         # ─────────────────────────────────────
@@ -1192,18 +1244,27 @@ class MasterNode(Node):
 
     # 플래그 공유 및 재배포
     def _broadcast_flags_to_scara(self):
-        self._send_scara(make_flag_u8(PID_SSF, self.flags['ssf']))
-        self._send_scara(make_flag_u8(PID_SMF, self.flags['smf']))
-        self._send_scara(make_flag_u8(PID_CRF, self.flags['crf']))
-        self._send_scara(make_flag_u16(PID_UV, self.flags['uv']))
-        self._send_scara(make_flag_u16(PID_WCNT, self.flags['wcnt']))
-        self._send_scara(make_flag_u8(PID_ULF, self.flags['ulf']))
-        self._send_scara(make_flag_u8(PID_URF, self.flags['urf']))
-        self._send_scara(make_flag_u8(PID_WLF, self.flags['wlf']))
-        self._send_scara(make_flag_u8(PID_WRF, self.flags['wrf']))
-        self._send_scara(make_flag_u8(PID_UEF, self.flags['uef']))
-        self._send_scara(make_flag_u8(PID_WEF, self.flags['wef']))
-        self._send_scara(make_flag_u8(PID_HMF, self.flags['hmf']))
+    # SCARA가 참고하는 상태값만 방송한다.
+    # SSF/CRF/UEF/WEF/HMF는 동작 트리거이므로 여기서 보내지 않는다.
+        self._send_scara(
+            make_flag_u16(PID_UV, self.flags['uv'])
+        )
+        self._send_scara(
+            make_flag_u16(PID_WCNT, self.flags['wcnt'])
+        )
+
+        self._send_scara(
+            make_flag_u8(PID_ULF, self.flags['ulf'])
+        )
+        self._send_scara(
+            make_flag_u8(PID_URF, self.flags['urf'])
+        )
+        self._send_scara(
+            make_flag_u8(PID_WLF, self.flags['wlf'])
+        )
+        self._send_scara(
+            make_flag_u8(PID_WRF, self.flags['wrf'])
+        )
 
     def _broadcast_flags_to_stm2(self):
         #self._send_binary_pi2(make_flag_u8(PID_FF, self.flags['ff']))
@@ -1402,7 +1463,89 @@ class MasterNode(Node):
                 '→ STM1에 CRF=0 전달'
             )
             return
+                # SCARA 사전 홈 완료
+        if line == 'SCARA:PC:FLAG:HMF:0':
+            with self.state_lock:
+                self.scara_reported_flags['hmf'] = 0
+                self.flags['hmf'] = 0
+                self.flags['smf'] = 0
+                self.scara_prehome_sent = False
 
+            self.get_logger().info(
+                'SCARA 사전 홈 완료: HMF=0'
+            )
+            return
+
+        # 레거시 SCARA 플래그 완료 신호
+        flag_done_map = {
+            'SCARA:PC:FLAG:SSF:0': (
+                JOB_C1_TO_NURSERY,
+                'ssf',
+            ),
+            'SCARA:PC:FLAG:UEF:0': (
+                JOB_NURSERY_TO_WATER,
+                'uef',
+            ),
+            'SCARA:PC:FLAG:WEF:0': (
+                JOB_WATER_TO_VIB_AND_C2,
+                'wef',
+            ),
+        }
+
+        if line in flag_done_map:
+            expected_job_type, flag_name = flag_done_map[line]
+
+            with self.state_lock:
+                active_job = self.active_scara_job
+
+                if (
+                    active_job is None
+                    or active_job['type'] != expected_job_type
+                ):
+                    self.get_logger().warn(
+                        f'현재 작업과 맞지 않는 SCARA 완료 플래그: '
+                        f'line={line}, active_job={active_job}'
+                    )
+                    return
+
+                self.scara_reported_flags[flag_name] = 0
+                self.flags[flag_name] = 0
+
+                completed_job = self._complete_scara_job_locked(
+                    active_job['type'],
+                    active_job['job_id'],
+                )
+
+                if completed_job is None:
+                    return
+
+                self._broadcast_all_flags()
+
+            # C1 작업이 완전히 끝난 뒤에도 CRF=0을 한 번 더 보장
+            if completed_job['type'] == JOB_C1_TO_NURSERY:
+                self._send_binary(
+                    make_flag_u8(PID_CRF, 0)
+                )
+
+            # SCARA가 C2에 트레이를 놓은 뒤에만 STM2 시작
+            elif (
+                completed_job['type']
+                == JOB_WATER_TO_VIB_AND_C2
+            ):
+                self._send_stm2(
+                    make_flag_u8(PID_FF, 1)
+                )
+
+                self.get_logger().info(
+                    f'STM2 FF=1 전송: '
+                    f'job_id={completed_job["job_id"]}'
+                )
+
+            self.get_logger().info(
+                f'SCARA 플래그 작업 완료: '
+                f'{completed_job}'
+            )
+            return
         if line.startswith('SCARA:PC:FLAG:'):
             parts = line.split(':')
 
@@ -2666,12 +2809,21 @@ def merge_nearby_sprout_boxes(boxes, merge_distance=22):
             groups.append([x1, y1, x2, y2, area])
 
     return [tuple(group) for group in groups]
+# def detect_sprouts_by_color(
+#     frame: np.ndarray,
+#     roi_x_min: float,
+#     roi_x_max: float,
+#     roi_y_min: float,
+#     roi_y_max: float
+# ):
 def detect_sprouts_by_color(
     frame: np.ndarray,
     roi_x_min: float,
     roi_x_max: float,
     roi_y_min: float,
-    roi_y_max: float
+    roi_y_max: float,
+    ignore_x_min: float,
+    ignore_x_max: float
 ):
     frame_h, frame_w = frame.shape[:2]
 
@@ -2770,13 +2922,15 @@ def detect_sprouts_by_color(
     # ------------------------------------------
     # 가운데 흰색 판 영역 강제 제외
     # ------------------------------------------
-    exclude_x1 = int(
-        roi_w * NURSERY_CENTER_EXCLUDE_X_MIN
-    )
+    # exclude_x1 = int(
+    #     roi_w * NURSERY_CENTER_EXCLUDE_X_MIN
+    # )
 
-    exclude_x2 = int(
-        roi_w * NURSERY_CENTER_EXCLUDE_X_MAX
-    )
+    # exclude_x2 = int(
+    #     roi_w * NURSERY_CENTER_EXCLUDE_X_MAX
+    # )
+    exclude_x1 = int(roi_w * ignore_x_min)
+    exclude_x2 = int(roi_w * ignore_x_max)
 
     exclude_x1 = max(0, exclude_x1)
     exclude_x2 = min(roi_w, exclude_x2)
@@ -2859,7 +3013,7 @@ def detect_sprouts_by_color(
         box_area = bw * bh
         fill_ratio = area / max(box_area, 1)
 
-        if fill_ratio < 0.08:
+        if fill_ratio < 0.18:
             continue
 
         # ROI 가장자리에 붙은 구조물 제거
@@ -2920,10 +3074,17 @@ def process_nursery_frame(
     disp = frame.copy()
     h, w = frame.shape[:2]
 
-    roi_x_min = NURSERY_ROI_X_MIN
-    roi_x_max = NURSERY_ROI_X_MAX
-    roi_y_min = NURSERY_ROI_Y_MIN
-    roi_y_max = NURSERY_ROI_Y_MAX
+    # roi_x_min = NURSERY_ROI_X_MIN
+    # roi_x_max = NURSERY_ROI_X_MAX
+    # roi_y_min = NURSERY_ROI_Y_MIN
+    # roi_y_max = NURSERY_ROI_Y_MAX
+    cfg = NURSERY_CAMERA_CONFIG.get(
+        position,
+        NURSERY_CAMERA_CONFIG['left']
+    )
+
+    roi_x_min, roi_x_max, roi_y_min, roi_y_max = cfg['roi']
+    ignore_x_min, ignore_x_max = cfg['ignore']
     
     # 가운데 흰색 영역 표시
     roi_px1 = int(w * roi_x_min)
@@ -2933,12 +3094,18 @@ def process_nursery_frame(
 
     roi_width = roi_px2 - roi_px1
 
-    exclude_px1 = roi_px1 + int(
-        roi_width * NURSERY_CENTER_EXCLUDE_X_MIN
-    )
+    # exclude_px1 = roi_px1 + int(
+    #     roi_width * NURSERY_CENTER_EXCLUDE_X_MIN
+    # )
 
+    # exclude_px2 = roi_px1 + int(
+    #     roi_width * NURSERY_CENTER_EXCLUDE_X_MAX
+    # )
+    exclude_px1 = roi_px1 + int(
+        roi_width * ignore_x_min
+    )
     exclude_px2 = roi_px1 + int(
-        roi_width * NURSERY_CENTER_EXCLUDE_X_MAX
+        roi_width * ignore_x_max
     )
 
     cv2.rectangle(
@@ -3060,13 +3227,22 @@ def process_nursery_frame(
 
     # 트레이가 있을 때만 OpenCV 새싹 검출
     if tray_detected:
+        # sprout_count, sprout_boxes, sprout_mask = detect_sprouts_by_color(
+        #     frame,
+        #     roi_x_min,
+        #     roi_x_max,
+        #     roi_y_min,
+        #     roi_y_max
+        # )
         sprout_count, sprout_boxes, sprout_mask = detect_sprouts_by_color(
-            frame,
-            roi_x_min,
-            roi_x_max,
-            roi_y_min,
-            roi_y_max
-        )
+        frame,
+        roi_x_min,
+        roi_x_max,
+        roi_y_min,
+        roi_y_max,
+        ignore_x_min,
+        ignore_x_max
+    )
     else:
         sprout_count = 0
         sprout_boxes = []
