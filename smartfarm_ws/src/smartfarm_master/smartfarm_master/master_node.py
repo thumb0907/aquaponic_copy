@@ -4117,16 +4117,21 @@ def process_nursery_frame(
     # ─────────────────────────────────────────
     # 8. 로그 출력
     # ─────────────────────────────────────────
-    node.get_logger().info(
-        f'[Nursery {position}] '
-        f'tray={tray_count}, '
-        f'sprouts={sprout_count}/{NURSERY_SPROUT_DONE_COUNT}, '
-        f'progress={sprout_progress:.2f}, '
-        f'done={sprout_done_detected}, '
-        f'stable={stable}, '
-        f'label={label}, '
-        f'slot={slot_state}'
-    )
+    now = time.time()
+
+    if now - st.get('last_log_time', 0.0) >= 2.0:
+        st['last_log_time'] = now
+
+        node.get_logger().info(
+            f'[Nursery {position}] '
+            f'tray={tray_count}, '
+            f'sprouts={sprout_count}/{NURSERY_SPROUT_DONE_COUNT}, '
+            f'progress={sprout_progress:.2f}, '
+            f'done={sprout_done_detected}, '
+            f'stable={stable}, '
+            f'label={label}, '
+            f'slot={slot_state}'
+        )
 
     # ─────────────────────────────────────────
     # 9. 화면 텍스트
