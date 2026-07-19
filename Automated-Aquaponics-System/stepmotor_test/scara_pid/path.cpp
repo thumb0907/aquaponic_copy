@@ -52,11 +52,24 @@ static Sect3Step sect3_step = SECT3_STEP_IDLE;
 
 int base_x = 80;
 int base_y = 0;
+
+static uint16_t active_uv_selector = 0;
+static uint8_t active_source = SCARA_SLOT_NONE;
+static uint8_t active_destination = SCARA_SLOT_NONE;
 // =========================
 // 실제 하드웨어 제어 함수 자리
 // 지금은 뼈대만
 // =========================
+static void reportMotionStart() {
+  reportMotionStart();
+  sendState(SCARA_STATE_MOVING);
+}
 
+static void reportMotionIdle() {
+  setSmf(0);
+  sendSmf();
+  sendState(SCARA_STATE_IDLE);
+}
 static void startScaraMotion(void) {
   home();
 }
@@ -68,8 +81,7 @@ void sect0(void){
   if (!sect0_started) {
     sect0_started = true;
 
-    setSmf(1);
-    sendSmf();
+    reportMotionStart();
   }
 
   home();
@@ -94,6 +106,7 @@ void sect0(void){
 
   setHm(0);
   sendHm();
+  reportMotionIdle();
 
   sect0_started = false;
   currentPath = PATH_IDLE;
@@ -102,8 +115,7 @@ void sect0(void){
 void sect1(void) {
   if (!sect1_started) {
     sect1_started = true;
-    setSmf(1);// 구동 중이므로 status플레그 셋
-    sendSmf(); // 상태 전송
+    reportMotionStart();
   }
   
   enc_reset_j3();
@@ -234,7 +246,7 @@ void sect1(void) {
   // 정상 완료 신호를 먼저 보내 Master가 active job을 확정 종료하게 한다.
   setSsf(0);
   sendSsf();
-
+  reportMotionIdle();
   setSmf(0); // 스카라 구동 끝
   sendSmf();
   
@@ -246,8 +258,7 @@ void sect1(void) {
 void sect2(void) {
   if (!sect2_started) {
     sect2_started = true;
-    setSmf(1);
-    sendSmf();
+    reportMotionStart();
     startScaraMotion();
   }
   moveRail(3000,0);   
@@ -260,6 +271,7 @@ void sect2(void) {
   // 발아실 -> 수경재배실 적재가 정상 완료된 뒤에만 완료 회신
   setS2f(0);
   sendS2f();
+  reportMotionIdle();
 
   setSmf(0);
   sendSmf();
@@ -272,8 +284,7 @@ void sect3(void) {
   switch (sect3_step) {
     case SECT3_STEP_IDLE:
       sect3_started = true;
-      setSmf(1);
-      sendSmf();
+      reportMotionStart();
       step_command_issued = false;
       sect3_step = SECT3_STEP_INIT;
       break;
@@ -310,7 +321,7 @@ void sect3(void) {
       // 진동부를 거쳐 C2에 트레이를 내려놓은 뒤에만 완료 회신
       setS3f(0);
       sendS3f();
-
+      reportMotionIdle();
       setSmf(0);
       sendSmf();
 
@@ -338,13 +349,14 @@ void pathTask(void) {
   // 스카라 시작 섹션 진입
   // -------------------------
   if (prev_hm == 0 && hm == 1) {
-    if (currentPath == PATH_IDLE) {
+  if (currentPath == PATH_IDLE) {
       currentPath = PATH_SECT0;
     }
   }
-  
+
   if (prev_ssf == 0 && ssf == 1) {
     if (currentPath == PATH_IDLE) {
+      active_uv_selector = getUv();
       currentPath = PATH_SECT1;
     }
   }
@@ -367,14 +379,30 @@ void pathTask(void) {
   // S2F 상승에지: 발아실 -> 수경재배실
   if (prev_s2f == 0 && s2f == 1) {
     if (currentPath == PATH_IDLE) {
-      currentPath = PATH_SECT2;
+      active_source = getScaraSrc();
+      active_destination = getScaraDst();
+
+      if (
+        active_source != SCARA_SLOT_NONE &&
+        active_destination != SCARA_SLOT_NONE
+      ) {
+        currentPath = PATH_SECT2;
+      }
     }
   }
 
   // S3F 상승에지: 수경재배실 -> 진동부 -> C2
   if (prev_s3f == 0 && s3f == 1) {
     if (currentPath == PATH_IDLE) {
-      currentPath = PATH_SECT3;
+      active_source = getScaraSrc();
+      active_destination = getScaraDst();
+
+      if (
+        active_source != SCARA_SLOT_NONE &&
+        active_destination == SCARA_SLOT_NONE
+      ) {
+        currentPath = PATH_SECT3;
+      }
     }
   }
 

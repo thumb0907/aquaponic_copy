@@ -5,18 +5,56 @@
 #include "path.h"
 #include "Serial.h"
 #include "servo_config.h"
-
+static const bool SCARA_STANDALONE_TEST = false;
 void setup() {
   serialProtocolBegin(115200);
+
   setServo();
   delay(50);
   motor_pin();
   set_tim();
   set_int();
+
   setflag();
+  updatePrevFlags();
+
+  sendState(SCARA_STATE_IDLE);
 }
 
 void loop() {
+  if (SCARA_STANDALONE_TEST) {
+    runStandaloneMotionTest();
+    return;
+  }
+
+  serialReceiveTask();
+
+  if (isEstopRequested()) {
+    clearEstopRequest();
+
+    pathEmergencyStop();
+
+    setSmf(0);
+    sendSmf();
+    sendState(SCARA_STATE_ESTOP);
+    return;
+  }
+
+  if (isResetRequested()) {
+    clearResetRequest();
+
+    pathResetState();
+    setflag();
+    updatePrevFlags();
+
+    sendState(SCARA_STATE_IDLE);
+    return;
+  }
+
+  pathTask();
+}
+
+void runStandaloneMotionTest() {
   //serialReceiveTask();
   //pathTask();
 

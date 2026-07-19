@@ -218,6 +218,9 @@ void sendU16(uint8_t id, uint16_t value) {
   buf[1] = (uint8_t)(value & 0xFF);
   sendFrame(id, buf, 2);
 }
+void sendState(uint8_t state) {
+  sendU8(PID_STATE, state);
+}
 
 void serialReceiveTask(void) {
   while (Serial.available() > 0) {

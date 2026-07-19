@@ -55,7 +55,16 @@ enum ParamId : uint8_t {
   PID_S2F       = 0x14,
   PID_S3F       = 0x15,
   PID_SCARA_SRC = 0x16,
-  PID_SCARA_DST = 0x17
+  PID_SCARA_DST = 0x17,
+
+  PID_STATE = 0x20
+};
+
+enum ScaraStateCode : uint8_t {
+  SCARA_STATE_IDLE   = 0x01,
+  SCARA_STATE_MOVING = 0x02,
+  SCARA_STATE_DONE   = 0x03,
+  SCARA_STATE_ESTOP  = 0x04
 };
 
 // master_node.py의 SLOT_NONE / SLOT_LEFT / SLOT_RIGHT와 동일하다.
@@ -79,6 +88,7 @@ void serialReceiveTask(void);
 void sendFrame(uint8_t id, const uint8_t* data, uint8_t len);
 void sendU8(uint8_t id, uint8_t value);
 void sendU16(uint8_t id, uint16_t value);
+void sendState(uint8_t state);
 
 // =========================
 // 현재 값 getter / setter
