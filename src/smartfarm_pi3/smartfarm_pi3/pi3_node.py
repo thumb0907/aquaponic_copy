@@ -274,7 +274,7 @@ class Pi3Node(Node):
         msg      = String()
         msg.data = f'STM3:PC:RAW:{line}'
         self.pub_uart.publish(msg)
-        self.get_logger().info(f'STM3→PC(raw): {line}')
+        self.get_logger().debug(f'STM3→PC(raw): {line}')
 
     def _update_cache_and_publish(self, updates: dict):
         """
@@ -289,7 +289,7 @@ class Pi3Node(Node):
         msg      = String()
         msg.data = ','.join(parts)
         self.pub_sensor.publish(msg)
-        self.get_logger().info(f'[Sensor] {msg.data}')
+        self.get_logger().debug(f'[Sensor] {msg.data}')
 
     def _publish_sensor_cache(self):
         """

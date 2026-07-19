@@ -3109,7 +3109,7 @@ class MasterNode(Node):
         현재는 로그만 기록. 필요 시 stm3_state 변수 추가하여 상태 관리 가능.
         """
         line = msg.data.strip()
-        self.get_logger().info(f'[STM3] {line}')
+        self.get_logger().debug(f'[STM3] {line}')
 
         with self.state_lock:
             if line.startswith('STM3:PC:ERR:'):

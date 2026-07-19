@@ -324,25 +324,20 @@ class MonitorNode(Node):
         print()
 
         # UV실
-        print(f'{C.BOLD}  ── UV실 ──{C.RESET}')
-        self._print_flag('uv',   f'트레이 개수 (최대2)')
-        self._print_flag('ulf',  '왼쪽 발아 완료')
-        self._print_flag('urf',  '오른쪽 발아 완료')
-        print(
-            f'  논리 슬롯  : left={self.status["nursery_left_slot"]}, '
-            f'right={self.status["nursery_right_slot"]}'
-        )
+        self._print_flag('uv', '전체 트레이 개수 (최대2)')
+        self._print_room_slot('UV left', 'nursery_left_slot')
+        self._print_room_slot('UV right', 'nursery_right_slot')
+        self._print_flag('ulf', '왼쪽 발아 완료')
+        self._print_flag('urf', '오른쪽 발아 완료')
         print()
 
         # 수경재배실
         print(f'{C.BOLD}  ── 수경재배실 ──{C.RESET}')
-        self._print_flag('wcnt', '트레이 개수 (최대2)')
-        self._print_flag('wlf',  '왼쪽 성장 완료')
-        self._print_flag('wrf',  '오른쪽 성장 완료')
-        print(
-            f'  논리 슬롯  : left={self.status["water_left_slot"]}, '
-            f'right={self.status["water_right_slot"]}'
-        )
+        self._print_flag('wcnt', '전체 트레이 개수 (최대2)')
+        self._print_room_slot('WCNT left', 'water_left_slot')
+        self._print_room_slot('WCNT right', 'water_right_slot')
+        self._print_flag('wlf', '왼쪽 성장 완료')
+        self._print_flag('wrf', '오른쪽 성장 완료')
         print()
 
         # 수경재배실 센서 (STM3)
@@ -394,7 +389,40 @@ class MonitorNode(Node):
             f'  {key:<10} ({desc:<22}) :  '
             f'{color}● {label}{C.RESET}'
         )
+    def _print_room_slot(self, label: str, status_key: str):
+        state = str(self.status.get(status_key, 'unknown'))
 
+        occupied_states = {
+            'reserved_in',
+            'occupied',
+            'growing',
+            'ready',
+            'reserved_out',
+        }
+
+        state_labels = {
+            'unknown': '확인 전',
+            'empty': '비어 있음',
+            'reserved_in': '입고 예약',
+            'occupied': '트레이 있음',
+            'growing': '성장 중',
+            'ready': '이송 준비',
+            'reserved_out': '출고 예약',
+        }
+
+        state_text = state_labels.get(state, state)
+
+        if state in occupied_states:
+            value_text = f'{C.GREEN}● 1{C.RESET}'
+        elif state == 'empty':
+            value_text = f'{C.GRAY}○ 0{C.RESET}'
+        else:
+            value_text = f'{C.YELLOW}?{C.RESET}'
+
+        print(
+            f'  {label:<12} '
+            f'(슬롯 상태: {state_text:<10}) :  {value_text}'
+        )
     def _print_sensor(self, key: str, label: str, unit: str):
         """센서값 한 줄 출력 — None이면 '수신 대기' 표시"""
         val = self.sensor_cache.get(key)
