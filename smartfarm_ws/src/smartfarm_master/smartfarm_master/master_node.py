@@ -175,10 +175,16 @@ WATER_CAMERA_CONFIG = {
         'roi_x_max': 0.91,
         'roi_y_min': 0.24,
         'roi_y_max': 0.79,
-        'ignore_x_min': 0.36,
-        'ignore_x_max': 0.66,
+        'ignore_x_min': 0.35,
+        'ignore_x_max': 0.65,
+
+        # green_ratio만으로 점유 판단
+        'occupy_green_ratio': 0.03,
+        'occupy_stable_frames': 3,
+
+        # green_ratio + largest_area로 성장완료 판단
         'growth_area_ratio': 0.06,
-        'min_leaf_area': 800,
+        'min_leaf_area': 1000,
     },
     'right': {
         'roi_x_min': WATER_ROI_X_MIN,
@@ -187,6 +193,10 @@ WATER_CAMERA_CONFIG = {
         'roi_y_max': WATER_ROI_Y_MAX,
         'ignore_x_min': None,
         'ignore_x_max': None,
+
+        'occupy_green_ratio': 0.03,
+        'occupy_stable_frames': 3,
+
         'growth_area_ratio': WATER_GROWTH_AREA_RATIO,
         'min_leaf_area': WATER_MIN_LEAF_AREA,
     },
@@ -474,6 +484,7 @@ class MasterNode(Node):
         self.water_state = {
             'left': {
                 'stable_cnt': 0,
+                'occupied_cnt': 0,
                 'lost_cnt': 0,
                 'last_tx': 0.0,
                 'last_label': 'none',
@@ -481,6 +492,7 @@ class MasterNode(Node):
             },
             'right': {
                 'stable_cnt': 0,
+                'occupied_cnt': 0,
                 'lost_cnt': 0,
                 'last_tx': 0.0,
                 'last_label': 'none',
@@ -4352,6 +4364,10 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
         if area > largest_area:
             largest_area = area
 
+    occupied_seen = (
+        green_ratio >= cfg['occupy_green_ratio']
+    )
+
     growth_done = (
         green_ratio >= cfg['growth_area_ratio']
         and largest_area >= cfg['min_leaf_area']
@@ -4362,7 +4378,7 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
 
     cv2.putText(
         disp,
-        f'green={green_ratio:.3f}/{cfg["growth_area_ratio"]:.2f}',
+        f'green={green_ratio:.3f} occ>{cfg["occupy_green_ratio"]:.2f} ready>{cfg["growth_area_ratio"]:.2f}',
         (20, 70),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
@@ -4417,6 +4433,11 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
         # ─────────────────────────────────────
         # 1. 카메라 판정 안정화
         # ─────────────────────────────────────
+        if occupied_seen:
+            st['occupied_cnt'] += 1
+        else:
+            st['occupied_cnt'] = 0
+
         if growth_done:
             st['stable_cnt'] += 1
             st['lost_cnt'] = 0
@@ -4426,12 +4447,25 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
             st['stable_cnt'] = 0
             st['lost_cnt'] += 1
             st['last_label'] = (
-                'growing'
-                if green_ratio > 0.03
+                'occupied'
+                if occupied_seen
                 else 'none'
             )
             st['last_score'] = green_ratio
+        # 점유 확정
+        if (
+            st['occupied_cnt'] >= cfg['occupy_stable_frames']
+            and logical_slot['state'] in (SLOT_UNKNOWN, SLOT_EMPTY)
+        ):
+            previous_state = logical_slot['state']
+            logical_slot['state'] = SLOT_OCCUPIED
+            logical_slot['job_id'] = None
 
+            node.get_logger().info(
+                f'[Water {position}] 점유 확정: '
+                f'{previous_state} -> {SLOT_OCCUPIED}, '
+                f'green_ratio={green_ratio:.3f}'
+            )
         # ─────────────────────────────────────
         # 2. 성장 완료 확정
         # ─────────────────────────────────────
