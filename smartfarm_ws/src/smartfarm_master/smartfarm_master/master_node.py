@@ -591,6 +591,7 @@ class MasterNode(Node):
         self.scara_prehome_sent = True
         self.scara_prehome_sent_at = time.time()
         self.flags['hmf'] = 1
+        self.flags['smf'] = 1
         self._send_scara(make_flag_u8(PID_HMF, 1))
 
         self.get_logger().info(
@@ -1677,20 +1678,26 @@ class MasterNode(Node):
 
             elif line == 'STM1:PC:STATE:RUN_CONVEYOR1':
                 self.stm_state = 'running'
+            elif line == 'STM1:PC:STATE:PICKING':
+                self.stm_state = 'picking'
             elif line == 'STM1:PC:STATE:SEEDING':
                 self.stm_state = 'seeding'
 
-                if not self._try_send_scara_prehome_locked():
-                    self.get_logger().warn(
-                        f'스카라 사전 홈잉 대기 또는 이미 완료: '
-                        f'sent={self.scara_prehome_sent}, '
-                        f'done={self.scara_prehome_done}, '
-                        f'smf={self.flags["smf"]}, '
-                        f'hmf={self.flags["hmf"]}, '
-                        f'scara_link={self.pi2_device_links["scara"]}, '
-                        f'pi2_alive={self.pi2_alive}, '
-                        f'emergency={self.emergency}'
-                    )
+                if (
+                    not self.scara_prehome_sent
+                    and not self.scara_prehome_done
+                ):
+                    if not self._try_send_scara_prehome_locked():
+                        self.get_logger().warn(
+                            f'SCARA 사전 호밍 전송 불가: '
+                            f'sent={self.scara_prehome_sent}, '
+                            f'done={self.scara_prehome_done}, '
+                            f'smf={self.flags["smf"]}, '
+                            f'hmf={self.flags["hmf"]}, '
+                            f'scara_link={self.pi2_device_links["scara"]}, '
+                            f'pi2_alive={self.pi2_alive}, '
+                            f'emergency={self.emergency}'
+                        )
             elif line == 'STM1:PC:STATE:EJECTING':
                 self.stm_state = 'ejecting'
             elif line == 'STM1:PC:STATE:WAIT_SCARA_PICK':

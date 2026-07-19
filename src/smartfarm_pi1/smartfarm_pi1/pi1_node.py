@@ -90,6 +90,7 @@ STATE_STR = {
     0x05: 'EJECTING',
     0x06: 'WAIT_SCARA_PICK',
     0x07: 'ESTOP',
+    0x08: 'PICKING',
 }
 DONE_STR = {
     0x01: 'HOMING',
