@@ -168,6 +168,31 @@ WATER_STABLE_FRAMES = 5
 WATER_LOST_FRAMES = 8
 WATER_COOLDOWN_SEC = 3.0
 
+#수경재배실쪽
+WATER_CAMERA_CONFIG = {
+    'left': {
+        'roi_x_min': 0.23,
+        'roi_x_max': 0.91,
+        'roi_y_min': 0.24,
+        'roi_y_max': 0.79,
+        'ignore_x_min': 0.36,
+        'ignore_x_max': 0.66,
+        'growth_area_ratio': 0.06,
+        'min_leaf_area': 800,
+    },
+    'right': {
+        'roi_x_min': WATER_ROI_X_MIN,
+        'roi_x_max': WATER_ROI_X_MAX,
+        'roi_y_min': WATER_ROI_Y_MIN,
+        'roi_y_max': WATER_ROI_Y_MAX,
+        'ignore_x_min': None,
+        'ignore_x_max': None,
+        'growth_area_ratio': WATER_GROWTH_AREA_RATIO,
+        'min_leaf_area': WATER_MIN_LEAF_AREA,
+    },
+}
+
+
 SCARA_SECT2_ENABLED = False
 SCARA_SECT3_ENABLED = False
 
@@ -4285,10 +4310,12 @@ def video_receive_loop(node: MasterNode):
 def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     disp = frame.copy()
     h, w = frame.shape[:2]
-    rx1 = int(w * WATER_ROI_X_MIN)
-    rx2 = int(w * WATER_ROI_X_MAX)
-    ry1 = int(h * WATER_ROI_Y_MIN)
-    ry2 = int(h * WATER_ROI_Y_MAX)
+    cfg = WATER_CAMERA_CONFIG.get(position, WATER_CAMERA_CONFIG['left'])
+
+    rx1 = int(w * cfg['roi_x_min'])
+    rx2 = int(w * cfg['roi_x_max'])
+    ry1 = int(h * cfg['roi_y_min'])
+    ry2 = int(h * cfg['roi_y_max'])
 
     roi = frame[ry1:ry2, rx1:rx2]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
@@ -4299,9 +4326,19 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
+    valid_pixels = mask.shape[0] * mask.shape[1]
+
+    ignore_x_min = cfg.get('ignore_x_min')
+    ignore_x_max = cfg.get('ignore_x_max')
+
+    if ignore_x_min is not None and ignore_x_max is not None:
+        ix1 = int(mask.shape[1] * ignore_x_min)
+        ix2 = int(mask.shape[1] * ignore_x_max)
+        mask[:, ix1:ix2] = 0
+        valid_pixels -= mask.shape[0] * max(0, ix2 - ix1)
+
     green_pixels = cv2.countNonZero(mask)
-    roi_pixels = max(1, mask.shape[0] * mask.shape[1])
-    green_ratio = green_pixels / roi_pixels
+    green_ratio = green_pixels / max(1, valid_pixels)
 
     contours, _ = cv2.findContours(
         mask,
@@ -4316,10 +4353,56 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
             largest_area = area
 
     growth_done = (
-        green_ratio >= WATER_GROWTH_AREA_RATIO
-        and largest_area >= WATER_MIN_LEAF_AREA
+        green_ratio >= cfg['growth_area_ratio']
+        and largest_area >= cfg['min_leaf_area']
+    )
+    color = (0, 255, 0) if growth_done else (0, 0, 255)
+
+    cv2.rectangle(disp, (rx1, ry1), (rx2, ry2), color, 2)
+
+    cv2.putText(
+        disp,
+        f'green={green_ratio:.3f}/{cfg["growth_area_ratio"]:.2f}',
+        (20, 70),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        color,
+        2
     )
 
+    cv2.putText(
+        disp,
+        f'area={largest_area:.0f}/{cfg["min_leaf_area"]}',
+        (20, 100),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        color,
+        2
+    )
+    ignore_x_min = cfg.get('ignore_x_min')
+    ignore_x_max = cfg.get('ignore_x_max')
+
+    if ignore_x_min is not None and ignore_x_max is not None:
+        ix1_abs = rx1 + int((rx2 - rx1) * ignore_x_min)
+        ix2_abs = rx1 + int((rx2 - rx1) * ignore_x_max)
+
+        cv2.rectangle(
+            disp,
+            (ix1_abs, ry1),
+            (ix2_abs, ry2),
+            (0, 0, 255),
+            2
+        )
+
+        cv2.putText(
+            disp,
+            'IGNORE',
+            (ix1_abs + 5, ry1 + 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 0, 255),
+            2
+        )
     now = time.time()
     send_event = False
     flag_name = 'wlf' if position == 'left' else 'wrf'
@@ -4436,6 +4519,7 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     # 상태가 실제로 변했을 때만 SCARA와 STM2에 재배포
     if send_event:
         node._broadcast_all_flags()
+    return disp
 #수경재배실 카메라
 def water_video_receive_loop(node: MasterNode, stream_port: int, position: str, calib_path: str | None = None):
     K = None
@@ -4528,10 +4612,10 @@ def water_video_receive_loop(node: MasterNode, stream_port: int, position: str, 
                     2
                 )
 
-                put_latest(target_queue, frame)
+                debug_frame = process_water_frame(node, frame, position)
+                put_latest(target_queue, debug_frame)
 
                 last_process_ts = now
-                process_water_frame(node, frame, position)
 
         except Exception as e:
             print(f'[Water Stream {position}] 오류: {e}')
@@ -4633,6 +4717,7 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
                     conn.close()
                 except Exception:
                     pass
+
 
 
 def main(args=None):
