@@ -67,6 +67,9 @@ CAM3_INDEX = '/dev/cam_water_right' # Pi3 기준 CAM3 장치 번호
 CAM_WIDTH  = 640
 CAM_HEIGHT = 480
 
+WATER_SEND_INTERVAL = 0.5
+JPEG_QUALITY = 60
+
 # ── 대상 식별자 ───────────────────────────────
 TARGET_STM3 = 0x01
 TARGET_RSVD = 0x02            # 예비
@@ -370,6 +373,8 @@ def _camera_stream_loop(cam_index: int, pc_ip: str, port: int, label: str):
     cap = cv2.VideoCapture(cam_index)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  CAM_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
 
     if not cap.isOpened():
         print(f'[{label}] 카메라 열기 실패 (index={cam_index})')
@@ -384,18 +389,35 @@ def _camera_stream_loop(cam_index: int, pc_ip: str, port: int, label: str):
             sock.connect((pc_ip, port))
             print(f'[{label}] PC 연결: {pc_ip}:{port}')
 
+            last_send_ts = 0.0
+
             while rclpy.ok():
-                ok, frame = cap.read()
+                now = time.time()
+
+                if now - last_send_ts < WATER_SEND_INTERVAL:
+                    cap.grab()
+                    time.sleep(0.005)
+                    continue
+
+                for _ in range(2):
+                    cap.grab()
+
+                ok, frame = cap.retrieve()
+                if not ok or frame is None:
+                    continue
+
+                last_send_ts = now
+
+                ok, jpeg = cv2.imencode(
+                    '.jpg',
+                    frame,
+                    [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
+                )
+
                 if not ok:
                     continue
 
-                # JPEG 인코딩 (품질 80)
-                _, jpeg = cv2.imencode(
-                    '.jpg', frame,
-                    [cv2.IMWRITE_JPEG_QUALITY, 80])
                 data = jpeg.tobytes()
-
-                # [4바이트 길이][JPEG] 형식으로 전송
                 sock.sendall(struct.pack('>I', len(data)) + data)
 
         except Exception as e:
@@ -436,10 +458,11 @@ def main():
     #   - stm3_rx_loop    : STM3 UART 문자열 수신 → 파싱 → publish
     #   - cam2_stream_loop: CAM2 영상 → PC TCP 5001 전송
     #   - cam3_stream_loop: CAM3 영상 → PC TCP 5002 전송
-    threading.Thread(target=rclpy.spin,       args=(node,), daemon=True).start()
-    threading.Thread(target=stm3_rx_loop,     args=(node,), daemon=True).start()
+    threading.Thread(target=rclpy.spin, args=(node,), daemon=True).start()
+    threading.Thread(target=stm3_rx_loop, args=(node,), daemon=True).start()
     threading.Thread(target=cam2_stream_loop, daemon=True).start()
-    threading.Thread(target=cam3_stream_loop, daemon=True).start()
+    # 오른쪽 수경재배실 카메라는 현재 사용하지 않음
+    # threading.Thread(target=cam3_stream_loop, daemon=True).start()
 
     try:
         while rclpy.ok():

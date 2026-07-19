@@ -143,7 +143,7 @@ NURSERY_CENTER_EXCLUDE_X_MAX = 0.67
 
 NURSERY_STABLE_FRAMES = 3
 NURSERY_COOLDOWN_SEC = 3.0
-NURSERY_SPROUT_DONE_COUNT = 25  # 새싹 후보가 몇 개 이상이면 발아 완료로 볼지 정하는 값. 
+NURSERY_SPROUT_DONE_COUNT = 15  # 새싹 후보가 몇 개 이상이면 발아 완료로 볼지 정하는 값. 
 NURSERY_SEND_FLAGS = True  
 
 TRAY_OCCUPY_FRAMES = 2
@@ -184,7 +184,7 @@ WATER_CAMERA_CONFIG = {
 
         # green_ratio + largest_area로 성장완료 판단
         'growth_area_ratio': 0.06,
-        'min_leaf_area': 1000,
+        'min_leaf_area': 700,
     },
     'right': {
         'roi_x_min': WATER_ROI_X_MIN,
@@ -203,8 +203,8 @@ WATER_CAMERA_CONFIG = {
 }
 
 
-SCARA_SECT2_ENABLED = False
-SCARA_SECT3_ENABLED = False
+SCARA_SECT2_ENABLED = True
+SCARA_SECT3_ENABLED = True
 
 # 자동 재전송은 실제 중복 동작 위험이 있으므로 하지 않고 오류 상태로 전환한다.
 SCARA_JOB_TIMEOUT_SEC = 180.0
