@@ -87,8 +87,11 @@ KEY_HUMIDITY   = 'HUMIDITY'    # DHT22 습도 (%)
 
 # ── 문자열 파서 정규식 ────────────────────────
 # "tds = 512, ph = 7.20"
-RE_TDS_PH   = re.compile(
-    r'tds\s*=\s*(\d+),\s*ph\s*=\s*([\d.]+)', re.IGNORECASE)
+RE_TDS_PH = re.compile(
+    r'tds\s*=\s*([+-]?\d+(?:\.\d+)?),'
+    r'\s*ph\s*=\s*([+-]?\d+(?:\.\d+)?)',
+    re.IGNORECASE
+)
 
 # "DHT: T=25.1 H=60.3"
 RE_DHT      = re.compile(
