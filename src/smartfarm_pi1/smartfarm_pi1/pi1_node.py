@@ -204,8 +204,10 @@ class Pi1Node(Node):
         # ── Publisher ─────────────────────────
         self.pub_uart = self.create_publisher(
             String, '/pi1/uart_response', 10)
-        self.pub_hb   = self.create_publisher(
+        self.pub_hb = self.create_publisher(
             String, '/system/heartbeat', 10)
+        self.pub_device_status = self.create_publisher(
+            String, '/pi1/device_status', 10)
 
         # ── Subscriber ────────────────────────
         self.create_subscription(
@@ -213,6 +215,7 @@ class Pi1Node(Node):
             self._on_uart_cmd, 10)
 
         self.create_timer(1.0, self._heartbeat)
+        self.create_timer(1.0, self._publish_device_status)
         self.get_logger().info('Pi1 노드 시작')
 
     def _on_uart_cmd(self, msg: UInt8MultiArray):
@@ -264,12 +267,24 @@ class Pi1Node(Node):
         self.get_logger().info(f'STM1→PC: {msg.data}')
 
     def _heartbeat(self):
-        if self.ser is None or not self.ser.is_open:
-            return
+        """Pi1 ROS 노드 자체의 생존 상태를 발행한다."""
+        msg = String()
+        msg.data = 'pi1'
+        self.pub_hb.publish(msg)
 
         msg = String()
         msg.data = 'pi1'
         self.pub_hb.publish(msg)
+        
+    def _publish_device_status(self):
+        """Pi1 노드 생존과 별도로 STM1 UART 연결 상태를 보고한다."""
+        stm1_ok = int(
+            self.ser is not None and self.ser.is_open
+        )
+
+        msg = String()
+        msg.data = f'STM1:{stm1_ok}'
+        self.pub_device_status.publish(msg)
 
 
 def uart_rx_loop(node: Pi1Node):

@@ -407,6 +407,7 @@ class MasterNode(Node):
         self.pi1_alive       = False
         self.pi1_last_hb     = 0.0
         self.pi1_alive_prev  = False  # 연결/끊김 변화 감지용
+        self.stm1_link       = False
 
         # ── STM2 상태 ─────────────────────────
         # 실제 STM2 상태 보고를 받기 전까지 사용 가능한 것으로 가정하지 않는다.
@@ -537,6 +538,9 @@ class MasterNode(Node):
         self.create_subscription(
             String, '/pi1/uart_response',
             self._on_uart1, 10)
+        self.create_subscription(
+            String, '/pi1/device_status',
+            self._on_pi1_device_status, 10)
         self.create_subscription(
             String, '/pi2/uart_response',
             self._on_uart2, 10)
@@ -2449,7 +2453,41 @@ class MasterNode(Node):
                 self.get_logger().error(line)
             elif line.startswith('STM2:PI2:ACK:'):
                 self.get_logger().info(f'ACK: {line}')
-            
+    def _on_pi1_device_status(self, msg: String):
+        """Pi1이 보고한 STM1 UART 연결 상태를 저장한다."""
+        line = msg.data.strip()
+        parts = line.split(':', 1)
+
+        if len(parts) != 2 or parts[0].strip().upper() != 'STM1':
+            self.get_logger().warn(
+                f'잘못된 Pi1 장치 상태: {line}'
+            )
+            return
+
+        try:
+            connected = bool(int(parts[1].strip()))
+        except ValueError:
+            self.get_logger().warn(
+                f'Pi1 장치 상태 숫자 변환 실패: {line}'
+            )
+            return
+
+        with self.state_lock:
+            previous = self.stm1_link
+            self.stm1_link = connected
+
+            if not connected:
+                self.stm_state = 'unknown'
+
+        if previous != connected:
+            if connected:
+                self.get_logger().info(
+                    '[Pi1/STM1] UART 연결됨'
+                )
+            else:
+                self.get_logger().warn(
+                    '[Pi1/STM1] UART 연결 끊김'
+                )
             
 
     # ══════════════════════════════════════════
@@ -2589,10 +2627,11 @@ class MasterNode(Node):
 
             # Pi 노드뿐 아니라 실제 SCARA UART 연결까지 확인한다.
             if (
-                not self.pi1_alive
-                or not self.pi2_alive
-                or not self.pi2_device_links['scara']
-            ):
+                    not self.pi1_alive
+                    or not self.stm1_link
+                    or not self.pi2_alive
+                    or not self.pi2_device_links['scara']
+                ):
                 self.startup_nodes_ready_since = None
                 return
 
@@ -2674,6 +2713,9 @@ class MasterNode(Node):
                 self.pi2_device_links['stm2'] = False
                 self.pi2_device_links['manip'] = False
                 self.stm2_state = 'unknown'
+            if not pi1_now:
+                self.stm1_link = False
+                self.stm_state = 'unknown'
 
             # 카메라 상태 판정
             if not self.cam1_connected:
@@ -3173,6 +3215,7 @@ class MasterNode(Node):
                 f'pi1_alive:{self.pi1_alive},'
                 f'pi2_alive:{self.pi2_alive},'
                 f'pi3_alive:{self.pi3_alive},'
+                f'stm1_link:{self.stm1_link},'
                 f'scara_link:{self.pi2_device_links["scara"]},'
                 f'stm2_link:{self.pi2_device_links["stm2"]},'
                 f'manip_link:{self.pi2_device_links["manip"]},'
@@ -3313,6 +3356,7 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                         and (now - node.last_tx) > COOLDOWN_SEC
                         and not node.emergency
                         and node.pi1_alive
+                        and node.stm1_link
                         and (
                             not node.demo_mode
                             or node.demo_phase != DEMO_ERROR

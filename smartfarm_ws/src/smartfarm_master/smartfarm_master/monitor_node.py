@@ -47,6 +47,7 @@ class MonitorNode(Node):
             'pi2_alive':  False,
             'pi3_alive':  False,
             'scara_link': False,
+            'stm1_link':  False,
             'stm2_link': False,
             'manip_link': False,
             'nursery_left_slot': 'unknown',
@@ -257,7 +258,11 @@ class MonitorNode(Node):
         alive  = self.status.get('pi1_alive', False)
         alive2 = self.status.get('pi2_alive', False)
         alive3 = self.status.get('pi3_alive', False)
+        stm1_link = self.status.get('stm1_link', False)
         scara_link = self.status.get('scara_link', False)
+        # Pi1은 STM1 UART가 열려 있을 때만 heartbeat를 보내므로
+        # 현재 구조에서는 pi1_alive를 STM1 UART 상태로 사용할 수 있다.
+        stm1_link = alive
         stm2_link = self.status.get('stm2_link', False)
         manip_link = self.status.get('manip_link', False)
         emg    = self.status.get('emergency', False)
@@ -275,9 +280,11 @@ class MonitorNode(Node):
         print(f'  Pi2 연결    :  {p2dot}')
         print(f'  Pi3 연결    :  {p3dot}')
 
+        stm1_dot = (f'{C.GREEN}● 연결됨{C.RESET}' if stm1_link else f'{C.RED}● 끊김{C.RESET}')
         scara_dot = f'{C.GREEN}● 연결됨{C.RESET}' if scara_link else f'{C.RED}● 끊김{C.RESET}'
         stm2_dot = f'{C.GREEN}● 연결됨{C.RESET}' if stm2_link else f'{C.RED}● 끊김{C.RESET}'
         manip_dot = f'{C.GREEN}● 연결됨{C.RESET}' if manip_link else f'{C.GRAY}○ 미연결{C.RESET}'
+        print(f'  STM1 UART   :  {stm1_dot}')
         print(f'  SCARA UART  :  {scara_dot}')
         print(f'  STM2 UART   :  {stm2_dot}')
         print(f'  MANIP UART  :  {manip_dot}')
