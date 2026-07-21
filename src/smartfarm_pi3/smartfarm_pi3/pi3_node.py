@@ -57,7 +57,9 @@ from std_msgs.msg import String, UInt8MultiArray
 PORT_STM3  = '/dev/ttyACM0'      # 센서허브 STM32
 BAUD       = 115200
 
-PC_IP      = '192.168.0.183'  # master_node 실행 PC IP
+#PC_IP      = '192.168.0.183'  # master_node 실행 PC IP
+PC_IP = '10.10.10.1'
+
 CAM2_PORT  = 5011             # 수경재배실 카메라 왼쪽
 CAM3_PORT  = 5012             # 수경재배실 카메라 오른쪽
 
