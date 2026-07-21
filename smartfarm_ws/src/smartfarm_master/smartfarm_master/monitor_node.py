@@ -260,9 +260,7 @@ class MonitorNode(Node):
         alive3 = self.status.get('pi3_alive', False)
         stm1_link = self.status.get('stm1_link', False)
         scara_link = self.status.get('scara_link', False)
-        # Pi1은 STM1 UART가 열려 있을 때만 heartbeat를 보내므로
-        # 현재 구조에서는 pi1_alive를 STM1 UART 상태로 사용할 수 있다.
-        stm1_link = alive
+        
         stm2_link = self.status.get('stm2_link', False)
         manip_link = self.status.get('manip_link', False)
         emg    = self.status.get('emergency', False)

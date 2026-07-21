@@ -272,9 +272,6 @@ class Pi1Node(Node):
         msg.data = 'pi1'
         self.pub_hb.publish(msg)
 
-        msg = String()
-        msg.data = 'pi1'
-        self.pub_hb.publish(msg)
         
     def _publish_device_status(self):
         """Pi1 노드 생존과 별도로 STM1 UART 연결 상태를 보고한다."""
