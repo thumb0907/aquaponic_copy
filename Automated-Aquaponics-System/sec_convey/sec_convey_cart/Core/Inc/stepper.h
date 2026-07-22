@@ -11,6 +11,7 @@ void Z_Enable(bool en);
 void Z_SetDir(bool dir);
 void Z_MoveSteps(int32_t steps, uint32_t step_hz); // +steps / -steps
 bool Z_IsBusy(void);
+void Z_StopHold(void);
 void Z_Stop(void);
 
 // main.c의 HAL_TIM_PeriodElapsedCallback에서 호출할 것

@@ -3,6 +3,8 @@
 ../Core/Src/stepper.c:31:6:Z_SetDir	1
 ../Core/Src/stepper.c:38:13:TIM5_SetStepHz	3
 ../Core/Src/stepper.c:60:6:Z_MoveSteps	2
-../Core/Src/stepper.c:84:6:Z_Stop	1
-../Core/Src/stepper.c:96:6:Z_IsBusy	1
-../Core/Src/stepper.c:102:6:Z_OnTimUpdate	5
+../Core/Src/stepper.c:84:13:Z_StopPulse	1
+../Core/Src/stepper.c:94:6:Z_StopHold	1
+../Core/Src/stepper.c:101:6:Z_Stop	1
+../Core/Src/stepper.c:108:6:Z_IsBusy	1
+../Core/Src/stepper.c:114:6:Z_OnTimUpdate	5

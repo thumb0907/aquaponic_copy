@@ -81,14 +81,26 @@ void Z_MoveSteps(int32_t steps, uint32_t step_hz)
 }
 
 /* ── 즉시 정지 ───────────────────────────────── */
-void Z_Stop(void)
+static void Z_StopPulse(void)
 {
     HAL_TIM_PWM_Stop(&htim5, TIM_CHANNEL_1);
     __HAL_TIM_DISABLE_IT(&htim5, TIM_IT_UPDATE);
 
     z_remain = 0;
     z_busy   = false;
+}
 
+// 이동은 정지하지만 모터 드라이버는 활성 상태로 유지
+void Z_StopHold(void)
+{
+    Z_StopPulse();
+    Z_Enable(true);
+}
+
+// 이동 정지 후 모터 드라이버까지 비활성화
+void Z_Stop(void)
+{
+    Z_StopPulse();
     Z_Enable(false);
 }
 

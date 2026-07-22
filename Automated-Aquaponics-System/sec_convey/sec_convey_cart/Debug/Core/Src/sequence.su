@@ -1,6 +1,6 @@
-../Core/Src/sequence.c:68:14:Handle_Timeout	16	static
-../Core/Src/sequence.c:79:14:Do_EStop	8	static
-../Core/Src/sequence.c:89:14:Do_Reset	8	static
-../Core/Src/sequence.c:102:7:Sequence_OnLimitHit	8	static
-../Core/Src/sequence.c:112:7:Sequence_Init	8	static
-../Core/Src/sequence.c:126:7:App_Run	8	static
+../Core/Src/sequence.c:74:14:Handle_Timeout	16	static
+../Core/Src/sequence.c:85:14:Do_EStop	8	static
+../Core/Src/sequence.c:95:14:Do_Reset	8	static
+../Core/Src/sequence.c:108:7:Sequence_OnPhotoDetected	8	static
+../Core/Src/sequence.c:124:7:Sequence_Init	8	static
+../Core/Src/sequence.c:138:7:App_Run	8	static

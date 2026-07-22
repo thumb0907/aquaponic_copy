@@ -7,4 +7,4 @@
 ../Core/Src/main.c:358:6:HAL_UART_RxCpltCallback	2
 ../Core/Src/main.c:368:6:HAL_TIM_PeriodElapsedCallback	1
 ../Core/Src/main.c:373:6:HAL_GPIO_EXTI_Callback	3
-../Core/Src/main.c:389:6:Error_Handler	1
+../Core/Src/main.c:391:6:Error_Handler	1

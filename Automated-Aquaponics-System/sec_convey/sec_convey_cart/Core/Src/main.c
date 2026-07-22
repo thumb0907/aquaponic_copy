@@ -374,10 +374,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     static uint32_t last = 0;
     uint32_t now = HAL_GetTick();
+
     if (GPIO_Pin == GPIO_PIN_2) {
-        if (now - last < 50) return;   /* 디바운싱 50ms */
+        if (now - last < 50) return;
+
         last = now;
-        Sequence_OnLimitHit();
+        Sequence_OnPhotoDetected();
     }
 }
 /* USER CODE END 4 */

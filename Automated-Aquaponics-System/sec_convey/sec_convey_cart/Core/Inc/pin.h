@@ -20,8 +20,8 @@
 #define IR_PIN		GPIO_PIN_3
 #define IR_PORT		GPIOC
 
-// 직교로봇 리밋스위치
-#define Z_LIM_PIN		GPIO_PIN_2
-#define Z_LIM_PORT	GPIOC
+// 직교로봇 리밋스위치 포토
+#define Z_PHOTO_PIN		GPIO_PIN_2
+#define Z_PHOTO_PORT	GPIOC
 
 #endif

@@ -5,6 +5,6 @@
 #include "pin.h"
 
 uint8_t IR_Detected(void); // 적외선센서
-uint8_t Z_LimitHit(void);  // 리밋스위치
+uint8_t Z_PhotoDetected(void);  // 리밋스위치
 
 #endif

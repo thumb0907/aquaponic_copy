@@ -18,11 +18,18 @@
 	/* ── 동작 파라미터 (실측 후 수정) ────────────── */
 	#define CONVEY_HZ        3000U   // 컨베이어 속도 (step/s)
 	#define STOP_SETTLE_MS    200U   // IR 감지 후 정착 딜레이 (ms)
-	#define Z_HOMING_HZ      1500U   // Z 호밍 속도 (step/s)
-	#define Z_FIX_STEPS      4000    // 리밋 후 하강 스텝 (실측 필요)
-	#define Z_FIX_HZ         1500U   // Z 고정 속도 (step/s)
-	#define Z_RETURN_STEPS   4000    // 수확 후 상승 스텝
-	#define Z_RETURN_HZ      1500U   // Z 복귀 속도 (step/s)
+
+	// 포토센서 위치까지 하강
+	#define Z_DESCEND_HZ          1000U
+
+	// 포토센서 고장 시 기계 끝까지 내려가지 않도록 하는 최대 하강량
+	// 실제 장비 치수에 맞춰 반드시 조정
+	#define Z_DESCEND_MAX_STEPS  5000
+
+	// 수확 완료 후 상승 거리
+	#define Z_RETURN_STEPS        4000
+	#define Z_RETURN_HZ           1000U
+
 	#define EXIT_MIN_RUN_MS   500U   // 배출 컨베이어 최소 구동 시간 (ms)
 
 	/* ── 타임아웃 ────────────────────────────────── */
@@ -45,21 +52,20 @@
 
 	/* ── 내부 시퀀스 상태 (SYS_RUN_CYCLE 내부) ───── */
 	typedef enum {
-		SEQ_CONVEY_RUN,
-		SEQ_CONVEY_STOP,
-		SEQ_Z_HOMING,
-		SEQ_WAIT_Z_FIX,
-		SEQ_SEND_HARVEST,
-		SEQ_WAIT_Z_RETURN,
-		SEQ_EXIT_CONVEY,
-		SEQ_CYCLE_DONE,
+	    SEQ_CONVEY_RUN,
+	    SEQ_CONVEY_STOP,
+	    SEQ_Z_DESCEND_TO_PHOTO,
+	    SEQ_SEND_HARVEST,
+	    SEQ_WAIT_Z_RETURN,
+	    SEQ_EXIT_CONVEY,
+	    SEQ_CYCLE_DONE,
 	} SeqState;
 
 	static SystemState sys_state  = SYS_IDLE;
 	static SeqState    seq_state  = SEQ_CONVEY_RUN;
 	static uint32_t    timer_start  = 0;
 	static uint32_t    settle_start = 0;
-	static volatile bool z_limit_hit = false;
+	static volatile bool z_photo_hit = false;
 
 	#define TIMER_START()   (timer_start = HAL_GetTick())
 	#define TIMED_OUT(ms)   ((HAL_GetTick() - timer_start) >= (ms))
@@ -92,20 +98,26 @@
 		Conveyor_Enable(false);
 		Z_Stop();
 		Comm_ClearAllFlags();
-		z_limit_hit = false;
+		z_photo_hit = false;
 		seq_state   = SEQ_CONVEY_RUN;
 		Comm_SendState(STATE_IDLE);
 		sys_state = SYS_IDLE;
 	}
 
 	/* ── EXTI 콜백: 리밋스위치 (main.c에서 호출) ─── */
-	void Sequence_OnLimitHit(void)
+	void Sequence_OnPhotoDetected(void)
 	{
-		if (!Z_LimitHit()) return;  // 실제 눌림 확인
-		if (sys_state == SYS_RUN_CYCLE && seq_state == SEQ_Z_HOMING) {
-			z_limit_hit = true;
-			Z_Stop();
-		}
+	    if (!Z_PhotoDetected()) return;
+
+	    if (
+	        sys_state == SYS_RUN_CYCLE
+	        && seq_state == SEQ_Z_DESCEND_TO_PHOTO
+	    ) {
+	        z_photo_hit = true;
+
+	        // 포토센서 위치에서 정지하되 고정 토크는 유지
+	        Z_StopHold();
+	    }
 	}
 
 	/* ── 초기화 ─────────────────────────────────── */
@@ -119,7 +131,7 @@
 	#endif
 		sys_state   = SYS_IDLE;
 		seq_state   = SEQ_CONVEY_RUN;
-		z_limit_hit = false;
+		z_photo_hit = false;
 	}
 
 	/* ── 메인 루프 (while(1)에서 매 루프 호출) ────── */
@@ -183,37 +195,59 @@
 
 					/* 정착 딜레이 후 Z 호밍 시작 */
 					case SEQ_CONVEY_STOP:
-						if ((HAL_GetTick() - settle_start) >= STOP_SETTLE_MS) {
-							z_limit_hit = false;
-							Z_Enable(true);
-							Z_MoveSteps(+1000000, Z_HOMING_HZ);  // CW 리밋 방향
-							TIMER_START();
-							seq_state = SEQ_Z_HOMING;
-						}
-						break;
+					    if ((HAL_GetTick() - settle_start) >= STOP_SETTLE_MS) {
+					        z_photo_hit = false;
 
-					/* 리밋스위치 감지 대기 (EXTI에서 z_limit_hit=true + Z_Stop) */
-					case SEQ_Z_HOMING:
-						if (z_limit_hit && !Z_IsBusy()) {
-							Z_Enable(true);
-							HAL_Delay(10);                        // 리밋 충격 안정화
-							Z_MoveSteps(-Z_FIX_STEPS, Z_FIX_HZ); // CCW 고정 위치
-							TIMER_START();
-							seq_state = SEQ_WAIT_Z_FIX;
-						} else if (TIMED_OUT(TIMEOUT_HOMING_MS)) {
-							Handle_Timeout(ERR_HOMING_TIMEOUT);
-						}
-						break;
+					        /*
+					         * 포토센서가 이미 감지 중이면 더 내려가지 않는다.
+					         * 현재 위치를 고정 위치로 판단한다.
+					         */
+					        if (Z_PhotoDetected()) {
+					            z_photo_hit = true;
+					            Z_Enable(true);
+					            Comm_SendState(STATE_Z_FIX);
+					            seq_state = SEQ_SEND_HARVEST;
+					        }
+					        else {
+					            // 현재 코드 방향 기준: 음수 스텝이 하강
+					            Z_MoveSteps(
+					                -Z_DESCEND_MAX_STEPS,
+					                Z_DESCEND_HZ
+					            );
 
-					/* Z 고정 완료 대기 */
-					case SEQ_WAIT_Z_FIX:
-						if (!Z_IsBusy()) {
-							Comm_SendState(STATE_Z_FIX);
-							seq_state = SEQ_SEND_HARVEST;
-						} else if (TIMED_OUT(TIMEOUT_MOVE_MS)) {
-							Handle_Timeout(ERR_Z_FIX_TIMEOUT);
-						}
-						break;
+					            TIMER_START();
+					            seq_state = SEQ_Z_DESCEND_TO_PHOTO;
+					        }
+					    }
+					    break;
+
+					case SEQ_Z_DESCEND_TO_PHOTO:
+					    /*
+					     * 인터럽트를 놓친 경우를 대비해
+					     * 메인 루프에서도 센서 상태를 확인한다.
+					     */
+					    if (z_photo_hit || Z_PhotoDetected()) {
+					        if (Z_IsBusy()) {
+					            Z_StopHold();
+					        }
+
+					        z_photo_hit = true;
+
+					        // 기존 통신 상태값을 그대로 사용
+					        Comm_SendState(STATE_Z_FIX);
+					        seq_state = SEQ_SEND_HARVEST;
+					    }
+					    else if (!Z_IsBusy()) {
+					        /*
+					         * 최대 하강 스텝까지 이동했는데 포토센서가
+					         * 감지되지 않은 경우
+					         */
+					        Handle_Timeout(ERR_HOMING_TIMEOUT);
+					    }
+					    else if (TIMED_OUT(TIMEOUT_HOMING_MS)) {
+					        Handle_Timeout(ERR_HOMING_TIMEOUT);
+					    }
+					    break;
 
 					/* STATE_HARVESTING 보고 → 라파2가 스카라+매니퓰에 H1 중계 */
 					case SEQ_SEND_HARVEST:
@@ -255,7 +289,7 @@
 					    Comm_SetFf(0);
 
 					    Comm_SendDone(DONE_CYCLE2);
-					    z_limit_hit = false;
+					    z_photo_hit = false;
 					    seq_state   = SEQ_CONVEY_RUN;
 					    sys_state   = SYS_IDLE;
 					    break;

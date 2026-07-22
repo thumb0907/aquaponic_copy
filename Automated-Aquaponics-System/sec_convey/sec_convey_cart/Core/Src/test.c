@@ -5,8 +5,8 @@
 // 커맨드 목록:
 //   C1   컨베이어 구동 (3000Hz)			43 31 0A
 //   C0   컨베이어 정지						43 30 0A
-//   ZF   Z축 CW 이동 (호밍 방향, 5000스텝)	5A 46 0A
-//   ZB   Z축 CCW 이동 (복귀 방향, 5000스텝) 5A 42 0A
+//   ZF   Z축 CW 이동 (호밍 방향, 5000스텝)	5A 46 0A (내려감)
+//   ZB   Z축 CCW 이동 (복귀 방향, 5000스텝) 5A 42 0A (올라감)
 //   ZS   Z축 즉시 정지					5A 53 0A
 //   IR   IR 센서 상태 출력					49 52 0A
 //   LM   리밋스위치 상태 출력				4C 4D 0A
@@ -25,8 +25,8 @@ extern UART_HandleTypeDef huart2;
 
 #define TEST_BUF_SIZE   8
 #define TEST_CONV_HZ    3500
-#define TEST_Z_STEPS    5000
-#define TEST_Z_HZ       2000
+#define TEST_Z_STEPS    3000
+#define TEST_Z_HZ       1000
 
 static uint8_t test_rx_byte = 0;
 static uint8_t test_buf[TEST_BUF_SIZE] = {0};
@@ -80,7 +80,7 @@ static void Test_Process(uint8_t *buf)
     }
     // LM: 리밋스위치 상태
     else if (buf[0] == 'L' && buf[1] == 'M') {
-        if (Z_LimitHit())
+        if (Z_PhotoDetected())
             Test_Send("[LIM] HIT");
         else
             Test_Send("[LIM] not hit");
