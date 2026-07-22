@@ -9,6 +9,14 @@
 // =========================
 // path 내부 상태
 // =========================
+static PathState currentPath = PATH_IDLE;
+
+static uint16_t activeUv = 0;
+static uint8_t activeSource = SCARA_SLOT_NONE;
+static uint8_t activeDestination = SCARA_SLOT_NONE;
+
+static bool sectionAborted = false;
+
 enum PathState : uint8_t {
   PATH_IDLE,
   PATH_SECT0,
@@ -56,7 +64,44 @@ int base_y = 0;
 // 실제 하드웨어 제어 함수 자리
 // 지금은 뼈대만
 // =========================
+static void reportMotionStart() {
+  setSmf(1);
+  sendSmf();
+  sendState(SCARA_STATE_MOVING);
+}
+static void reportMotionIdle() {
+  setSmf(0);
+  sendSmf();
+  sendState(SCARA_STATE_IDLE);
+}
 
+static void finishHome() {
+  reportMotionIdle();
+
+  setHmf(0);
+  sendHmf();       // 완료 통지는 마지막
+}
+
+static void finishSect1() {
+  reportMotionIdle();
+
+  setSsf(0);
+  sendSsf();
+}
+
+static void finishSect2() {
+  reportMotionIdle();
+
+  setS2f(0);
+  sendS2f();
+}
+
+static void finishSect3() {
+  reportMotionIdle();
+
+  setS3f(0);
+  sendS3f();
+}
 static void startScaraMotion(void) {
   home();
 }
@@ -67,9 +112,7 @@ static void startScaraMotion(void) {
 void sect0(void){
   if (!sect0_started) {
     sect0_started = true;
-
-    setSmf(1);
-    sendSmf();
+    reportMotionStart();
   }
 
   home();
@@ -95,6 +138,12 @@ void sect0(void){
   setHm(0);
   sendHm();
 
+  if (sectionAborted) {
+    return;
+  }
+
+  finishHome();
+
   sect0_started = false;
   currentPath = PATH_IDLE;
 }
@@ -102,8 +151,6 @@ void sect0(void){
 void sect1(void) {
   if (!sect1_started) {
     sect1_started = true;
-    setSmf(1);// 구동 중이므로 status플레그 셋
-    sendSmf(); // 상태 전송
   }
   
   enc_reset_j3();
@@ -154,8 +201,8 @@ void sect1(void) {
   delay(500);
   enc_reset_j1();
   
-  
-  if (uv == 1)
+   
+  if (activeUv == 1) // 왼쪽
   {
     moveRail_untilStop(false, 4500, stop3_rail);
     moveRail(1500,1);   
@@ -190,7 +237,7 @@ void sect1(void) {
     delay(500);
     uv++;
   }
-  else if(uv == 0)
+  else if(activeUv == 0)
   {
     moveRail_untilStop(false, 4500, stop3_rail);
     moveRail(2000,0);   
@@ -231,12 +278,10 @@ void sect1(void) {
     uv++;
   }
   
-  setSmf(0); // 스카라 구동 끝
-  sendSmf();
-  
+  finishSect1();
+
   sect1_started = false;
   currentPath = PATH_IDLE;
-  
 }
 
 void sect2(void) {
@@ -250,7 +295,7 @@ void sect2(void) {
   //urf=0;
   //ulf++;
   moveRail_untilStop(false, 4000, stop3_rail);
-  if (((urf == 0)&&(ulf == 1))||((urf == 1)&&(ulf == 1)))
+  if (activeSource == SCARA_SLOT_LEFT)
   {
     move_j2_cm(-5);
     j1_home_stop_on_switch(false, 1200);
@@ -301,7 +346,7 @@ void sect2(void) {
   //delay(800);
   j4_stop();
   }
-  else if ((urf == 1)&&(ulf == 0))
+  else if (activeSource == SCARA_SLOT_RIGHT)
   {
     j1_home_stop_on_switch(false, 1200);
     delay(500);
@@ -364,7 +409,7 @@ void sect2(void) {
   move_j2_cm(-1);
   //wlf == 0;
   //wrf = 0;
-  if (((wlf == 1)&&(wrf == 0))||((wlf==0)&&(wrf==0)))
+  if (activeDestination == SCARA_SLOT_LEFT)
   {
     enc_reset_j1();
     delay(20);
@@ -418,7 +463,7 @@ void sect2(void) {
     wrf ++;
   }
 
-  else if ((wlf == 0)&&(wrf == 1))
+  else if (activeDestination == SCARA_SLOT_RIGHT)
   {
     enc_reset_j1();
     delay(20);
@@ -465,6 +510,8 @@ void sect2(void) {
   }
 
 
+  finishSect2();
+
   sect2_started = false;
   currentPath = PATH_IDLE;
 }
@@ -484,7 +531,7 @@ void sect3(void) {
   delay(1000);
   move_j2_cm(-4.5);
 
-  if(((wrf == 1)&&(wlf == 0))||((wrf == 1)&&(wlf == 1)))
+  if(activeSource == SCARA_SLOT_RIGHT)
   {
     enc_reset_j1();
     delay(20);
@@ -539,7 +586,7 @@ void sect3(void) {
     wrf --;  
   }
 
-  else if((wlf ==1)&&(wrf == 0))
+  else if(activeSource == SCARA_SLOT_LEFT)
   {
     enc_reset_j1();
     delay(20);
@@ -636,101 +683,78 @@ void sect3(void) {
 
   j1_home_stop_on_switch(true, 3200);
 
-  sec3_started = false;
+  finishSect3();
+
+  sect3_started = false;
   currentPath = PATH_IDLE;
 }
 // =========================
 // 전체 동작 판단
 // =========================
-void pathTask(void) {
-  uint8_t hm  = getHm();
-  uint8_t ssf = getSsf();
-  uint8_t crf = getCrf();
+void pathTask() {
+  const uint8_t hmf = getHmf();
+  const uint8_t ssf = getSsf();
+  const uint8_t s2f = getS2f();
+  const uint8_t s3f = getS3f();
 
-  uint8_t prev_hm  = getPrevHm();
-  uint8_t prev_ssf = getPrevSsf();
-  uint8_t prev_crf = getPrevCrf();
-  // -------------------------
-  // ssf 상승에지: 0 -> 1
-  // 스카라 시작 섹션 진입
-  // -------------------------
-  if (prev_hm == 0 && hm == 1) {
-    if (currentPath == PATH_IDLE) {
+  const uint8_t prevHmf = getPrevHmf();
+  const uint8_t prevSsf = getPrevSsf();
+  const uint8_t prevS2f = getPrevS2f();
+  const uint8_t prevS3f = getPrevS3f();
+
+  if (currentPath == PATH_IDLE) {
+    if (prevHmf == 0 && hmf == 1) {
       currentPath = PATH_SECT0;
     }
-  }
-  
-  if (prev_ssf == 0 && ssf == 1) {
-    if (currentPath == PATH_IDLE) {
+    else if (prevSsf == 0 && ssf == 1) {
+      activeUv = getUv();
       currentPath = PATH_SECT1;
     }
-  }
+    else if (prevS2f == 0 && s2f == 1) {
+      activeSource = getScaraSrc();
+      activeDestination = getScaraDst();
 
-  // -------------------------
-  // ssf 하강에지: 1 -> 0
-  // 필요 시 강제 정지
-  // -------------------------
-  if (prev_ssf == 1 && ssf == 0) {
-    //stopScaraMotion();
-    sect1_started = false;
-    setSmf(0);
-    sendSmf();
-    if (currentPath == PATH_SECT1) {
-      currentPath = PATH_IDLE;
+      if (
+        activeSource != SCARA_SLOT_NONE &&
+        activeDestination != SCARA_SLOT_NONE
+      ) {
+        currentPath = PATH_SECT2;
+      }
+    }
+    else if (prevS3f == 0 && s3f == 1) {
+      activeSource = getScaraSrc();
+      activeDestination = getScaraDst();
+
+      if (
+        activeSource != SCARA_SLOT_NONE &&
+        activeDestination == SCARA_SLOT_NONE
+      ) {
+        currentPath = PATH_SECT3;
+      }
     }
   }
 
+  switch (currentPath) {
+    case PATH_SECT0:
+      sect0();
+      break;
 
-  if (prev_crf == 0 && crf == 1) {
-    if (currentPath == PATH_IDLE) {
-      currentPath = PATH_SECT2;
-    }
+    case PATH_SECT1:
+      sect1();
+      break;
+
+    case PATH_SECT2:
+      sect2();
+      break;
+
+    case PATH_SECT3:
+      sect3();
+      break;
+
+    case PATH_IDLE:
+    default:
+      break;
   }
 
-
-  
-  // -------------------------
-  // crf 하강에지: 1 -> 0
-  // 필요 시 초기화 정지
-  // -------------------------
-  if (prev_crf == 1 && crf == 0) {
-    //stopCartesianReset();
-
-    sect2_started = false;
-
-    if (currentPath == PATH_SECT2) {
-      currentPath = PATH_IDLE;
-    }
-  }
-
-  // -------------------------
-  // 현재 섹션 수행
-  // -------------------------
-switch (currentPath) {
-  case PATH_IDLE:
-    break;
-
-  case PATH_SECT0:
-    sect0();
-    break;
-
-  case PATH_SECT1:
-    sect1();
-    break;
-
-  case PATH_SECT2:
-    sect2();
-    break;
-
-  case PATH_SECT3:
-    sect3();
-    break;
-
-  default:
-    currentPath = PATH_IDLE;
-    break;
-}
-
-  // 마지막에 이전값 갱신
   updatePrevFlags();
 }
