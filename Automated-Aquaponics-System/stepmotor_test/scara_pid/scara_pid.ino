@@ -14,6 +14,8 @@ void setup() {
   set_tim();
   set_int();
   setflag();
+  updatePrevFlags();
+  sendState(SCARA_STATE_IDLE);  
 }
 
 void loop() {

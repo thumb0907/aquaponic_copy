@@ -21,22 +21,24 @@ static uint8_t prevS3f = 0;
 static bool estopRequested = false;
 static bool resetRequested = false;
 
-void setflag()
-{
-  setSsf(0);
-  setSmf(0);
-  setCrf(0);
-  setUv(0);
-  setHm(0);
+void setflag() {
+  hmf = 0;
+  ssf = 0;
+  s2f = 0;
+  s3f = 0;
+  smf = 0;
 
-  setWcnt(0);
-  setUlf(0);
-  setUrf(0);
-  setWrf(0);
-  setWlf(0);
-  setUef(0);
-  setWef(0);
-  setFf(0);
+  uv = 0;
+  scaraSrc = SCARA_SLOT_NONE;
+  scaraDst = SCARA_SLOT_NONE;
+
+  prevHmf = 0;
+  prevSsf = 0;
+  prevS2f = 0;
+  prevS3f = 0;
+
+  estopRequested = false;
+  resetRequested = false;
 }
 
 // =========================
@@ -279,23 +281,3 @@ void sendSsf() { sendU8(PID_SSF, ssf); }
 void sendS2f() { sendU8(PID_S2F, s2f); }
 void sendS3f() { sendU8(PID_S3F, s3f); }
 void sendSmf() { sendU8(PID_SMF, smf); }
-
-void setflag() {
-  hmf = 0;
-  ssf = 0;
-  s2f = 0;
-  s3f = 0;
-  smf = 0;
-
-  uv = 0;
-  scaraSrc = SCARA_SLOT_NONE;
-  scaraDst = SCARA_SLOT_NONE;
-
-  prevHmf = 0;
-  prevSsf = 0;
-  prevS2f = 0;
-  prevS3f = 0;
-
-  estopRequested = false;
-  resetRequested = false;
-}

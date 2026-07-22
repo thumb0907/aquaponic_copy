@@ -277,6 +277,7 @@ void sect1(void) {
 void sect2(void) {
   if (!sect2_started) {
     sect2_started = true;
+    reportMotionStart();
     //startScaraMotion();
     home();
   }

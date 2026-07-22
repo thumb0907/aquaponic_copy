@@ -61,7 +61,7 @@ void sendState(uint8_t state);
 
 uint8_t getSsf();
 uint8_t getSmf();
-uint8_t getCrf();
+//uint8_t getCrf();
 uint16_t getUv();
 uint8_t getHmf();
 

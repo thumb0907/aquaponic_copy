@@ -41,7 +41,7 @@ static bool move_sync_13(float th1_deg, float th3_deg,
     }
 
     if (millis() - t0 > timeout_ms) {
-      Serial.println("[SYNC13] timeout");
+      //Serial.println("[SYNC13] timeout");
       stop_joints_134();
       motors_enable_all(false);
       return false;
@@ -70,7 +70,7 @@ static bool move_sync_134(float th1_deg, float th3_deg, float th4_deg,
     }
 
     if (millis() - t0 > timeout_ms) {
-      Serial.println("[SYNC134] timeout");
+      //Serial.println("[SYNC134] timeout");
       stop_joints_134();
       motors_enable_all(false);
       return false;
@@ -108,7 +108,7 @@ void home()
   grip(false);
   j2_home_stop_on_switch(true, 4000);   // 또는 j2_home_precise(true, 4000, 1000);
   delay(50);
-  Serial.println("j2 end");
+  //Serial.println("j2 end");
   //delay(1000);
 
   //delay(50);
@@ -125,7 +125,7 @@ void home()
   enc_reset_j3();
 
   move_j2_cm(-1.0f, 4000);
-  Serial.println("j2 home");
+  //Serial.println("j2 home");
 
   enc_reset_j1();
   delay(10);
@@ -178,7 +178,7 @@ void goXY(float x, float y, unsigned long pps1, unsigned long int pps2)
   float th1, th2;
   bool ok = inverse2R_best(x, y, th1_cur, th2_cur, th1, th2);
   if (!ok) {
-    Serial.println("[IK] unreachable");
+    //Serial.println("[IK] unreachable");
     return;
   }
 
@@ -188,8 +188,8 @@ void goXY(float x, float y, unsigned long pps1, unsigned long int pps2)
 void printXY(float th1_deg, float th2_deg)
 {
   Pose2D p = forward2R(th1_deg, th2_deg, L1_mm, L2_mm);
-  Serial.print("X="); Serial.print(p.x_mm);
-  Serial.print("  Y="); Serial.println(p.y_mm);
+  //Serial.print("X="); Serial.print(p.x_mm);
+  //Serial.print("  Y="); Serial.println(p.y_mm);
 }
 
 void moveXY_rel(float dx_mm, float dy_mm)
@@ -204,7 +204,7 @@ void moveXY_rel(float dx_mm, float dy_mm)
 
   float th1_tgt, th2_tgt;
   if (!inverse2R_best(x_tgt, y_tgt, th1_cur, th2_cur, th1_tgt, th2_tgt)) {
-    Serial.println("[IK] unreachable (rel)");
+    //Serial.println("[IK] unreachable (rel)");
     return;
   }
 
@@ -218,7 +218,7 @@ void goXY_keepParallel(float x, float y)
 
   float th1, th2;
   if (!inverse2R_best(x, y, th1_cur, th2_cur, th1, th2)) {
-    Serial.println("[IK] unreachable");
+    //Serial.println("[IK] unreachable");
     return;
   }
 
