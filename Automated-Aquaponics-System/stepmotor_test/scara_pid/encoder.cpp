@@ -156,36 +156,60 @@ static float j1_error_deg(float targetAngle) //현재 오차값 저장하는 함
   return (j1_gear * targetAngle) - j1_now_deg();
 }
 
-bool move_j1_wait(float targetAngle,
-                  unsigned long max_pps,
-                  float tolDeg,
-                  unsigned long stable_ms,
-                  unsigned long timeout_ms)
-{
-  unsigned long t0 = millis();
-  unsigned long inTolSince = 0;
+bool move_j1_wait(
+  float targetAngle,
+  unsigned long max_pps,
+  float tolDeg,
+  unsigned long stable_ms,
+  unsigned long timeout_ms
+) {
+  const unsigned long startedAt = millis();
+  unsigned long inToleranceSince = 0;
+
+  bool completed = false;
 
   motors_enable_all(true);
 
   while (true) {
-    move_j1(targetAngle, max_pps, tolDeg);
+    move_j1(
+      targetAngle,
+      max_pps,
+      tolDeg
+    );
 
-    float e = j1_error_deg(targetAngle);
-    if (fabs(e) <j1_gear* tolDeg) {
-      if (inTolSince == 0) inTolSince = millis();
-      if (millis() - inTolSince >= stable_ms) break;
-    } else {
-      inTolSince = 0;
+    const float error = j1_error_deg(targetAngle);
+
+    if (fabs(error) <= j1_gear * tolDeg) {
+      if (inToleranceSince == 0) {
+        inToleranceSince = millis();
+      }
+
+      if (
+        millis() - inToleranceSince
+        >= stable_ms
+      ) {
+        completed = true;
+        break;
+      }
+    }
+    else {
+      inToleranceSince = 0;
     }
 
-    if (millis() - t0 > timeout_ms) break;
+    if (
+      millis() - startedAt
+      >= timeout_ms
+    ) {
+      completed = false;
+      break;
+    }
   }
 
-  // 정지(필요하면)
   j1_run = false;
   digitalWrite(j1_pul, LOW);
   motors_enable_all(false);
-  return true;
+
+  return completed;
 }
 
 static void j1_set_pps(unsigned long pps) {
@@ -294,7 +318,7 @@ void j2_set_pps(unsigned long pps)
 void move_j2_continuous(bool dir, unsigned long pps)
 {
   if (rail_run) {
-    Serial.println("[J2] blocked: rail is running");
+    //Serial.println("[J2] blocked: rail is running");
     return;
   }
 
@@ -304,8 +328,8 @@ void move_j2_continuous(bool dir, unsigned long pps)
 
   j2_enable(true);
 
-  Serial.print("[J2 DIR] input dir = ");
-  Serial.println(dir ? "true" : "false");
+  //Serial.print("[J2 DIR] input dir = ");
+  //Serial.println(dir ? "true" : "false");
 
   digitalWrite(DIR_PIN, dir ? LOW : HIGH);   // 필요시 HIGH/LOW 뒤집기
   digitalWrite(STEP_PIN, LOW);
@@ -334,7 +358,7 @@ void move_j2_continuous(bool dir, unsigned long pps)
 bool j2_home_stop_on_switch(bool toward_home, unsigned long pps)
 {
   if (rail_run) {
-    Serial.println("[J2 HOME] blocked: rail is running");
+    //Serial.println("[J2 HOME] blocked: rail is running");
     return false;
   }
 
@@ -395,7 +419,7 @@ bool is_j2_endstop_pressed()
 bool move_j2(float deg, unsigned long pps)
 {
   if (rail_run) {
-    Serial.println("[J2] blocked: rail is running");
+    //Serial.println("[J2] blocked: rail is running");
     return false;
   }
 
@@ -547,39 +571,62 @@ static float j3_error_deg(float targetAngle) //현재 오차값 저장하는 함
 {
   return (j3_gear * targetAngle) - j3_now_deg();
 } 
-bool move_j3_wait(float targetAngle,
-                  unsigned long max_pps,
-                  float tolDeg,
-                  unsigned long stable_ms,
-                  unsigned long timeout_ms)
-{
-  unsigned long t0 = millis();
-  unsigned long inTolSince = 0;
+bool move_j3_wait(
+  float targetAngle,
+  unsigned long max_pps,
+  float tolDeg,
+  unsigned long stable_ms,
+  unsigned long timeout_ms
+) {
+  const unsigned long startedAt = millis();
+  unsigned long inToleranceSince = 0;
+
+  bool completed = false;
 
   motors_enable_all(true);
 
   while (true) {
-    bool reached = move_j3(targetAngle, max_pps, tolDeg);
+    const bool reached = move_j3(
+      targetAngle,
+      max_pps,
+      tolDeg
+    );
 
     if (reached) {
-      if (inTolSince == 0) inTolSince = millis();
-      if (millis() - inTolSince >= stable_ms) break;
-    } else {
-      inTolSince = 0;
+      if (inToleranceSince == 0) {
+        inToleranceSince = millis();
+      }
+
+      if (
+        millis() - inToleranceSince
+        >= stable_ms
+      ) {
+        completed = true;
+        break;
+      }
+    }
+    else {
+      inToleranceSince = 0;
     }
 
-    if (millis() - t0 > timeout_ms) break;
+    if (
+      millis() - startedAt
+      >= timeout_ms
+    ) {
+      completed = false;
+      break;
+    }
   }
 
   noInterrupts();
   j3_run = false;
   j3pulseState = LOW;
   digitalWrite(j3_pul, LOW);
-  motors_enable_all(false);
   interrupts();
 
   motors_enable_all(false);
-  return true;
+
+  return completed;
 }
 
 static void j3_set_pps(unsigned long pps) {
@@ -785,8 +832,8 @@ bool move_j4(float targetAngle, float tolDeg = 0.3f)
 
   digitalWrite(j4_dir, (pidOut > 0) ? LOW : HIGH);
 
-  Serial.print("Angle="); Serial.print(nowAngle);
-  Serial.print(" Error="); Serial.println(error);
+  //Serial.print("Angle="); Serial.print(nowAngle);
+  //Serial.print(" Error="); Serial.println(error);
   //Serial.print(" speed="); Serial.print(speed);
   //Serial.print(" interval(us)="); Serial.println(interval);
 
@@ -1026,7 +1073,7 @@ void rail_set_pps(unsigned long pps)
 void moveRail(unsigned long pps, bool dir)
 {
   if (j2_run) {
-    Serial.println("[RAIL] blocked: j2 is running");
+    //Serial.println("[RAIL] blocked: j2 is running");
     return;
   }
 

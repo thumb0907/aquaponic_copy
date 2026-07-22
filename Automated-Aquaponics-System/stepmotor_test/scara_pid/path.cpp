@@ -14,8 +14,24 @@ enum PathState : uint8_t {
   PATH_SECT0,
   PATH_SECT1,
   PATH_SECT2,
-  PATH_SECT3
+  PATH_SECT3,
+  PATH_FAULT
 };
+static void failCurrentSection() {
+  setSmf(0);
+  sendSmf();
+
+  // 여기서 ESTOP은 원격 비상정지 명령이 아니라
+  // SCARA 자체 동작 실패 상태 보고 의미
+  sendState(SCARA_STATE_ESTOP);
+
+  sect0_started = false;
+  sect1_started = false;
+  sect2_started = false;
+  sect3_started = false;
+
+  currentPath = PATH_FAULT;
+}
 
 static PathState currentPath = PATH_IDLE;
 
@@ -745,6 +761,8 @@ void pathTask() {
     case PATH_IDLE:
     default:
       break;
+    case PATH_FAULT:
+       break;
   }
 
   updatePrevFlags();
