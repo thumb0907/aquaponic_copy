@@ -13,6 +13,6 @@ uint8_t Z_PhotoDetected(void)
         HAL_GPIO_ReadPin(
             Z_PHOTO_PORT,
             Z_PHOTO_PIN
-        ) == GPIO_PIN_RESET
+        ) == GPIO_PIN_SET
     );
 }

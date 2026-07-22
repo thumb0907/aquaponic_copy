@@ -81,9 +81,9 @@ static void Test_Process(uint8_t *buf)
     // LM: 리밋스위치 상태
     else if (buf[0] == 'L' && buf[1] == 'M') {
         if (Z_PhotoDetected())
-            Test_Send("[LIM] HIT");
+            Test_Send("[PHOTO] HIT");
         else
-            Test_Send("[LIM] not hit");
+            Test_Send("[PHOTO] not hit");
     }
     // E1: 긴급정지
     else if (buf[0] == 'E' && buf[1] == '1') {
@@ -127,7 +127,7 @@ void Test_Init(void)
     Test_Send("ZB  Z CCW -5000step");
     Test_Send("ZS  Z STOP");
     Test_Send("IR  IR sensor state");
-    Test_Send("LM  Limit switch state");
+    Test_Send("LM  Photo sensor state");
     Test_Send("E1  ESTOP");
     Test_Send("=================");
 }
