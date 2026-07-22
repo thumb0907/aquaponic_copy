@@ -17,27 +17,8 @@ enum PathState : uint8_t {
   PATH_SECT3,
   PATH_FAULT
 };
-static void failCurrentSection() {
-  setSmf(0);
-  sendSmf();
-
-  // 여기서 ESTOP은 원격 비상정지 명령이 아니라
-  // SCARA 자체 동작 실패 상태 보고 의미
-  sendState(SCARA_STATE_ESTOP);
-
-  sect0_started = false;
-  sect1_started = false;
-  sect2_started = false;
-  sect3_started = false;
-
-  currentPath = PATH_FAULT;
-}
 
 static PathState currentPath = PATH_IDLE;
-
-static uint16_t activeUv = 0;
-static uint8_t activeSource = SCARA_SLOT_NONE;
-static uint8_t activeDestination = SCARA_SLOT_NONE;
 
 enum Sect3Step : uint8_t {
   SECT3_STEP_IDLE,
@@ -72,6 +53,25 @@ static bool pending_sect2 = false;
 
 static Sect3Step sect3_step = SECT3_STEP_IDLE;
 
+static uint16_t activeUv = 0;
+static uint8_t activeSource = SCARA_SLOT_NONE;
+static uint8_t activeDestination = SCARA_SLOT_NONE;
+
+static void failCurrentSection() {
+  setSmf(0);
+  sendSmf();
+
+  // 여기서 ESTOP은 원격 비상정지 명령이 아니라
+  // SCARA 자체 동작 실패 상태 보고 의미
+  //sendState(SCARA_STATE_ESTOP);
+
+  sect0_started = false;
+  sect1_started = false;
+  sect2_started = false;
+  sect3_started = false;
+
+  currentPath = PATH_FAULT;
+}
 int base_x = 80;
 int base_y = 0;
 // =========================
