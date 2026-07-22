@@ -25,7 +25,7 @@ void Z_Enable(bool en)
      * 드라이버에 따라 반전될 수 있음 — 실측 후 수정
      */
     HAL_GPIO_WritePin(CART_PORT, CART_EN_PIN,
-                      en ? GPIO_PIN_RESET : GPIO_PIN_SET);
+                      en ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
 void Z_SetDir(bool dir)

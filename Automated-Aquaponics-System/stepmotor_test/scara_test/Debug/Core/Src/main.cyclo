@@ -1,0 +1,5 @@
+../Core/Src/main.c:59:6:stepPulse	1
+../Core/Src/main.c:72:5:main	2
+../Core/Src/main.c:124:6:SystemClock_Config	3
+../Core/Src/main.c:166:13:MX_GPIO_Init	1
+../Core/Src/main.c:200:6:Error_Handler	1

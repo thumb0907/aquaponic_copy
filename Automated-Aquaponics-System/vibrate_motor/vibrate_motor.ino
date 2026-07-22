@@ -8,8 +8,8 @@ const int IR_DETECTED_LEVEL = LOW;
 const int MOTOR_STOP_LEVEL = HIGH;
 const int MOTOR_RUN_LEVEL  = LOW;
 
-const unsigned long DETECT_TIME_MS = 4000;   // 연속 감지 시간: 4초
-const unsigned long MOTOR_RUN_MS   = 10000;  // 모터 구동 시간: 10초
+const unsigned long DETECT_TIME_MS = 3000;   // 연속 감지 시간: 3초
+const unsigned long MOTOR_RUN_MS   = 5000;  // 모터 구동 시간: 5초
 
 unsigned long detectStartTime = 0;
 unsigned long motorStartTime = 0;

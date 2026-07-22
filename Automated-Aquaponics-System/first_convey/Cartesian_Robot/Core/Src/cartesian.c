@@ -60,7 +60,11 @@ static uint32_t g_pump_on_ms      = 5000;    // 펌프 ON 유지 시간 (ms), PU
 
 // ── 파종 파라미터 ─────────────────────────────
 #define SOW_ROWS 6
-static float g_sow_z_down_mm = 90.0f;   // 파종 Z 하강 거리 (실측 후 조정) - 90이 최대하강거리
+#define DEMO_SOW_ROWS 3
+// 3줄 파종에서 생략되는 이동거리
+// 3→4행 150mm, 4→5행 35mm, 5→6행 35mm
+#define DEMO_SKIP_FEED_MM (150.0f + 35.0f + 35.0f)
+static float g_sow_z_down_mm = 100.0f;   // 파종 Z 하강 거리 (실측 후 조정) - 90이 최대하강거리
 static const float sow_row_feed_mm[SOW_ROWS - 1] = {
     35.0f,
     35.0f,
@@ -621,7 +625,8 @@ void Cartesian_Task(void)
 
         // Z축 하강 (씨앗통으로)
         case ST_PICK_Z_DOWN:
-        	Z_MoveToMM(Z_SEED_DOWN_POS_MM);
+            Pump_Set(true);
+            Z_MoveToMM(Z_SEED_DOWN_POS_MM);
             state = ST_PICK_WAIT_Z_DOWN;
             break;
 
@@ -701,7 +706,7 @@ void Cartesian_Task(void)
                 if (g_test_picksow_one) {
                     g_test_picksow_one = false;
                     state = ST_DONE;
-                } else if (sow_row < SOW_ROWS) {
+                } else if (sow_row < DEMO_SOW_ROWS) {
                     // 다음 행: X를 씨앗통으로 돌아가서 다시 픽업
                     FirstConvey_MoveDistance(sow_row_feed_mm[sow_row - 1]);
                     state = ST_SOW_WAIT_ROW;
@@ -718,8 +723,14 @@ void Cartesian_Task(void)
 
         // 배출:컨베이어 구동
         case ST_EXIT_CONVEY:
-            FirstConvey_SetIrEnabled(false);      // 이 구간은 IR로 정지하지 않음
-            FirstConvey_MoveDistance(CONVEY_TO_SCARA_MM);
+            FirstConvey_SetIrEnabled(false);
+
+            // 3줄만 파종하지만 최종 SCARA 픽업 위치는
+            // 기존 6줄 파종 때와 동일하게 유지한다.
+            FirstConvey_MoveDistance(
+                CONVEY_TO_SCARA_MM + DEMO_SKIP_FEED_MM
+            );
+
             state = ST_EXIT_WAIT_CONVEY;
             break;
 
