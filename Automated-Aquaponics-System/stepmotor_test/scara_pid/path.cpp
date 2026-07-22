@@ -9,14 +9,6 @@
 // =========================
 // path 내부 상태
 // =========================
-static PathState currentPath = PATH_IDLE;
-
-static uint16_t activeUv = 0;
-static uint8_t activeSource = SCARA_SLOT_NONE;
-static uint8_t activeDestination = SCARA_SLOT_NONE;
-
-static bool sectionAborted = false;
-
 enum PathState : uint8_t {
   PATH_IDLE,
   PATH_SECT0,
@@ -24,6 +16,13 @@ enum PathState : uint8_t {
   PATH_SECT2,
   PATH_SECT3
 };
+
+static PathState currentPath = PATH_IDLE;
+
+static uint16_t activeUv = 0;
+static uint8_t activeSource = SCARA_SLOT_NONE;
+static uint8_t activeDestination = SCARA_SLOT_NONE;
+
 enum Sect3Step : uint8_t {
   SECT3_STEP_IDLE,
   SECT3_STEP_INIT,
@@ -42,7 +41,6 @@ enum HarvestStep : uint8_t {
   HARVEST_STEP_ADVANCE_INDEX,
   HARVEST_STEP_DONE
 };
-static PathState currentPath = PATH_IDLE;
 static PathState suspendedPath = PATH_IDLE;
 
 static bool sect0_started = false;
@@ -132,15 +130,6 @@ void sect0(void){
 
   delay(300);
 
-  setSmf(0);
-  sendSmf();
-
-  setHm(0);
-  sendHm();
-
-  if (sectionAborted) {
-    return;
-  }
 
   finishHome();
 
@@ -151,6 +140,7 @@ void sect0(void){
 void sect1(void) {
   if (!sect1_started) {
     sect1_started = true;
+    reportMotionStart();
   }
   
   enc_reset_j3();
@@ -185,8 +175,8 @@ void sect1(void) {
   //move_j1_wait(-10);
   //move_j2_cm(3);
 
-  setCrf(0); // 직교로봇 리셋
-  sendCrf();
+  //setCrf(0); // 직교로봇 리셋
+  //sendCrf();
   j4_move(false, 2000);
   delay(140);
   j4_stop();
@@ -235,7 +225,7 @@ void sect1(void) {
     move_j2_cm(3.7);
     j1_home_stop_on_switch(true, 3500);
     delay(500);
-    uv++;
+    //uv++;
   }
   else if(activeUv == 0)
   {
@@ -275,7 +265,7 @@ void sect1(void) {
     j1_home_stop_on_switch(true, 3500);
     enc_reset_j1();
     delay(500);
-    uv++;
+    //uv++;
   }
   
   finishSect1();
@@ -327,7 +317,7 @@ void sect2(void) {
     //delay(2000);
     stopRail();
     
-    ulf --;
+    //ulf --;
     grip(true);
   //delay(100);
   move_j2_cm(-4.2);
@@ -379,7 +369,7 @@ void sect2(void) {
     moveRail(750,0);
     delay(1400);
     stopRail();
-    urf --;
+    //urf --;
     grip(true);
   //delay(100);
     move_j2_cm(-4.2);
@@ -409,7 +399,7 @@ void sect2(void) {
   move_j2_cm(-1);
   //wlf == 0;
   //wrf = 0;
-  if (activeDestination == SCARA_SLOT_LEFT)
+  if (activeDestination == SCARA_SLOT_RIGHT)
   {
     enc_reset_j1();
     delay(20);
@@ -460,10 +450,10 @@ void sect2(void) {
     j1_home_stop_on_switch(true, 3200);
     enc_reset_j1();
     //delay(10000000000);
-    wrf ++;
+    //wrf ++;
   }
 
-  else if (activeDestination == SCARA_SLOT_RIGHT)
+  else if (activeDestination == SCARA_SLOT_LEFT)
   {
     enc_reset_j1();
     delay(20);
@@ -506,7 +496,7 @@ void sect2(void) {
     enc_reset_j1();
 
     //delay(10000000000);
-    wlf ++;
+    //wlf ++;
   }
 
 
@@ -520,10 +510,10 @@ void sect3(void) {
  if (!sect3_started) {
     sect3_started = true;
     //startScaraMotion();
+    reportMotionStart();
     home();
   } 
 
-  home();
   moveRail_untilStop(false, 4400, stop2_rail); 
   delay(100);
   j1_home_stop_on_switch(false, 1200);
@@ -583,7 +573,7 @@ void sect3(void) {
     delay(500);
     enc_reset_j1();
 
-    wrf --;  
+    //wrf --;  
   }
 
   else if(activeSource == SCARA_SLOT_LEFT)
@@ -652,7 +642,7 @@ void sect3(void) {
     stopRail();
     move_j2_cm(-3.5);
 
-    wlf --;
+    //wlf --;
   } 
   
   move_j2_cm(-13.5);

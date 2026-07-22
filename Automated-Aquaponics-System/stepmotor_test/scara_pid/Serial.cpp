@@ -167,9 +167,25 @@ void sendU16(uint8_t id, uint16_t value) {
   sendFrame(id, buf, 2);
 }
 
+static unsigned long lastRxByteAt = 0;
+static const unsigned long RX_TIMEOUT_MS = 100;
+
+static void resetRxParser() {
+  rxState = RX_WAIT_SOF;
+  rxIndex = 0;
+  rxLen = 0;
+}
 void serialReceiveTask(void) {
+  if (
+    rxState != RX_WAIT_SOF &&
+    millis() - lastRxByteAt > RX_TIMEOUT_MS
+  ) {
+    resetRxParser();
+  }
+
   while (Serial.available() > 0) {
-    uint8_t b = (uint8_t)Serial.read();
+    const uint8_t b = (uint8_t)Serial.read();
+    lastRxByteAt = millis();
 
     switch (rxState) {
       case RX_WAIT_SOF:
@@ -220,111 +236,66 @@ void serialReceiveTask(void) {
     }
   }
 }
-static unsigned long lastRxByteAt = 0;
-static const unsigned long RX_TIMEOUT_MS = 100;
+uint8_t getHmf() { return hmf; }
+uint8_t getSsf() { return ssf; }
+uint8_t getS2f() { return s2f; }
+uint8_t getS3f() { return s3f; }
+uint8_t getSmf() { return smf; }
+uint16_t getUv() { return uv; }
 
-static void resetRxParser() {
-  rxState = RX_WAIT_SOF;
-  rxIndex = 0;
-  rxLen = 0;
-}
+uint8_t getScaraSrc() { return scaraSrc; }
+uint8_t getScaraDst() { return scaraDst; }
 
-void serialReceiveTask() {
-  if (
-    rxState != RX_WAIT_SOF &&
-    millis() - lastRxByteAt > RX_TIMEOUT_MS
-  ) {
-    resetRxParser();
-  }
+uint8_t getPrevHmf() { return prevHmf; }
+uint8_t getPrevSsf() { return prevSsf; }
+uint8_t getPrevS2f() { return prevS2f; }
+uint8_t getPrevS3f() { return prevS3f; }
 
-  while (Serial.available() > 0) {
-    uint8_t value = (uint8_t)Serial.read();
-    lastRxByteAt = millis();
+bool isEstopRequested() { return estopRequested; }
+bool isResetRequested() { return resetRequested; }
 
-    // 기존 에뮬레이터의 상태 머신 사용
-  }
-}
-// =========================
-// getter
-// =========================
-uint8_t getSsf(void) { return ssf; }
-uint8_t getSmf(void) { return smf; }
-uint8_t getCrf(void) { return crf; }
-uint16_t getUv(void) { return uv; }
-uint8_t getHm(void) { return hm; }
+void clearEstopRequest() { estopRequested = false; }
+void clearResetRequest() { resetRequested = false; }
 
-uint8_t getWcnt(void) { return wcnt; }
-uint8_t getUlf(void)  { return ulf; }
-uint8_t getUrf(void)  { return urf; }
-uint8_t getWrf(void)  { return wrf; }
-uint8_t getWlf(void)  { return wlf; }
-uint8_t getUef(void)  { return uef; }
-uint8_t getWef(void)  { return wef; }
-uint8_t getFf(void)   { return ff; }
-
-// =========================
-// setter
-// =========================
+void setHmf(uint8_t value) { hmf = value; }
 void setSsf(uint8_t value) { ssf = value; }
+void setS2f(uint8_t value) { s2f = value; }
+void setS3f(uint8_t value) { s3f = value; }
 void setSmf(uint8_t value) { smf = value; }
-void setCrf(uint8_t value) { crf = value; }
-void setUv(uint16_t value) { uv = value; }
-void setHm(uint8_t value) { hm = value; }
 
-void setWcnt(uint8_t value) { wcnt = value; }
-void setUlf(uint8_t value)  { ulf = value; }
-void setUrf(uint8_t value)  { urf = value; }
-void setWrf(uint8_t value)  { wrf = value; }
-void setWlf(uint8_t value)  { wlf = value; }
-void setUef(uint8_t value)  { uef = value; }
-void setWef(uint8_t value)  { wef = value; }
-void setFf(uint8_t value)   { ff = value; }
-
-// =========================
-// 이전 값 관련
-// =========================
-uint8_t getPrevSsf(void) { return prev_ssf; }
-uint8_t getPrevCrf(void) { return prev_crf; }
-uint8_t getPrevHm(void) { return prev_hm; }
-
-uint8_t getPrevWcnt(void) { return prev_wcnt; }
-uint8_t getPrevUlf(void)  { return prev_ulf; }
-uint8_t getPrevUrf(void)  { return prev_urf; }
-uint8_t getPrevWrf(void)  { return prev_wrf; }
-uint8_t getPrevWlf(void)  { return prev_wlf; }
-uint8_t getPrevUef(void)  { return prev_uef; }
-uint8_t getPrevWef(void)  { return prev_wef; }
-uint8_t getPrevFf(void)   { return prev_ff; }
-
-void updatePrevFlags(void) {
-  prev_ssf = ssf;
-  prev_crf = crf;
-  prev_hm = hm;
-
-  prev_wcnt = wcnt;
-  prev_ulf  = ulf;
-  prev_urf  = urf;
-  prev_wrf  = wrf;
-  prev_wlf  = wlf;
-  prev_uef  = uef;
-  prev_wef  = wef;
-  prev_ff   = ff;
+void updatePrevFlags() {
+  prevHmf = hmf;
+  prevSsf = ssf;
+  prevS2f = s2f;
+  prevS3f = s3f;
 }
 
-// =========================
-// 편의 송신 함수
-// =========================
-void sendSsf(void)  { sendU8(PID_SSF, ssf); }
-void sendSmf(void)  { sendU8(PID_SMF, smf); }
-void sendCrf(void)  { sendU8(PID_CRF, crf); }
-void sendUv(void)   { sendU16(PID_UV, uv); }
-void sendHm(void) { sendU8(PID_HM, hm); }
+void sendState(uint8_t state) {
+  sendU8(PID_STATE, state);
+}
 
-void sendWcnt(void) { sendU8(PID_WCNT, wcnt); }
-void sendUlf(void)  { sendU8(PID_ULF, ulf); }
-void sendUrf(void)  { sendU8(PID_URF, urf); }
-void sendWrf(void)  { sendU8(PID_WRF, wrf); }
-void sendWlf(void)  { sendU8(PID_WLF, wlf); }
-void sendUef(void)  { sendU8(PID_UEF, uef); }
-void sendWef(void)  { sendU8(PID_WEF, wef); }
-void sendFf(void)   { sendU8(PID_FF, ff); }
+void sendHmf() { sendU8(PID_HMF, hmf); }
+void sendSsf() { sendU8(PID_SSF, ssf); }
+void sendS2f() { sendU8(PID_S2F, s2f); }
+void sendS3f() { sendU8(PID_S3F, s3f); }
+void sendSmf() { sendU8(PID_SMF, smf); }
+
+void setflag() {
+  hmf = 0;
+  ssf = 0;
+  s2f = 0;
+  s3f = 0;
+  smf = 0;
+
+  uv = 0;
+  scaraSrc = SCARA_SLOT_NONE;
+  scaraDst = SCARA_SLOT_NONE;
+
+  prevHmf = 0;
+  prevSsf = 0;
+  prevS2f = 0;
+  prevS3f = 0;
+
+  estopRequested = false;
+  resetRequested = false;
+}
