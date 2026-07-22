@@ -19,11 +19,6 @@ uint8_t uef  = 0;
 uint8_t wef  = 0;
 uint8_t ff   = 0;
 
-uint8_t s2f = 0;
-uint8_t s3f = 0;
-uint8_t scara_src = SCARA_SLOT_NONE;
-uint8_t scara_dst = SCARA_SLOT_NONE;
-
 static uint8_t prev_hm = 0;
 static uint8_t prev_ssf = 0;
 static uint8_t prev_crf = 0;
@@ -36,10 +31,6 @@ static uint8_t prev_wlf  = 0;
 static uint8_t prev_uef  = 0;
 static uint8_t prev_wef  = 0;
 static uint8_t prev_ff   = 0;
-static uint8_t prev_s2f  = 0;
-static uint8_t prev_s3f  = 0;
-static bool estop_requested = false;
-static bool reset_requested = false;
 
 void setflag()
 {
@@ -57,11 +48,6 @@ void setflag()
   setUef(0);
   setWef(0);
   setFf(0);
-
-  setS2f(0);
-  setS3f(0);
-  setScaraSrc(SCARA_SLOT_NONE);
-  setScaraDst(SCARA_SLOT_NONE);
 }
 
 // =========================
@@ -153,34 +139,6 @@ static void handleFrame(uint8_t id, const uint8_t* data, uint8_t len) {
       if (len == 1) ff = data[0];
       break;
 
-    case PID_S2F:
-      if (len == 1 && data[0] <= 1) s2f = data[0];
-      break;
-
-    case PID_S3F:
-      if (len == 1 && data[0] <= 1) s3f = data[0];
-      break;
-
-    case PID_SCARA_SRC:
-      if (len == 1 && data[0] <= SCARA_SLOT_RIGHT) {
-        scara_src = data[0];
-      }
-      break;
-
-    case PID_SCARA_DST:
-      if (len == 1 && data[0] <= SCARA_SLOT_RIGHT) {
-        scara_dst = data[0];
-      }
-      break;
-
-    case PID_ESTOP:
-      if (len == 0) estop_requested = true;
-      break;
-
-    case PID_RESET:
-      if (len == 0) reset_requested = true;
-      break;
-
     default:
       break;
   }
@@ -217,9 +175,6 @@ void sendU16(uint8_t id, uint16_t value) {
   buf[0] = (uint8_t)((value >> 8) & 0xFF);
   buf[1] = (uint8_t)(value & 0xFF);
   sendFrame(id, buf, 2);
-}
-void sendState(uint8_t state) {
-  sendU8(PID_STATE, state);
 }
 
 void serialReceiveTask(void) {
@@ -294,16 +249,6 @@ uint8_t getUef(void)  { return uef; }
 uint8_t getWef(void)  { return wef; }
 uint8_t getFf(void)   { return ff; }
 
-uint8_t getS2f(void)       { return s2f; }
-uint8_t getS3f(void)       { return s3f; }
-uint8_t getScaraSrc(void)  { return scara_src; }
-uint8_t getScaraDst(void)  { return scara_dst; }
-
-bool isEstopRequested(void) { return estop_requested; }
-bool isResetRequested(void) { return reset_requested; }
-void clearEstopRequest(void) { estop_requested = false; }
-void clearResetRequest(void) { reset_requested = false; }
-
 // =========================
 // setter
 // =========================
@@ -322,11 +267,6 @@ void setUef(uint8_t value)  { uef = value; }
 void setWef(uint8_t value)  { wef = value; }
 void setFf(uint8_t value)   { ff = value; }
 
-void setS2f(uint8_t value)      { s2f = value; }
-void setS3f(uint8_t value)      { s3f = value; }
-void setScaraSrc(uint8_t value) { scara_src = value; }
-void setScaraDst(uint8_t value) { scara_dst = value; }
-
 // =========================
 // 이전 값 관련
 // =========================
@@ -342,8 +282,6 @@ uint8_t getPrevWlf(void)  { return prev_wlf; }
 uint8_t getPrevUef(void)  { return prev_uef; }
 uint8_t getPrevWef(void)  { return prev_wef; }
 uint8_t getPrevFf(void)   { return prev_ff; }
-uint8_t getPrevS2f(void)  { return prev_s2f; }
-uint8_t getPrevS3f(void)  { return prev_s3f; }
 
 void updatePrevFlags(void) {
   prev_ssf = ssf;
@@ -358,8 +296,6 @@ void updatePrevFlags(void) {
   prev_uef  = uef;
   prev_wef  = wef;
   prev_ff   = ff;
-  prev_s2f  = s2f;
-  prev_s3f  = s3f;
 }
 
 // =========================
@@ -379,7 +315,3 @@ void sendWlf(void)  { sendU8(PID_WLF, wlf); }
 void sendUef(void)  { sendU8(PID_UEF, uef); }
 void sendWef(void)  { sendU8(PID_WEF, wef); }
 void sendFf(void)   { sendU8(PID_FF, ff); }
-void sendS2f(void)  { sendU8(PID_S2F, s2f); }
-void sendS3f(void)  { sendU8(PID_S3F, s3f); }
-void sendScaraSrc(void) { sendU8(PID_SCARA_SRC, scara_src); }
-void sendScaraDst(void) { sendU8(PID_SCARA_DST, scara_dst); }

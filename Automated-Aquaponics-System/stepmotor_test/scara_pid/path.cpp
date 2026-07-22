@@ -52,24 +52,11 @@ static Sect3Step sect3_step = SECT3_STEP_IDLE;
 
 int base_x = 80;
 int base_y = 0;
-
-static uint16_t active_uv_selector = 0;
-static uint8_t active_source = SCARA_SLOT_NONE;
-static uint8_t active_destination = SCARA_SLOT_NONE;
 // =========================
 // 실제 하드웨어 제어 함수 자리
 // 지금은 뼈대만
 // =========================
-static void reportMotionStart() {
-  reportMotionStart();
-  sendState(SCARA_STATE_MOVING);
-}
 
-static void reportMotionIdle() {
-  setSmf(0);
-  sendSmf();
-  sendState(SCARA_STATE_IDLE);
-}
 static void startScaraMotion(void) {
   home();
 }
@@ -81,7 +68,8 @@ void sect0(void){
   if (!sect0_started) {
     sect0_started = true;
 
-    reportMotionStart();
+    setSmf(1);
+    sendSmf();
   }
 
   home();
@@ -106,7 +94,6 @@ void sect0(void){
 
   setHm(0);
   sendHm();
-  reportMotionIdle();
 
   sect0_started = false;
   currentPath = PATH_IDLE;
@@ -115,7 +102,8 @@ void sect0(void){
 void sect1(void) {
   if (!sect1_started) {
     sect1_started = true;
-    reportMotionStart();
+    setSmf(1);// 구동 중이므로 status플레그 셋
+    sendSmf(); // 상태 전송
   }
   
   enc_reset_j3();
@@ -243,10 +231,6 @@ void sect1(void) {
     uv++;
   }
   
-  // 정상 완료 신호를 먼저 보내 Master가 active job을 확정 종료하게 한다.
-  setSsf(0);
-  sendSsf();
-  reportMotionIdle();
   setSmf(0); // 스카라 구동 끝
   sendSmf();
   
@@ -258,78 +242,402 @@ void sect1(void) {
 void sect2(void) {
   if (!sect2_started) {
     sect2_started = true;
-    reportMotionStart();
-    startScaraMotion();
+    //startScaraMotion();
+    home();
   }
-  moveRail(3000,0);   
-  delay(2000);
-  stopRail();
-  move_j1_wait(30);
+    
+  
+  //urf=0;
+  //ulf++;
+  moveRail_untilStop(false, 4000, stop3_rail);
+  if (((urf == 0)&&(ulf == 1))||((urf == 1)&&(ulf == 1)))
+  {
+    move_j2_cm(-5);
+    j1_home_stop_on_switch(false, 1200);
+    delay(500);
+    enc_reset_j1();
+    
+    moveRail_untilStop(false, 4500, stop3_rail);
+    moveRail(2000,0);   
+    delay(1000);
+    stopRail();
+    //move_j2_cm(-1.5);
+    
+    enc_reset_j3();
+    move_j3_wait(-50);
+    delay(200);
+    enc_reset_j3();
+
+    enc_reset_j1();
+    delay(15);
+    move_j1_wait(40, 1500);
+    delay(200);
+    enc_reset_j1();
+    
+    j4_move(false, 1100);
+    moveRail(100,0);   
+    delay(2000);
+    j4_stop();
+    //moveRail(700,1);
+    //delay(2000);
+    stopRail();
+    
+    ulf --;
+    grip(true);
+  //delay(100);
+  move_j2_cm(-4.2);
+  grip(false); //발아실의 트레이를 집음
+  delay(50);
+  move_j2_cm(6.2);
+  delay(30);
+  moveRail_untilStop(false, 4000, stop2_rail); 
+  //enc_reset_j3();
+  j1_home_stop_on_switch(true, 2200);
+  delay(500);
+  //move_j1_wait(130);
+  enc_reset_j1();
+  
+  //j4_move(false, 1400);
+  //delay(800);
+  j4_stop();
+  }
+  else if ((urf == 1)&&(ulf == 0))
+  {
+    j1_home_stop_on_switch(false, 1200);
+    delay(500);
+    enc_reset_j1();
+    moveRail(1500,1);   
+    delay(1000);
+    stopRail();
+    move_j2_cm(-5);
+    
+    j4_move(false, 1100);
+    moveRail(2600,1);   
+    //delay(2000);
+    delay(2000);
+    j4_stop();
+    stopRail();
+
+    enc_reset_j3();
+    move_j3_wait(-50);
+    enc_reset_j3();
+    
+    enc_reset_j1();
+    delay(20);
+    move_j1_wait(40, 2000);
+    delay(200);
+    enc_reset_j1();
+    
+    
+    
+    
+    moveRail(750,0);
+    delay(1400);
+    stopRail();
+    urf --;
+    grip(true);
+  //delay(100);
+    move_j2_cm(-4.2);
+    grip(false); //발아실의 트레이를 집음
+    delay(50);
+    move_j2_cm(6.2);
+    delay(30);
+    enc_reset_j3();
+    
+    
+    j1_home_stop_on_switch(true, 2200);
+    delay(500);
+    //move_j1_wait(130);
+    enc_reset_j1();
+    moveRail_untilStop(false, 4000, stop2_rail); 
+  }
+  
+  j4_move(true, 800);
+  delay(800);
+  j4_stop();
+  //j4_move(false, 800);
+  delay(200);
   enc_reset_j3();
-  move_j3_wait(30);
+  move_j3_wait(30+20);
+  delay(200);
+  enc_reset_j3();
+  move_j2_cm(-1);
+  //wlf == 0;
+  //wrf = 0;
+  if (((wlf == 1)&&(wrf == 0))||((wlf==0)&&(wrf==0)))
+  {
+    enc_reset_j1();
+    delay(20);
+    move_j1_wait(210,3000);
+    delay(200);
+    enc_reset_j1();
 
-  // 발아실 -> 수경재배실 적재가 정상 완료된 뒤에만 완료 회신
-  setS2f(0);
-  sendS2f();
-  reportMotionIdle();
+    move_j2_cm(2);
 
-  setSmf(0);
-  sendSmf();
+    enc_reset_j3();
+    delay(20);
+    move_j3_wait(-20-40);
+    delay(200);
+    enc_reset_j3();
+    j4_move(true, 1600);
+    delay(500);
+    j4_move(true, 500);
+    //moveRail(1420,0);
+    delay(2000);
+    stopRail();
+    j4_stop();
+    enc_reset_j3();
+    move_j3_wait(-25-10);
+    delay(150);
+    enc_reset_j3();
+    
+    //j4_move(true, 50);
+    moveRail(1850,0);
+    delay(2000);
+    stopRail();
+    //j4_home();
+    delay(50);
+    
+    enc_reset_j1();
+    delay(150);
+    //move_j1_wait(-5, 1000);
+    enc_reset_j1();
+    delay(10);    
+
+    move_j2_cm(-14.5 - 3);
+    delay(10);
+    grip(true); //놓기
+    move_j2_cm(17);
+
+    moveRail_untilStop(true, 4000, stop3_rail);
+
+    enc_reset_j1();
+    j1_home_stop_on_switch(true, 3200);
+    enc_reset_j1();
+    //delay(10000000000);
+    wrf ++;
+  }
+
+  else if ((wlf == 0)&&(wrf == 1))
+  {
+    enc_reset_j1();
+    delay(20);
+    move_j1_wait(105,3000);
+    enc_reset_j1();
+    enc_reset_j3();
+    move_j3_wait(-55);
+    delay(200);
+    enc_reset_j3();
+    moveRail(1900,0);
+    delay(2000);
+    stopRail();
+    
+
+    enc_reset_j3();
+    //move_j3_wait(-10);
+    delay(200);
+    enc_reset_j3();
+
+    j4_move(false, 520);
+    delay(400);
+    j4_stop();
+
+    enc_reset_j1();
+    delay(20);
+    move_j1_wait(7,3000);
+    enc_reset_j1();
+    
+    //delay(200000000000);
+
+    move_j2_cm(-14.5 - 3);
+    delay(10);
+    grip(true); //놓기
+    move_j2_cm(17);
+
+    moveRail_untilStop(true, 4000, stop3_rail);
+
+    enc_reset_j1();
+    j1_home_stop_on_switch(true, 3200);
+    enc_reset_j1();
+
+    //delay(10000000000);
+    wlf ++;
+  }
+
 
   sect2_started = false;
   currentPath = PATH_IDLE;
 }
 
 void sect3(void) {
-  switch (sect3_step) {
-    case SECT3_STEP_IDLE:
-      sect3_started = true;
-      reportMotionStart();
-      step_command_issued = false;
-      sect3_step = SECT3_STEP_INIT;
-      break;
+ if (!sect3_started) {
+    sect3_started = true;
+    //startScaraMotion();
+    home();
+  } 
 
-    case SECT3_STEP_INIT:
-      if (!step_command_issued) {
-        //sect3_init();
-        step_command_issued = true;
-      }
+  home();
+  moveRail_untilStop(false, 4400, stop2_rail); 
+  delay(100);
+  j1_home_stop_on_switch(false, 1200);
+  enc_reset_j1();
+  delay(1000);
+  move_j2_cm(-4.5);
 
-      // 예: if (is_j1_done())
-      if (true) {
-        step_command_issued = false;
-        sect3_step = SECT3_STEP_START_HARVEST;
-      }
-      break;
+  if(((wrf == 1)&&(wlf == 0))||((wrf == 1)&&(wlf == 1)))
+  {
+    enc_reset_j1();
+    delay(20);
+    move_j1_wait(205,2500);
+    delay(100);
+    enc_reset_j1();
+    //j1_home_stop_on_switch(true, 3200);
+    //delay(500);
+    enc_reset_j1();
+    delay(15);
+    //move_j1_wait(-7,500);
+    //delay(200);
+    enc_reset_j1();
 
-    case SECT3_STEP_START_HARVEST:
-      if (!step_command_issued) {
-        // STM2 FF=1은 S3F=0을 받은 Master가 전송한다.
-        // SCARA가 FF를 직접 보내면 시작 주체가 둘이 되므로 여기서는 보내지 않는다.
-        step_command_issued = true;
-      }
+    enc_reset_j3();
+    delay(15);
+    move_j3_wait(-25-10-20-40);
+    delay(200);
+    enc_reset_j3();
 
-      // 예: if (is_j2_done())
-      if (true) {
-        step_command_issued = false;
-        sect3_step = SECT3_STEP_HARVEST_RUNNING;
-      }
-      break;
+    j4_move(false, 1620);
+    moveRail(1230,0);
+    delay(2000);
+    j4_stop();
+    stopRail();
 
+    
 
-    case SECT3_STEP_DONE:
-      // 진동부를 거쳐 C2에 트레이를 내려놓은 뒤에만 완료 회신
-      setS3f(0);
-      sendS3f();
-      reportMotionIdle();
-      setSmf(0);
-      sendSmf();
+    grip(true);
+    move_j2_cm(-14.5 - 2.5);
+    delay(10);
+    grip(false); //놓기
+    move_j2_cm(17);
 
-      sect3_started = false;
-      sect3_step = SECT3_STEP_IDLE;
-      currentPath = PATH_IDLE;
-      break;
+    moveRail_untilStop(true, 4000, stop3_rail);
+    moveRail(2600,1);
+    delay(2000);
+    //j4_stop();
+    stopRail();
+    delay(200);
+
+    j4_move(false, 600);
+    delay(500);
+    j4_stop();
+
+    enc_reset_j1();
+    delay(35);
+    move_j1_wait(20,500);
+    delay(500);
+    enc_reset_j1();
+
+    wrf --;  
   }
+
+  else if((wlf ==1)&&(wrf == 0))
+  {
+    enc_reset_j1();
+    delay(20);
+    move_j1_wait(113,2500);
+    delay(100);
+    enc_reset_j1();
+
+    enc_reset_j3();
+    delay(20);
+    move_j3_wait(-55);
+    delay(200);
+    enc_reset_j3();
+    moveRail(1900,0);
+    delay(2000);
+    stopRail();
+    
+    j4_move(false, 3020);
+    delay(600);
+    j4_stop();
+
+    enc_reset_j1();
+    delay(20);
+    //move_j1_wait(5,300);
+    delay(200);
+    enc_reset_j1();
+
+    grip(true);
+    move_j2_cm(-15 - 2);
+    delay(10);
+    grip(false); //잡기
+    move_j2_cm(17);
+
+    moveRail_untilStop(true, 4000, stop3_rail);
+
+    //j4_move(false, 3020);
+    //delay(600);
+    //j4_stop();
+
+    
+
+    enc_reset_j1();
+    delay(30);
+    move_j1_wait(55,1200);
+    delay(200);
+    enc_reset_j1();
+    
+    move_j2_cm(3.5);
+    delay(200);
+
+    enc_reset_j1();
+    delay(30);
+    move_j1_wait(75,1200);
+    delay(200);
+    enc_reset_j1();
+
+    j4_move(false, 3020);
+    delay(850);
+    j4_stop();
+    delay(500);
+    //delay(100);
+    moveRail(1100,1);
+    delay(2000);
+    stopRail();
+    move_j2_cm(-3.5);
+
+    wlf --;
+  } 
+  
+  move_j2_cm(-13.5);
+  delay(10);
+  grip(true); //놓기
+  //move_j2_cm(6.5);
+
+  delay(5000);
+
+  //move_j2_cm(-6.5);
+  //delay(10);
+  grip(false); //잡기
+  move_j2_cm(10.5);
+
+  moveRail_untilStop(true, 2000, stop_rail);
+
+  moveRail(2000, 1); 
+  delay(800);
+  stopRail();
+
+  move_j2_cm(-8.5);
+  grip(true);
+  move_j2_cm(10.5);
+
+  moveRail(4000, 0); 
+  delay(1000);
+  stopRail();
+
+  j1_home_stop_on_switch(true, 3200);
+
+  sec3_started = false;
+  currentPath = PATH_IDLE;
 }
 // =========================
 // 전체 동작 판단
@@ -337,26 +645,23 @@ void sect3(void) {
 void pathTask(void) {
   uint8_t hm  = getHm();
   uint8_t ssf = getSsf();
-  uint8_t s2f = getS2f();
-  uint8_t s3f = getS3f();
+  uint8_t crf = getCrf();
 
   uint8_t prev_hm  = getPrevHm();
   uint8_t prev_ssf = getPrevSsf();
-  uint8_t prev_s2f = getPrevS2f();
-  uint8_t prev_s3f = getPrevS3f();
+  uint8_t prev_crf = getPrevCrf();
   // -------------------------
   // ssf 상승에지: 0 -> 1
   // 스카라 시작 섹션 진입
   // -------------------------
   if (prev_hm == 0 && hm == 1) {
-  if (currentPath == PATH_IDLE) {
+    if (currentPath == PATH_IDLE) {
       currentPath = PATH_SECT0;
     }
   }
-
+  
   if (prev_ssf == 0 && ssf == 1) {
     if (currentPath == PATH_IDLE) {
-      active_uv_selector = getUv();
       currentPath = PATH_SECT1;
     }
   }
@@ -376,33 +681,25 @@ void pathTask(void) {
   }
 
 
-  // S2F 상승에지: 발아실 -> 수경재배실
-  if (prev_s2f == 0 && s2f == 1) {
+  if (prev_crf == 0 && crf == 1) {
     if (currentPath == PATH_IDLE) {
-      active_source = getScaraSrc();
-      active_destination = getScaraDst();
-
-      if (
-        active_source != SCARA_SLOT_NONE &&
-        active_destination != SCARA_SLOT_NONE
-      ) {
-        currentPath = PATH_SECT2;
-      }
+      currentPath = PATH_SECT2;
     }
   }
 
-  // S3F 상승에지: 수경재배실 -> 진동부 -> C2
-  if (prev_s3f == 0 && s3f == 1) {
-    if (currentPath == PATH_IDLE) {
-      active_source = getScaraSrc();
-      active_destination = getScaraDst();
 
-      if (
-        active_source != SCARA_SLOT_NONE &&
-        active_destination == SCARA_SLOT_NONE
-      ) {
-        currentPath = PATH_SECT3;
-      }
+  
+  // -------------------------
+  // crf 하강에지: 1 -> 0
+  // 필요 시 초기화 정지
+  // -------------------------
+  if (prev_crf == 1 && crf == 0) {
+    //stopCartesianReset();
+
+    sect2_started = false;
+
+    if (currentPath == PATH_SECT2) {
+      currentPath = PATH_IDLE;
     }
   }
 

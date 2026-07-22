@@ -22,12 +22,6 @@ extern uint8_t uef;
 extern uint8_t wef;
 extern uint8_t ff;
 
-// sect2 / sect3 명령과 이번 작업의 좌우 슬롯 선택값
-extern uint8_t s2f;
-extern uint8_t s3f;
-extern uint8_t scara_src;
-extern uint8_t scara_dst;
-
 static const uint8_t SOF = 0xAA;
 static const uint8_t MAX_DATA_LEN = 16;
 
@@ -48,30 +42,7 @@ enum ParamId : uint8_t {
   PID_FF  = 0x0A,
   PID_UEF  = 0x0B,
   PID_WEF   = 0x0C,
-  PID_ESTOP = 0x10,
-  PID_RESET = 0x11,
-  PID_HM = 0x12,
-
-  PID_S2F       = 0x14,
-  PID_S3F       = 0x15,
-  PID_SCARA_SRC = 0x16,
-  PID_SCARA_DST = 0x17,
-
-  PID_STATE = 0x20
-};
-
-enum ScaraStateCode : uint8_t {
-  SCARA_STATE_IDLE   = 0x01,
-  SCARA_STATE_MOVING = 0x02,
-  SCARA_STATE_DONE   = 0x03,
-  SCARA_STATE_ESTOP  = 0x04
-};
-
-// master_node.py의 SLOT_NONE / SLOT_LEFT / SLOT_RIGHT와 동일하다.
-enum ScaraSlotCode : uint8_t {
-  SCARA_SLOT_NONE  = 0x00,
-  SCARA_SLOT_LEFT  = 0x01,
-  SCARA_SLOT_RIGHT = 0x02
+  PID_HM = 0x12
 };
 
 void setflag();
@@ -88,7 +59,6 @@ void serialReceiveTask(void);
 void sendFrame(uint8_t id, const uint8_t* data, uint8_t len);
 void sendU8(uint8_t id, uint8_t value);
 void sendU16(uint8_t id, uint16_t value);
-void sendState(uint8_t state);
 
 // =========================
 // 현재 값 getter / setter
@@ -109,17 +79,6 @@ uint8_t getUef(void);
 uint8_t getWef(void);
 uint8_t getFf(void);
 
-uint8_t getS2f(void);
-uint8_t getS3f(void);
-uint8_t getScaraSrc(void);
-uint8_t getScaraDst(void);
-
-// 실제 모터 정지/원점 복귀는 동작 계층이 이 요청을 소비해 수행한다.
-bool isEstopRequested(void);
-bool isResetRequested(void);
-void clearEstopRequest(void);
-void clearResetRequest(void);
-
 void setSsf(uint8_t value);
 void setSmf(uint8_t value);
 void setCrf(uint8_t value);
@@ -133,11 +92,6 @@ void setWlf(uint8_t value);
 void setUef(uint8_t value);
 void setWef(uint8_t value);
 void setFf(uint8_t value);
-
-void setS2f(uint8_t value);
-void setS3f(uint8_t value);
-void setScaraSrc(uint8_t value);
-void setScaraDst(uint8_t value);
 
 // =========================
 // 이전 값 관련
@@ -154,8 +108,6 @@ uint8_t getPrevWlf(void);
 uint8_t getPrevUef(void);
 uint8_t getPrevWef(void);
 uint8_t getPrevFf(void);
-uint8_t getPrevS2f(void);
-uint8_t getPrevS3f(void);
 
 void updatePrevFlags(void);
 
@@ -176,9 +128,5 @@ void sendWlf(void);
 void sendUef(void);
 void sendWef(void);
 void sendFf(void);
-void sendS2f(void);
-void sendS3f(void);
-void sendScaraSrc(void);
-void sendScaraDst(void);
 
 #endif

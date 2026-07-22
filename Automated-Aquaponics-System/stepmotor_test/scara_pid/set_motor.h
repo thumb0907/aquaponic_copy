@@ -19,7 +19,7 @@
 #define j2_en     28
 //#define BK_PIN  21
 #define ALM_PIN   29
-#define stop_z    3
+#define stop_z    53
 
 //중간 관절
 #define j3_pul  10
@@ -37,7 +37,7 @@
 #define j4_A    2
 #define j4_B    22
 #define j4_Z    25
-#define stop_j4 34 // == 53으로 돼 있음
+#define stop_j4 45 // == 53으로 돼 있음
 
 //리니어 레일
 #define rail_pul  41
@@ -48,7 +48,7 @@
 #define stop3_rail 49
 
 //릴레이 핀 설정
-#define num1 45
+#define num1 48
 #define num2 46
 #define num3 47
 

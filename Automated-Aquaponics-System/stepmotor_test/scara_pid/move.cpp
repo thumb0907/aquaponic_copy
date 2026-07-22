@@ -91,7 +91,7 @@ void move_j2_mm(float mm, unsigned long pps)
 
 void move_j2_cm(float cm, unsigned long pps)
 {
-  move_j2_mm(cm * 10.0f, pps);
+  move_j2_mm(cm * 10.0f , pps);
 }
 
 void home()
@@ -113,7 +113,7 @@ void home()
 
   //delay(50);
   enc_reset_j3();
-  move_j3_wait(170, 5500);
+  move_j3_wait(190, 5500);
   enc_reset_j3();
   delay(100);
   //Serial.println("j3 back");
@@ -130,9 +130,9 @@ void home()
   enc_reset_j1();
   delay(10);
   //Serial.println("j1_back start");
-  move_j1_wait(-30);
+  move_j1_wait(-30, 3000);
   //Serial.println("j1_back");
-  delay(200);
+  delay(250);
 
   j1_home_stop_on_switch(false, 2000);
   delay(500);
@@ -141,8 +141,9 @@ void home()
   //delay(1000);
 
   move_j1_wait(-40);
-  enc_reset_j1();
   delay(100);
+  enc_reset_j1();
+  
   //Serial.println("j1 end");
 /*
   j4_home_stop_on_switch_safe(false, 2000);
