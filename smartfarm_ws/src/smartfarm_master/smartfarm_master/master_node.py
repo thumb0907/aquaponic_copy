@@ -279,6 +279,21 @@ SLOT_GROWING = 'growing'
 SLOT_READY = 'ready'
 SLOT_RESERVED_OUT = 'reserved_out'
 
+# 발표용 고정 데모 경로
+DEMO_ROUTE = {
+    # 새로 파종한 트레이를 넣을 발아실
+    'seed_nursery_dst': 'right',
+
+    # 사람이 준비할 발아 완료 트레이
+    'germinated_nursery_src': 'left',
+
+    # 발아 완료 트레이를 넣을 수경재배실
+    'germinated_water_dst': 'right',
+
+    # 사람이 준비할 성장 완료 트레이
+    'mature_water_src': 'left',
+}
+
 def make_frame(pid: int, data: bytes = b'') -> list:
     """바이너리 프레임 생성 [SOF, ID, LEN, DATA..., CHK]"""
     length = len(data)
@@ -379,7 +394,7 @@ class MasterNode(Node):
         self.next_manip_job_id = 1
         # 발표 데모 진행 상태
         #예를 들어 파종 트레이가 발아실 왼쪽에 들어가면: self.demo_seeded_nursery_slot = 'left' 이후 데모 스케줄러는 발아 완료 트레이를 오른쪽에서만 찾습니다.
-        self.demo_mode = False
+        self.demo_mode = True
         self.demo_phase = DEMO_WAIT_FIRST_TRAY
         # 이번 데모에서 방금 파종한 트레이가 들어간 발아실 슬롯
         # 미리 준비한 발아 완료 트레이를 선택할 때 제외한다.
@@ -1081,14 +1096,42 @@ class MasterNode(Node):
             # 파종 트레이의 발아실 적재까지 완료된 상태
             # → 반대쪽 발아 완료 트레이만 찾는다.
             if self.demo_phase == DEMO_WAIT_GERMINATED_TRAY:
-                nursery_source = self._find_ready_slot_locked(
-                    'nursery',
-                    excluded_slot=self.demo_seeded_nursery_slot,
+                nursery_source = DEMO_ROUTE[
+                    'germinated_nursery_src'
+                ]
+
+                water_destination = DEMO_ROUTE[
+                    'germinated_water_dst'
+                ]
+
+                nursery_ready = (
+                    self.nursery_slots[nursery_source]['state']
+                    == SLOT_READY
                 )
 
-                water_destination = self._find_empty_slot_locked(
-                    'water'
+                water_empty = (
+                    self.water_slots[water_destination]['state']
+                    == SLOT_EMPTY
                 )
+
+                if nursery_ready and water_empty:
+                    queued = self._queue_nursery_to_water_locked(
+                        nursery_source,
+                        water_destination,
+                    )
+
+                    if queued:
+                        self.demo_phase = (
+                            DEMO_MOVING_NURSERY_TO_WATER
+                        )
+
+                        self.get_logger().info(
+                            f'데모 고정 경로 시작: '
+                            f'nursery={nursery_source} -> '
+                            f'water={water_destination}'
+                        )
+
+                return
 
                 if (
                     nursery_source is not None
@@ -1118,10 +1161,36 @@ class MasterNode(Node):
             # → 새로 들어간 수경 트레이는 제외하고
             #   반대쪽 성장 완료 트레이만 찾는다.
             if self.demo_phase == DEMO_WAIT_MATURE_TRAY:
-                water_source = self._find_ready_slot_locked(
-                    'water',
-                    excluded_slot=self.demo_growing_water_slot,
+                water_source = DEMO_ROUTE[
+                    'mature_water_src'
+                ]
+
+                water_ready = (
+                    self.water_slots[water_source]['state']
+                    == SLOT_READY
                 )
+
+                stm2_ready = (
+                    self.stm2_state == 'idle'
+                )
+
+                if water_ready and stm2_ready:
+                    queued = self._queue_water_to_c2_locked(
+                        water_source
+                    )
+
+                    if queued:
+                        self.demo_phase = (
+                            DEMO_MOVING_WATER_TO_C2
+                        )
+
+                        self.get_logger().info(
+                            f'데모 고정 경로 시작: '
+                            f'water={water_source} '
+                            f'-> vibration -> conveyor2'
+                        )
+
+                return
 
                 if (
                     water_source is not None
@@ -1142,7 +1211,6 @@ class MasterNode(Node):
                             f'{self.demo_phase}, '
                             f'water={water_source}'
                         )
-
                 return
 
             # WAIT_FIRST_TRAY, SEEDING, MOVING 계열 단계에서는
@@ -3362,10 +3430,22 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                             or node.demo_phase != DEMO_ERROR
                         )
                     ):
-                        target_slot = node._find_empty_slot_locked(
-                            'nursery'
-                        )
+                        if node.demo_mode:
+                            candidate_slot = DEMO_ROUTE[
+                                'seed_nursery_dst'
+                            ]
 
+                            if (
+                                node.nursery_slots[candidate_slot]['state']
+                                == SLOT_EMPTY
+                            ):
+                                target_slot = candidate_slot
+                            else:
+                                target_slot = None
+                        else:
+                            target_slot = node._find_empty_slot_locked(
+                                'nursery'
+                            )
                         if target_slot is not None:
                             # C1F를 보내기 전에 슬롯부터 예약한다.
                             # 그래야 다음 카메라 프레임이 같은 슬롯을
