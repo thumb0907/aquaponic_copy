@@ -208,7 +208,7 @@ void sect1(void) {
   enc_reset_j1();
   
    
-  if (activeUv == 1) // 왼쪽
+  if (activeUv == 0) // 오른쪽
   {
     moveRail_untilStop(false, 4500, stop3_rail);
     moveRail(1500,1);   
@@ -243,7 +243,7 @@ void sect1(void) {
     delay(500);
     //uv++;
   }
-  else if(activeUv == 0)
+  else if(activeUv == 1) //왼쪽
   {
     moveRail_untilStop(false, 4500, stop3_rail);
     moveRail(2000,0);   
@@ -416,7 +416,7 @@ void sect2(void) {
   move_j2_cm(-1);
   //wlf == 0;
   //wrf = 0;
-  if (activeDestination == SCARA_SLOT_RIGHT)
+  if (activeDestination == SCARA_SLOT_LEFT)
   {
     enc_reset_j1();
     delay(20);
@@ -470,7 +470,7 @@ void sect2(void) {
     //wrf ++;
   }
 
-  else if (activeDestination == SCARA_SLOT_LEFT)
+  else if (activeDestination == SCARA_SLOT_RIGHT)
   {
     enc_reset_j1();
     delay(20);
@@ -504,7 +504,7 @@ void sect2(void) {
     move_j2_cm(-14.5 - 3);
     delay(10);
     grip(true); //놓기
-    move_j2_cm(17);
+    move_j2_cm(15);
 
     moveRail_untilStop(true, 4000, stop3_rail);
 
@@ -538,7 +538,7 @@ void sect3(void) {
   delay(1000);
   move_j2_cm(-4.5);
 
-  if(activeSource == SCARA_SLOT_RIGHT)
+  if(activeSource == SCARA_SLOT_LEFT)
   {
     enc_reset_j1();
     delay(20);
@@ -593,7 +593,7 @@ void sect3(void) {
     //wrf --;  
   }
 
-  else if(activeSource == SCARA_SLOT_LEFT)
+  else if(activeSource == SCARA_SLOT_RIGHT)
   {
     enc_reset_j1();
     delay(20);
