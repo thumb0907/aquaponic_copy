@@ -366,7 +366,7 @@ def stm3_rx_loop(node: Pi3Node):
 # ══════════════════════════════════════════════
 # 카메라 스트림 루프 (카메라별 별도 스레드)
 # ══════════════════════════════════════════════
-def _camera_stream_loop(cam_index: int, pc_ip: str, port: int, label: str):
+def _camera_stream_loop(cam_index: int | str, pc_ip: str, port: int, label: str):
     """
     단일 카메라 → PC TCP 스트리밍 루프.
     Pi1의 video_stream_loop과 동일한 방식.
@@ -466,8 +466,7 @@ def main():
     threading.Thread(target=rclpy.spin, args=(node,), daemon=True).start()
     threading.Thread(target=stm3_rx_loop, args=(node,), daemon=True).start()
     threading.Thread(target=cam2_stream_loop, daemon=True).start()
-    # 오른쪽 수경재배실 카메라는 현재 사용하지 않음
-    # threading.Thread(target=cam3_stream_loop, daemon=True).start()
+    threading.Thread(target=cam3_stream_loop, daemon=True).start()
 
     try:
         while rclpy.ok():
