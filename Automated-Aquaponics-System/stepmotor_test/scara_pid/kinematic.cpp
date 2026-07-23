@@ -1,9 +1,8 @@
-// kinematic.cpp
 #include "kinematic.h"
 #include <math.h>
 
-float L1_mm = 100;
-float L2_mm = 100;
+float L1_mm = 240;
+float L2_mm = 160;
 
 Pose2D forward2R(float th1_deg, float th2_deg, float L1_mm, float L2_mm) {
   float t1 = th1_deg * DEG_TO_RAD;
@@ -41,6 +40,8 @@ bool inverse2R(float x_mm, float y_mm, float L1_mm, float L2_mm,
 
   th1_deg = th1 * RAD_TO_DEG;
   th2_deg = th2 * RAD_TO_DEG;
+  //th2_deg = -th2_deg;
+  
   return true;
 }
 
@@ -49,27 +50,31 @@ float wristPhiParallelX(float th1_deg, float th2_deg, float phi_offset_deg) {
   return -(th1_deg + th2_deg) + phi_offset_deg;
 }
 
-/*
-Joint2R j;
-Pose2D  p;
+static inline float sqr(float x) { return x * x; }
 
-// (1) 원하는 목표 좌표가 있을 때: IK
-bool ok = inverse2R(150.0f, 50.0f, L1_mm, L2_mm, true, j.th1_deg, j.th2_deg);
-if (ok) {
-  // j.th1_deg, j.th2_deg에 각도 들어있음
-  // move_j1(j.th1_deg); move_j3(j.th2_deg);  // <- 네 로봇 축 매핑에 맞게
+bool inverse2R_best(float x, float y,
+                    float th1_cur_deg, float th2_cur_deg,
+                    float& th1_out_deg, float& th2_out_deg)
+{
+  float th1_u, th2_u;
+  float th1_d, th2_d;
+
+  bool ok_u = inverse2R(x, y, L1_mm, L2_mm, /*elbowUp=*/true,  th1_u, th2_u);
+  bool ok_d = inverse2R(x, y, L1_mm, L2_mm, /*elbowUp=*/false, th1_d, th2_d);
+
+  if (!ok_u && !ok_d) return false;
+
+  // 둘 다 가능하면 "현재 자세와 가장 가까운 해"를 선택
+  if (ok_u && ok_d) {
+    float du = sqr(th1_u - th1_cur_deg) + sqr(th2_u - th2_cur_deg);
+    float dd = sqr(th1_d - th1_cur_deg) + sqr(th2_d - th2_cur_deg);
+    if (du <= dd) { th1_out_deg = th1_u; th2_out_deg = th2_u; }
+    else          { th1_out_deg = th1_d; th2_out_deg = th2_d; }
+    return true;
+  }
+
+  // 하나만 가능하면 그 해 사용
+  if (ok_u) { th1_out_deg = th1_u; th2_out_deg = th2_u; return true; }
+  else      { th1_out_deg = th1_d; th2_out_deg = th2_d; return true; }
 }
 
-// (2) 현재 각도에서 좌표가 궁금할 때: FK
-p = forward2R(j.th1_deg, j.th2_deg, L1_mm, L2_mm);
-// p.x_mm, p.y_mm가 좌표
-*/
-
-/*
-절대이동 (목표 x,y가 주어짐)
-→ IK만 해서 Joint2R 얻고 → 그 각도를 move_j1/move_j3 파라미터로 넣으면 됨
-
-상대이동 (현재 위치에서 Δx,Δy)
-→ (현재각) FK로 현재좌표 → 목표좌표 계산 → IK로 목표각 → move에 넣기
-→ 이때는 네가 말한 “FK→IK” 흐름이 맞음
-*/

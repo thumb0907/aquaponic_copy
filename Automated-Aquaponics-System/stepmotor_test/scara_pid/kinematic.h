@@ -1,11 +1,13 @@
-// kinematic.h
 #ifndef KINEMATIC_H
 #define KINEMATIC_H
 
 #include <Arduino.h>
 
+extern float L1_mm;
+extern float L2_mm;
+
 struct Pose2D {
-  float x_mm; 
+  float x_mm;
   float y_mm;
 };
 
@@ -26,4 +28,9 @@ bool inverse2R(float x_mm, float y_mm, float L1_mm, float L2_mm,
 // 그리퍼를 X축에 평행하게 유지하고 싶을 때(필요하면 사용)
 float wristPhiParallelX(float th1_deg, float th2_deg, float phi_offset_deg);
 
+static inline float sqr(float x);
+
+bool inverse2R_best(float x, float y,
+                    float th1_cur_deg, float th2_cur_deg,
+                    float& th1_out_deg, float& th2_out_deg);
 #endif
