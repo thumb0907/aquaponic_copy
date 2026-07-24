@@ -2769,7 +2769,7 @@ uint8_t Z_PhotoDetected(void)
  800133c:	20000128 	.word	0x20000128
  8001340:	2000012c 	.word	0x2000012c
  8001344:	ffffec78 	.word	0xffffec78
- 8001348:	0001d4bf 	.word	0x0001d4bf
+ 8001348:	00057e3f 	.word	0x00057e3f
 
 0800134c <TIM_APB1_GetTimerClockHz>:
 

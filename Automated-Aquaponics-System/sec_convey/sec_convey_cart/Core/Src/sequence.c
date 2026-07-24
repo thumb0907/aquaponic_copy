@@ -36,7 +36,7 @@
 	#define TIMEOUT_CONVEY_MS   30000U   // 컨베이어 IR 감지 대기
 	#define TIMEOUT_HOMING_MS   15000U   // Z 호밍 리밋 감지 대기
 	#define TIMEOUT_MOVE_MS      5000U   // Z 이동 완료 대기
-	#define TIMEOUT_HARVEST_MS 120000U   // 수확 완료 신호 대기
+	#define TIMEOUT_HARVEST_MS 360000U
 	#define TIMEOUT_EXIT_MS     15000U   // 배출 완료 대기
 
 	/* ── SKIP_COMM 시뮬레이션 용 ─────────────────── */
