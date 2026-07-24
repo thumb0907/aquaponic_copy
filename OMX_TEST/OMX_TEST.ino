@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "step.h"
+#include "comm.h"
 
 static constexpr double ARM_SPEED_RAD_S = 0.42;
 static constexpr double FIRST_HOME_TIME = 4.0;
@@ -67,7 +68,17 @@ static const JointPose SEEDING_PLACE_POSE = {
   -1.6536312893409282
 };
 
+// 처음에는 실제 모터를 움직이지 않고 통신만 시험
+static constexpr bool COMM_TEST_ONLY = true;
+
 static bool sequence_failed = false;
+static bool manipulator_ready = false;
+static bool estopped = false;
+static bool job_running = false;
+
+static uint8_t active_job_id = 0;
+static uint8_t last_completed_job_id = 0;
+static bool last_completed_valid = false;
 
 static void moveHomeOpen()
 {
@@ -181,8 +192,10 @@ static bool runFullSequence()
 void setup()
 {
   Serial.begin(115200);
+  commBegin(Serial);
 
   const unsigned long start_ms = millis();
+
   while (!Serial && millis() - start_ms < 3000)
   {
     delay(10);
@@ -195,27 +208,215 @@ void setup()
   if (!initManipulator())
   {
     Serial.println("[SYSTEM] INIT FAILED");
+
+    manipulator_ready = false;
     sequence_failed = true;
+
+    commSendState(
+      MANIP_STATE_ERROR,
+      0
+    );
+
+    commSendError(
+      0,
+      MANIP_ERR_NOT_READY
+    );
+
     return;
   }
 
   runManipulator(1.0);
 
-  if (!runFullSequence())
-  {
-    Serial.println("[SYSTEM] SEQUENCE ABORTED");
-    sequence_failed = true;
-  }
+  manipulator_ready = true;
+  sequence_failed = false;
+  estopped = false;
+
+  Serial.println("[SYSTEM] WAITING FOR PI2 COMMAND");
+
+  commSendState(
+    MANIP_STATE_IDLE,
+    0
+  );
 }
 
 void loop()
 {
   processManipulatorOnce();
+  commPoll();
 
-  if (sequence_failed)
+  // ─────────────────────────────
+  // RESET 처리
+  // ─────────────────────────────
+  if (commTakeReset())
   {
-    delay(20);
+    stopRail();
+
+    estopped = false;
+    sequence_failed = false;
+    job_running = false;
+    active_job_id = 0;
+
+    last_completed_valid = false;
+
+    Serial.println("[COMM] RESET");
+
+    if (manipulator_ready)
+    {
+      commSendState(
+        MANIP_STATE_IDLE,
+        0
+      );
+    }
+    else
+    {
+      commSendState(
+        MANIP_STATE_ERROR,
+        0
+      );
+    }
+
     return;
+  }
+
+  // ─────────────────────────────
+  // ESTOP 처리
+  // ─────────────────────────────
+  if (commTakeEstop())
+  {
+    stopRail();
+
+    estopped = true;
+    sequence_failed = true;
+    job_running = false;
+
+    Serial.println("[COMM] ESTOP");
+
+    commSendState(
+      MANIP_STATE_ESTOP,
+      active_job_id
+    );
+
+    return;
+  }
+
+  // ─────────────────────────────
+  // 새 수확 작업 확인
+  // ─────────────────────────────
+  uint8_t requested_job_id = 0;
+
+  if (!commTakeHarvestJob(requested_job_id))
+  {
+    delay(10);
+    return;
+  }
+
+  Serial.print("[COMM] HARVEST JOB RECEIVED, ID=");
+  Serial.println(requested_job_id);
+
+  // 같은 완료 패킷이 재전송된 경우
+  // 실제 수확을 다시 하지 않고 DONE만 다시 응답
+  if (
+    last_completed_valid &&
+    requested_job_id == last_completed_job_id
+  )
+  {
+    Serial.println("[COMM] DUPLICATE COMPLETED JOB");
+
+    commSendDone(requested_job_id);
+    return;
+  }
+
+  if (!manipulator_ready)
+  {
+    commSendError(
+      requested_job_id,
+      MANIP_ERR_NOT_READY
+    );
+
+    return;
+  }
+
+  if (estopped)
+  {
+    commSendError(
+      requested_job_id,
+      MANIP_ERR_ESTOP
+    );
+
+    return;
+  }
+
+  if (job_running)
+  {
+    commSendError(
+      requested_job_id,
+      MANIP_ERR_BUSY
+    );
+
+    return;
+  }
+
+  // ─────────────────────────────
+  // 수확 작업 시작
+  // ─────────────────────────────
+  job_running = true;
+  active_job_id = requested_job_id;
+
+  commSendState(
+    MANIP_STATE_HARVESTING,
+    active_job_id
+  );
+
+  bool result = false;
+
+  if (COMM_TEST_ONLY)
+  {
+    Serial.println("[COMM TEST] 3 SECOND FAKE HARVEST");
+
+    runManipulator(3.0);
+    result = true;
+  }
+  else
+  {
+    result = runFullSequence();
+  }
+
+  // ─────────────────────────────
+  // 결과 보고
+  // ─────────────────────────────
+  if (result)
+  {
+    Serial.println("[COMM] HARVEST COMPLETE");
+
+    last_completed_job_id = active_job_id;
+    last_completed_valid = true;
+
+    // 반드시 ID를 지우기 전에 DONE 전송
+    commSendDone(active_job_id);
+
+    sequence_failed = false;
+  }
+  else
+  {
+    Serial.println("[COMM] HARVEST FAILED");
+
+    commSendError(
+      active_job_id,
+      MANIP_ERR_SEQUENCE_FAILED
+    );
+
+    sequence_failed = true;
+  }
+
+  job_running = false;
+  active_job_id = 0;
+
+  if (!sequence_failed)
+  {
+    commSendState(
+      MANIP_STATE_IDLE,
+      0
+    );
   }
 
   delay(10);
