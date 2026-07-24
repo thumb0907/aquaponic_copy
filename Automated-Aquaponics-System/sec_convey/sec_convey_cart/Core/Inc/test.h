@@ -6,9 +6,9 @@
  *            0 = 정상 시퀀스 모드
  *
  */
-#define TEST_MODE   1
+#define TEST_MODE   0
 
-#define SKIP_COMM   1
+#define SKIP_COMM   0 // 1이면 매니퓰레이터 통신 x
 
 void Test_Init(void);
 void Test_Run(void);
