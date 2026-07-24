@@ -173,12 +173,15 @@ class BinaryParser:
 
         elif self.state == self.WAIT_LEN:
             self.length = byte
+
+            # 새 프레임이므로 길이와 무관하게 이전 DATA 제거
+            self.data = []
+
             if self.length > MAX_DATA_LEN:
-                self.state = self.WAIT_SOF  # 비정상 길이 → 버림
+                self.state = self.WAIT_SOF
             elif self.length == 0:
                 self.state = self.WAIT_CHK
             else:
-                self.data  = []
                 self.state = self.WAIT_DATA
 
         elif self.state == self.WAIT_DATA:

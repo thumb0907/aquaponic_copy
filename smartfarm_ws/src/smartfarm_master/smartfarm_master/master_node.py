@@ -2310,9 +2310,13 @@ class MasterNode(Node):
                 self.stm2_state = 'error'
                 self.emergency = True
 
+                self.device_estop['stm2'] = True
+                self.device_estop['manip'] = True
+
                 if self.demo_mode:
                     self.demo_phase = DEMO_ERROR
-
+            self._send_estop_stm2()
+            self._send_estop_manip()
             # 오류 시 HF=1을 보내지 않는다.
             # 실제 수확이 끝나지 않았으므로 STM2를 진행시키면 안 된다.
             self.get_logger().error(
@@ -3420,7 +3424,10 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                         node.stable_cnt >= STABLE_FRAMES
                         and not node.start_flag
                         and node.seed_target_slot is None
+                        # 매니퓰레이터가 새 트레이를 놓고
+                        # 홈까지 복귀한 뒤에만 파종 허용
                         and node.stm_state == 'idle'
+                        and node.active_manip_job is None
                         and (now - node.last_tx) > COOLDOWN_SEC
                         and not node.emergency
                         and node.pi1_alive
