@@ -268,6 +268,16 @@ class Pi2Node(Node):
 
         self.create_timer(1.0, self._heartbeat)
         self.create_timer(1.0, self._publish_device_status)
+        # Pi2 노드 시작 후 STM2 최초 연결에서만
+        # RESET을 한 번 전송하기 위한 상태
+        self.stm2_startup_reset_done = False
+
+        # STM2 연결이 늦어질 수 있으므로
+        # 2초마다 연결 상태를 확인한다.
+        self.stm2_init_timer = self.create_timer(
+            2.0,
+            self._initialize_stm2_once
+        )
         self.get_logger().info('Pi2 노드 시작')
 
     # ══════════════════════════════════════════
@@ -310,19 +320,78 @@ class Pi2Node(Node):
             self.get_logger().warn(
                 f'알 수 없는 대상 식별자: 0x{target:02X}')
 
-    def _write_to(self, label: str, ser, payload: bytes):
+    def _write_to(self, label: str, ser, payload: bytes) -> bool:
         """지정 장치의 시리얼 포트로 바이트 전송"""
+
         if ser is None or not ser.is_open:
-            self.get_logger().error(f'{label} 미연결 — 전송 불가')
-            return
+            self.get_logger().error(
+                f'{label} 미연결 — 전송 불가'
+            )
+            return False
+
         try:
             ser.write(payload)
             ser.flush()
+
             self.get_logger().info(
-                f'→ {label}: {payload.hex()}')
+                f'→ {label}: {payload.hex()}'
+            )
+
+            return True
+
         except Exception as e:
-            self.get_logger().error(f'{label} 전송 실패: {e}')
+            self.get_logger().error(
+                f'{label} 전송 실패: {e}'
+            )
+
             self._mark_device_disconnected(label)
+            return False
+
+    def _initialize_stm2_once(self):
+        """
+        Pi2 노드가 실행된 후 STM2에 처음 연결되면
+        RESET 프레임을 한 번만 전송한다.
+        """
+
+        if self.stm2_startup_reset_done:
+            return
+
+        if (
+            self.ser_stm2 is None
+            or not self.ser_stm2.is_open
+        ):
+            return
+
+        # STM2 RESET 프레임
+        #
+        # SOF = 0xAA
+        # PID_RESET = 0x11
+        # LEN = 0
+        # CHK = 0x11
+        reset_frame = bytes([
+            SOF,
+            PID_RESET,
+            0x00,
+            PID_RESET,
+        ])
+
+        sent = self._write_to(
+            'STM2',
+            self.ser_stm2,
+            reset_frame
+        )
+
+        if not sent:
+            return
+
+        self.stm2_startup_reset_done = True
+
+        self.get_logger().info(
+            'STM2 시작 초기화 RESET 전송 완료'
+        )
+
+        # 최초 1회만 실행하므로 타이머 중지
+        self.stm2_init_timer.cancel()
 
     def _mark_device_disconnected(self, label: str):
         """송수신 오류가 난 장치 핸들을 끊어 재연결 루프로 넘긴다."""
