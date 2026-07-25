@@ -43,6 +43,7 @@ class MonitorNode(Node):
             'start_flag': False,
             'stm_state':  'idle',
             'stm2_state': 'idle',
+            'manip_state': 'unknown',
             'pi1_alive':  False,
             'pi2_alive':  False,
             'pi3_alive':  False,
@@ -286,6 +287,12 @@ class MonitorNode(Node):
         print(f'  SCARA UART  :  {scara_dot}')
         print(f'  STM2 UART   :  {stm2_dot}')
         print(f'  MANIP UART  :  {manip_dot}')
+        manip_state = self.status.get(
+            'manip_state',
+            'unknown'
+        )
+
+        print(f'  MANIP 상태  :  {manip_state}')
 
         emgdot = f'{C.RED}{C.BOLD}● ON{C.RESET}' if emg else f'{C.GRAY}○ OFF{C.RESET}'
         print(f'  긴급정지    :  {emgdot}')
