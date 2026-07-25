@@ -187,6 +187,10 @@ void commPoll()
     }
   }
 }
+bool commEstopPending()
+{
+  return estop_pending;
+}
 
 bool commTakeHarvestJob(uint8_t &job_id)
 {

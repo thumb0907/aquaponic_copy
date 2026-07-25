@@ -18,14 +18,14 @@ extern DynamixelWorkbench gripper_wb;
 bool initManipulator();
 
 void processManipulatorOnce();
-void runManipulator(double seconds);
+bool runManipulator(double seconds);  
 
-void movePoseTimed(
+bool movePoseTimed(
   const JointPose &pose,
   double move_time
 );
 
-void movePoseAtSpeed(
+bool movePoseAtSpeed(
   const JointPose &pose,
   double speed_rad_s
 );

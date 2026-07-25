@@ -25,7 +25,7 @@ static constexpr uint8_t MANIP_ERR_BUSY           = 0x02;
 static constexpr uint8_t MANIP_ERR_SEQUENCE_FAILED = 0x03;
 static constexpr uint8_t MANIP_ERR_NOT_READY      = 0x04;
 static constexpr uint8_t MANIP_ERR_ESTOP          = 0x05;
-
+bool commEstopPending();
 void commBegin(Stream &port);
 void commPoll();
 

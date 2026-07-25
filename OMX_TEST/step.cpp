@@ -1,5 +1,5 @@
 #include "step.h"
-
+#include "comm.h"
 #include <math.h>
 
 static constexpr int SW_PIN = 3;
@@ -30,12 +30,12 @@ static long mmToPulses(float mm)
 
 void initializeRail()
 {
-  digitalWrite(PUL_PIN, HIGH);
-  digitalWrite(DIR_PIN, LOW);
-
   pinMode(PUL_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
   pinMode(SW_PIN, INPUT_PULLUP);
+
+  digitalWrite(PUL_PIN, HIGH);
+  digitalWrite(DIR_PIN, LOW);
 
   Serial.println("[RAIL] INITIALIZED");
 }
@@ -93,7 +93,7 @@ static int calculateRampDelay(
   return target_delay;
 }
 
-static void moveRailMM(
+static bool moveRailMM(
   bool direction,
   float distance_mm,
   int target_delay_us
@@ -116,7 +116,13 @@ static void moveRailMM(
   );
 
   delayMicroseconds(100);
+  commPoll();
 
+  if (commEstopPending())
+  {
+    stopRail();
+    return false;
+  }
   for (long i = 0; i < pulses; ++i)
   {
     const int pulse_delay =
@@ -132,6 +138,8 @@ static void moveRailMM(
   }
 
   stopRail();
+  stopRail();
+  return true;  
 }
 
 bool homeRail()
@@ -140,10 +148,14 @@ bool homeRail()
 
   if (digitalRead(SW_PIN) == LOW)
   {
-    moveRailMM(
-      RAIL_AWAY_DIR,
-      RAIL_BACKOFF_MM,
-      RAIL_MOVE_DELAY_US
+    if (!moveRailMM(
+          RAIL_AWAY_DIR,
+          RAIL_BACKOFF_MM,
+          RAIL_MOVE_DELAY_US
+        ))
+    {
+      return false;
+    }
     );
 
     delay(300);
@@ -153,6 +165,7 @@ bool homeRail()
       Serial.println(
         "[RAIL] LIMIT RELEASE FAILED"
       );
+
       return false;
     }
   }
@@ -169,6 +182,13 @@ bool homeRail()
 
   while (digitalRead(SW_PIN) == HIGH)
   {
+    commPoll();
+
+    if (commEstopPending())
+    {
+      stopRail();
+      return false;
+    }
     if (
       millis() - start_ms >
       RAIL_HOME_TIMEOUT_MS
@@ -179,6 +199,7 @@ bool homeRail()
       Serial.println(
         "[RAIL] HOMING TIMEOUT"
       );
+
       return false;
     }
 
@@ -193,20 +214,29 @@ bool homeRail()
 
   delay(300);
 
-  moveRailMM(
-    RAIL_AWAY_DIR,
-    RAIL_BACKOFF_MM,
-    RAIL_MOVE_DELAY_US
-  );
+  if (!moveRailMM(
+          RAIL_AWAY_DIR,
+          RAIL_BACKOFF_MM,
+          RAIL_MOVE_DELAY_US
+        ))
+    {
+      return false;
+    }
 
   delay(300);
 
   if (digitalRead(SW_PIN) == LOW)
   {
-    Serial.println("[RAIL] BACKOFF FAILED");
+    Serial.println(
+      "[RAIL] BACKOFF FAILED"
+    );
+
     return false;
   }
 
-  Serial.println("[RAIL] HOMING COMPLETE");
+  Serial.println(
+    "[RAIL] HOMING COMPLETE"
+  );
+
   return true;
 }
