@@ -294,16 +294,16 @@ static bool waitUntilPoseReached(
     millis();
 
   while (
+    millis() - start_ms <
+    JOINT_REACHED_TIMEOUT_MS
+  )
+  {
     commPoll();
 
     if (commEstopPending())
     {
       return false;
     }
-    millis() - start_ms <
-    JOINT_REACHED_TIMEOUT_MS
-  )
-  {
     processManipulatorOnce();
 
     std::vector<
@@ -417,6 +417,13 @@ static bool commandGripperAndWait(
     GRIPPER_TIMEOUT_MS
   )
   {
+    commPoll();
+
+    if (commEstopPending())
+    {
+      return false;
+    }
+
     processManipulatorOnce();
 
     const unsigned long now_ms =
@@ -763,13 +770,19 @@ void processManipulatorOnce()
 
   omx.solveForwardKinematics();
 }
-
 bool runManipulator(double seconds)
 {
   if (seconds <= 0.0)
   {
+    commPoll();
+
+    if (commEstopPending())
+    {
+      return false;
+    }
+
     processManipulatorOnce();
-    return;
+    return true;
   }
 
   const unsigned long start_ms =
@@ -781,23 +794,24 @@ bool runManipulator(double seconds)
     );
 
   while (
+    millis() - start_ms <
+    duration_ms
+  )
+  {
     commPoll();
 
     if (commEstopPending())
     {
       return false;
     }
-    millis() - start_ms <
-    duration_ms
-  )
-  {
+
     processManipulatorOnce();
     delay(10);
   }
 
   processManipulatorOnce();
   return true;
-}f
+}
 
 // =====================================================
 // 자세 이동

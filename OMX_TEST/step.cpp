@@ -125,6 +125,14 @@ static bool moveRailMM(
   }
   for (long i = 0; i < pulses; ++i)
   {
+    commPoll();
+
+    if (commEstopPending())
+    {
+      stopRail();
+      return false;
+    }
+
     const int pulse_delay =
       calculateRampDelay(
         i,
@@ -137,7 +145,6 @@ static bool moveRailMM(
     stepOnce(pulse_delay);
   }
 
-  stopRail();
   stopRail();
   return true;  
 }
@@ -156,7 +163,6 @@ bool homeRail()
     {
       return false;
     }
-    );
 
     delay(300);
 

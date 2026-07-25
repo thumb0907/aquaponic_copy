@@ -672,7 +672,12 @@ void setup()
   }
 
   // Dynamixel/OpenManipulator 초기 처리
-  runManipulator(1.0);
+  if (!runManipulator(1.0))
+  {
+    commTakeEstop();
+    enterEstop();
+    return;
+  }
 
   manipulator_ready = true;
   sequence_failed = false;
@@ -799,7 +804,6 @@ void loop()
   {
     // 통신 검증용 가상 수확
     result = runManipulator(3.0);
-    result = true;
   }
   else
   {
