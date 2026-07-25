@@ -19,7 +19,29 @@ enum PathState : uint8_t {
 };
 
 static PathState currentPath = PATH_IDLE;
+static bool estopLatched = false;
+static void resetPathRuntimeState(PathState nextState)
+{
+    currentPath = nextState;
+    suspendedPath = PATH_IDLE;
 
+    sect0_started = false;
+    sect1_started = false;
+    sect2_started = false;
+    sect3_started = false;
+
+    step_command_issued = false;
+    sect3_preemptible = false;
+
+    pending_sect1 = false;
+    pending_sect2 = false;
+
+    sect3_step = SECT3_STEP_IDLE;
+
+    activeUv = 0;
+    activeSource = SCARA_SLOT_NONE;
+    activeDestination = SCARA_SLOT_NONE;
+}
 enum Sect3Step : uint8_t {
   SECT3_STEP_IDLE,
   SECT3_STEP_INIT,
@@ -766,4 +788,49 @@ void pathTask() {
   }
 
   updatePrevFlags();
+}
+bool processScaraControlRequests()
+{
+    if (isEstopRequested()) {
+        clearEstopRequest();
+
+        stopAllMotion(false);
+
+        setflag();
+        updatePrevFlags();
+
+        resetPathRuntimeState(PATH_FAULT);
+        estopLatched = true;
+
+        setSmf(0);
+        sendSmf();
+        sendState(SCARA_STATE_ESTOP);
+
+        return true;
+    }
+
+    if (isResetRequested()) {
+        clearResetRequest();
+
+        stopAllMotion(false);
+
+        setflag();
+        updatePrevFlags();
+
+        resetPathRuntimeState(PATH_IDLE);
+        estopLatched = false;
+
+        setSmf(0);
+        sendSmf();
+        sendState(SCARA_STATE_IDLE);
+
+        return true;
+    }
+
+    return estopLatched;
+}
+
+bool isScaraEstopLatched()
+{
+    return estopLatched;
 }

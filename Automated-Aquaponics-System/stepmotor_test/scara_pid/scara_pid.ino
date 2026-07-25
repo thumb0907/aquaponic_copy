@@ -19,9 +19,13 @@ void setup() {
 }
 
 void loop() {
-  serialReceiveTask();
-  pathTask();  
-  
+    serialReceiveTask();
+
+    if (processScaraControlRequests()) {
+        return;
+    }
+
+    pathTask();
   
 //*/
   /*

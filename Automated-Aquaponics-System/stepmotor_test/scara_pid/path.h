@@ -4,6 +4,8 @@
 #include <Arduino.h>
 
 void pathTask();
+bool processScaraControlRequests();
+bool isScaraEstopLatched();
 
 void sect0();
 void sect1();  // 발아실 이동
