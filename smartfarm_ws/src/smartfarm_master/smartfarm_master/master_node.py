@@ -157,10 +157,10 @@ WATER_RIGHT_STREAM_PORT = 5012
 WATER_LOWER_GREEN = np.array([35, 45, 40], dtype=np.uint8)
 WATER_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
 
-WATER_ROI_X_MIN = 0.10
-WATER_ROI_X_MAX = 0.90
-WATER_ROI_Y_MIN = 0.10
-WATER_ROI_Y_MAX = 0.90
+WATER_ROI_X_MIN = 0.23
+WATER_ROI_X_MAX = 0.91
+WATER_ROI_Y_MIN = 0.20
+WATER_ROI_Y_MAX = 0.80
 
 WATER_GROWTH_AREA_RATIO = 0.18
 WATER_MIN_LEAF_AREA = 2500
@@ -259,7 +259,7 @@ DEMO_WAIT_HARVEST_COMPLETE = 'WAIT_HARVEST_COMPLETE'
 DEMO_COMPLETE = 'COMPLETE'
 DEMO_ERROR = 'ERROR'
 # 매니퓰레이터 바이너리 펌웨어가 준비되기 전까지 False
-MANIP_HARVEST_ENABLED = False
+MANIP_HARVEST_ENABLED = True
 
 SLOT_NONE = 0x00
 SLOT_LEFT = 0x01
@@ -405,6 +405,12 @@ class MasterNode(Node):
         # 발표 흐름을 진행시키는 첫 번째 파종 작업 ID
         # 이후 추가 파종 작업은 demo_phase를 변경하지 않는다.
         self.demo_primary_seed_job_id = None
+
+        self.scara_state = 'unknown'
+
+        self.reset_in_progress = False
+        self.reset_ready = False
+        self.reset_waiting = set()
 
         # ── STM1 상태 ─────────────────────────
         self.start_flag = False
@@ -588,7 +594,28 @@ class MasterNode(Node):
 
         self.get_logger().info('Master 노드 시작')
 
+    def _mark_reset_idle_locked(self, device: str):
+        if not self.reset_in_progress:
+            return
 
+        self.reset_waiting.discard(device)
+
+        if device in self.device_estop:
+            self.device_estop[device] = False
+
+        if self.reset_waiting:
+            return
+
+        self.reset_in_progress = False
+        self.reset_ready = True
+
+        # 여기서는 emergency를 아직 풀지 않는다.
+        # 실제 설비 비움 확인 후 DEMO_RESET에서 푼다.
+        self.get_logger().info(
+            '모든 제어기 RESET 응답 확인: '
+            '실제 설비 확인 후 DEMO_RESET 실행 가능'
+        )
+        
     # 플래그 조작 함수
     def _set_flag(self, name: str, value: int):
         if name in self.flags:
@@ -1885,6 +1912,7 @@ class MasterNode(Node):
                 self.scara_prehome_sent_at = 0.0
                 self._set_flag('c1f', 0)
                 self._set_flag('hmf', 0) 
+                self._mark_reset_idle_locked('stm1')
             elif line.startswith('STM1:PC:ERR:'):
                 self.stm_state  = 'error'
                 self.start_flag = False
@@ -1901,6 +1929,24 @@ class MasterNode(Node):
     def _on_uart2(self, msg: String):
         line = msg.data.strip()
         self.get_logger().info(f'[STM2] {line}')
+
+        if line.startswith('SCARA:PC:STATE:'):
+            state_text = line.rsplit(':', 1)[1].lower()
+
+            with self.state_lock:
+                self.scara_state = state_text
+
+                if state_text == 'idle':
+                    self._mark_reset_idle_locked('scara')
+
+                elif state_text == 'estop':
+                    self.device_estop['scara'] = True
+                    self.emergency = True
+
+                    if self.demo_mode:
+                        self.demo_phase = DEMO_ERROR
+
+            return
 
         # 스카라가 CRF=0 전송 → STM1 초기화 트리거
         if line == 'SCARA:PC:FLAG:CRF:0':
@@ -2396,7 +2442,8 @@ class MasterNode(Node):
             # ── STM2 상태 수신 ────────────────────────────
             if line == 'STM2:PC:STATE:IDLE':
                 self.stm2_state = 'idle'
-
+                self._mark_reset_idle_locked('stm2')
+                
                 self.get_logger().info(
                     '[STM2] IDLE 상태 확인'
                 )
@@ -2693,6 +2740,8 @@ class MasterNode(Node):
         send_reset = False
 
         with self.state_lock:
+            if self.emergency or self.reset_in_progress:
+                return
             # 이미 이번 마스터 실행에서 리셋했으면 다시 실행하지 않는다.
             if self.startup_reset_sent:
                 return
@@ -2703,6 +2752,8 @@ class MasterNode(Node):
                     or not self.stm1_link
                     or not self.pi2_alive
                     or not self.pi2_device_links['scara']
+                    and not self.emergency
+                    and not self.reset_in_progress
                 ):
                 self.startup_nodes_ready_since = None
                 return
@@ -2931,11 +2982,22 @@ class MasterNode(Node):
         # ─────────────────────────────
         elif cmd in ('RESET', 'RESET_ALL'):
             with self.state_lock:
-                self.emergency = False
+                # RESET 중에도 자동 시퀀스는 계속 차단
+                self.emergency = True
+
+                self.reset_in_progress = True
+                self.reset_ready = False
+                self.reset_waiting = {
+                    'stm1',
+                    'scara',
+                    'stm2',
+                }
+
+                self.stm_state = 'resetting'
+                self.scara_state = 'resetting'
+                self.stm2_state = 'resetting'
 
                 self.start_flag = False
-                self.stm_state = 'idle'
-                self.stm2_state = 'unknown'
                 self.stm2_start_requested_at = 0.0
                 self.scara_prehome_sent = False
                 self.scara_prehome_done = False
@@ -2962,10 +3024,10 @@ class MasterNode(Node):
                 self.flags['s3f'] = 0
                 self.flags['scara_src'] = SLOT_NONE
                 self.flags['scara_dst'] = SLOT_NONE
-                self.device_estop['stm1'] = False
-                self.device_estop['scara'] = False
-                self.device_estop['stm2'] = False
-                self.device_estop['manip'] = False
+                # self.device_estop['stm1'] = False
+                # self.device_estop['scara'] = False
+                # self.device_estop['stm2'] = False
+                # self.device_estop['manip'] = False
 
                 # 실제 트레이 위치를 확인하기 전까지
                 # 자동 데모 진행을 다시 시작하지 않는다.
@@ -3047,6 +3109,21 @@ class MasterNode(Node):
         # 데모용 초기화 명령
         elif cmd == 'DEMO_RESET':
             with self.state_lock:
+                if (
+                    not self.reset_ready
+                    or self.reset_in_progress
+                    or self.start_flag
+                    or self.active_scara_job is not None
+                    or self.active_manip_job is not None
+                    or self.stm_state != 'idle'
+                    or self.scara_state != 'idle'
+                    or self.stm2_state != 'idle'
+                ):
+                    self.get_logger().warn(
+                        'DEMO_RESET 거부: '
+                        'RESET 완료 또는 장치 IDLE 상태가 아님'
+                    )
+                    return
                 if self.active_scara_job is not None:
                     self.get_logger().warn(
                         'SCARA 작업 중에는 DEMO_RESET 불가'
@@ -3068,20 +3145,40 @@ class MasterNode(Node):
                     slot['state'] = SLOT_EMPTY
                     slot['job_id'] = None
 
-                self.demo_phase = DEMO_WAIT_FIRST_TRAY
-                self.demo_primary_seed_job_id = None
-                self.flags['ssf'] = 0
-                self.flags['smf'] = 0
-                self.flags['crf'] = 0
-                self.flags['ff'] = 0
-                self.flags['hf'] = 0
-                self.flags['s2f'] = 0
-                self.flags['s3f'] = 0
+                self.start_flag = False
+
+                self.scara_prehome_sent = False
+                self.scara_prehome_done = False
+                self.scara_prehome_sent_at = 0.0
+                self.stm2_start_requested_at = 0.0
+
+                for name in (
+                    'c1f',
+                    'ssf',
+                    'smf',
+                    'crf',
+                    'hmf',
+                    'ff',
+                    'uef',
+                    'wef',
+                    'hf',
+                    'c2f',
+                    's2f',
+                    's3f',
+                ):
+                    self.flags[name] = 0
+
                 self.flags['scara_src'] = SLOT_NONE
                 self.flags['scara_dst'] = SLOT_NONE
 
                 self._sync_slot_flags_locked()
 
+                self.emergency = False
+                self.reset_ready = False
+
+                self._sync_slot_flags_locked()
+
+            self._broadcast_all_flags()
             self.get_logger().info(
                 'DEMO_RESET 완료: 실제 설비도 비어 있는지 확인 필요'
             )
