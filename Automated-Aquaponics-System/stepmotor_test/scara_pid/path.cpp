@@ -814,6 +814,9 @@ bool processScaraControlRequests()
         clearResetRequest();
 
         stopAllMotion(false);
+        // Timer1/J1, Timer3/rail, Timer4/J3, Timer5/J4
+        // 기본 ISR 구성을 다시 준비
+        set_tim();
 
         setflag();
         updatePrevFlags();

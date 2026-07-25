@@ -1826,3 +1826,144 @@ bool j3_ol_move_deg(float delta_joint_deg,
 
   return j3_ol_move_steps(dir, steps, pps, timeout_ms);
 }
+void stopAllMotion(bool disableDrivers)
+{
+    /*
+     * 1. ISR에서 참조하는 모든 동작 상태를 먼저 정지한다.
+     *
+     * 이 구간에서는 Timer ISR이 중간 상태를 읽지 못하도록
+     * 전체 상태를 한 번에 변경한다.
+     */
+    noInterrupts();
+
+    // ─────────────────────────
+    // J1 PID 상태
+    // ─────────────────────────
+    j1_run = false;
+    j1pulseState = LOW;
+
+    // J1 open-loop 상태
+    j1_ol_run = false;
+    j1_ol_pulse_state = LOW;
+    j1_ol_target_steps = 0;
+    j1_ol_step_count = 0;
+    j1_ol_done = false;
+
+    // ─────────────────────────
+    // J2 상태
+    // ─────────────────────────
+    j2_run = false;
+    j2pulseState = LOW;
+    j2_target_steps = 0;
+    j2_step_count = 0;
+    j2_move_done = false;
+    j2_endstop_hit = false;
+
+    // ─────────────────────────
+    // J3 PID 상태
+    // ─────────────────────────
+    j3_run = false;
+    j3pulseState = LOW;
+
+    // J3 open-loop 상태
+    j3_ol_run = false;
+    j3_ol_pulse_state = LOW;
+    j3_ol_target_steps = 0;
+    j3_ol_step_count = 0;
+    j3_ol_done = false;
+
+    // ─────────────────────────
+    // J4 상태
+    // ─────────────────────────
+    j4_run = false;
+    j4pulseState = LOW;
+    j4_step_edges = 0;
+
+    // ─────────────────────────
+    // 레일 상태
+    // ─────────────────────────
+    rail_run = false;
+    railPulseState = LOW;
+
+    // 현재 사용되지는 않지만 이전 pulse 상태 변수도 정리
+    j1_ps = false;
+    j2_ps = false;
+    j3_ps = false;
+    j4_ps = false;
+
+    interrupts();
+
+    /*
+     * 2. 하드웨어 타이머 정지
+     *
+     * Timer1 = J1 PID/open-loop
+     * Timer3 = J2 또는 레일 공유
+     * Timer4 = J3 PID/open-loop
+     * Timer5 = J4
+     */
+    Timer1.stop();
+    Timer3.stop();
+    Timer4.stop();
+    Timer5.stop();
+
+    /*
+     * 3. 현재 타이머 ISR 소유권 해제
+     *
+     * ESTOP 후 RESET에서 set_tim()을 호출해
+     * 기본 ISR을 다시 연결한다.
+     */
+    Timer1.detachInterrupt();
+    Timer3.detachInterrupt();
+    Timer4.detachInterrupt();
+    Timer5.detachInterrupt();
+
+    /*
+     * 4. 모든 STEP/PULSE 핀을 LOW로 확정
+     *
+     * run=false만 설정해도 ISR이 LOW로 내리지만,
+     * 타이머를 detach했기 때문에 마지막 핀 상태를
+     * 명시적으로 LOW로 만들어야 한다.
+     */
+    digitalWrite(j1_pul, LOW);
+    digitalWrite(STEP_PIN, LOW);
+    digitalWrite(j3_pul, LOW);
+    digitalWrite(j4_pul, LOW);
+    digitalWrite(rail_pul, LOW);
+
+    /*
+     * 5. PID 누적값 정리
+     *
+     * ESTOP 전에 누적된 integral/prevError가 남아 있으면
+     * RESET 후 첫 PID 이동에서 순간적으로 큰 출력이
+     * 만들어질 수 있다.
+     *
+     * Kp/Ki/Kd/iLimit 및 엔코더 위치는 건드리지 않는다.
+     */
+    j1_pid.prevError = 0.0f;
+    j1_pid.integral = 0.0f;
+
+    j3_pid.prevError = 0.0f;
+    j3_pid.integral = 0.0f;
+
+    j4_pid.prevError = 0.0f;
+    j4_pid.integral = 0.0f;
+
+    /*
+     * 6. 선택적으로 드라이버 Disable
+     *
+     * false이면 현재 Enable 상태를 유지하므로
+     * 모터 토크가 유지된다.
+     *
+     * SCARA가 트레이를 들고 있거나 수직축이 있는 경우
+     * ESTOP에서는 일반적으로 false를 사용한다.
+     */
+    if (disableDrivers) {
+        j1_enable(false);
+        j2_enable(false);
+        j3_enable(false);
+        j4_enable(false);
+
+        // 현재 레일 코드는 HIGH=Enable, LOW=Disable
+        digitalWrite(rail_en, LOW);
+    }
+}
