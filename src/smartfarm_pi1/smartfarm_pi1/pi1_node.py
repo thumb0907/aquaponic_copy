@@ -42,7 +42,7 @@ PC_IP = '10.10.10.1'
 STREAM_PORT = 5000
 SERIAL_PORT = '/dev/stm1'
 BAUD        = 115200
-CAM_INDEX = '/dev/video0'
+#CAM_INDEX = '/dev/video0'
 CAM_WIDTH   = 640
 CAM_HEIGHT  = 480
 JPEG_QUALITY = 50
@@ -50,11 +50,28 @@ JPEG_QUALITY = 50
 CONVEYOR_SEND_INTERVAL = 0.5    # 컨베이어는 유지 (빠른 반응 불필요)
 NURSERY_SEND_INTERVAL  = 0.5   # 발아실은 5fps (5 * 0.25초  내 판정 가능)
 # 추가 카메라: 발아실 감지용
-NURSERY_LEFT_CAM_INDEX = '/dev/video2'
+#NURSERY_LEFT_CAM_INDEX = '/dev/video2'
 NURSERY_LEFT_STREAM_PORT = 5001
 
-NURSERY_RIGHT_CAM_INDEX = '/dev/video4'
+#NURSERY_RIGHT_CAM_INDEX = '/dev/video4'
 NURSERY_RIGHT_STREAM_PORT = 5002
+# 첫 번째 컨베이어 카메라
+CAM_INDEX = (
+    '/dev/v4l/by-path/'
+    'platform-xhci-hcd.0-usb-0:1:1.0-video-index0'
+)
+
+# 발아실 왼쪽 카메라
+NURSERY_LEFT_CAM_INDEX = (
+    '/dev/v4l/by-path/'
+    'platform-xhci-hcd.0-usb-0:2:1.0-video-index0'
+)
+
+# 발아실 오른쪽 카메라
+NURSERY_RIGHT_CAM_INDEX = (
+    '/dev/v4l/by-path/'
+    'platform-xhci-hcd.1-usb-0:1:1.0-video-index0'
+)
 
 # ── 프로토콜 상수 (comm.h와 동일) ─────────────
 SOF          = 0xAA
