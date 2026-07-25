@@ -407,6 +407,7 @@ class MasterNode(Node):
         self.demo_primary_seed_job_id = None
 
         self.scara_state = 'unknown'
+        self.manip_state = 'unknown'
 
         self.reset_in_progress = False
         self.reset_ready = False
@@ -1928,8 +1929,58 @@ class MasterNode(Node):
     # ══════════════════════════════════════════
     def _on_uart2(self, msg: String):
         line = msg.data.strip()
-        self.get_logger().info(f'[STM2] {line}')
+        self.get_logger().info(f'[Pi2 UART] {line}')
+        if line.startswith('MANIP:PC:STATE:'):
+            parts = line.split(':')
 
+            if len(parts) != 5:
+                self.get_logger().error(
+                    f'잘못된 MANIP STATE 형식: {line}'
+                )
+                return
+
+            try:
+                state_code = int(parts[3])
+                job_id = int(parts[4])
+            except ValueError:
+                self.get_logger().error(
+                    f'MANIP STATE 숫자 변환 실패: {line}'
+                )
+                return
+
+            state_map = {
+                1: 'idle',
+                2: 'harvesting',
+                3: 'estop',
+                4: 'error',
+            }
+
+            state_text = state_map.get(
+                state_code,
+                f'unknown_{state_code}'
+            )
+
+            with self.state_lock:
+                self.manip_state = state_text
+
+                if state_text == 'idle':
+                    self._mark_reset_idle_locked('manip')
+
+                elif state_text in ('estop', 'error'):
+                    self.device_estop['manip'] = True
+                    self.emergency = True
+
+                    if self.demo_mode:
+                        self.demo_phase = DEMO_ERROR
+
+            if state_text in ('estop', 'error'):
+                self._send_estop_stm2()
+
+            self.get_logger().info(
+                f'MANIP 상태: state={state_text}, '
+                f'job_id={job_id}'
+            )
+            return
         if line.startswith('SCARA:PC:STATE:'):
             state_text = line.rsplit(':', 1)[1].lower()
 
@@ -2997,10 +3048,14 @@ class MasterNode(Node):
                     'scara',
                     'stm2',
                 }
+                if MANIP_HARVEST_ENABLED:
+                    self.reset_waiting.add('manip')
 
                 self.stm_state = 'resetting'
                 self.scara_state = 'resetting'
                 self.stm2_state = 'resetting'
+                if MANIP_HARVEST_ENABLED:
+                    self.manip_state = 'resetting'
 
                 self.start_flag = False
                 self.stm2_start_requested_at = 0.0
@@ -3410,6 +3465,7 @@ class MasterNode(Node):
                 f'nursery_right_conf:{self.nursery_state["right"]["last_conf"]:.2f},'
                 f'nursery_right_stable:{self.nursery_state["right"]["stable_cnt"]},'
                 f'scara_state:{self.scara_state},'
+                f'manip_state:{self.manip_state},'
                 f'reset_in_progress:{self.reset_in_progress},'
                 f'reset_ready:{self.reset_ready},'
                 f'reset_waiting:{"+".join(sorted(self.reset_waiting)) or "none"},'
@@ -3544,7 +3600,14 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                             or node.demo_phase != DEMO_ERROR
                         )
                     ):
-                        if node.demo_mode:
+                        first_demo_seed = (
+                            node.demo_mode
+                            and node.demo_phase == DEMO_WAIT_FIRST_TRAY
+                            and node.demo_primary_seed_job_id is None
+                        )
+
+                        if first_demo_seed:
+                            # 발표 시작 시 최초 파종 트레이만 오른쪽 고정
                             candidate_slot = DEMO_ROUTE[
                                 'seed_nursery_dst'
                             ]
@@ -3557,6 +3620,8 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                             else:
                                 target_slot = None
                         else:
+                            # 최초 파종 이후에는 데모 모드여도
+                            # 발아실의 실제 빈 슬롯을 선택
                             target_slot = node._find_empty_slot_locked(
                                 'nursery'
                             )
