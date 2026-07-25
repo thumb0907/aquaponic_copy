@@ -2562,6 +2562,7 @@ class MasterNode(Node):
             elif line == 'STM2:PC:STATE:RESET_DONE':
                 self.stm2_state = 'idle'
                 self.stm2_start_requested_at = 0.0
+                self._mark_reset_idle_locked('stm2')
             elif line == 'STM2:PC:STATE:ESTOP':
                 self.stm2_state = 'error'
                 self.stm2_start_requested_at = 0.0
@@ -2650,6 +2651,8 @@ class MasterNode(Node):
                 not previous['stm2']
                 and self.flags['ff'] == 0
                 and self.active_manip_job is None
+                and not self.emergency
+                and not self.reset_in_progress
             ):
                 # STM2는 부팅 시 STATE 보고가 이미 지나갔을 수 있으므로
                 # 연결 직후 RESET을 보내 IDLE 응답을 다시 받는다.
@@ -2752,8 +2755,6 @@ class MasterNode(Node):
                     or not self.stm1_link
                     or not self.pi2_alive
                     or not self.pi2_device_links['scara']
-                    and not self.emergency
-                    and not self.reset_in_progress
                 ):
                 self.startup_nodes_ready_since = None
                 return
@@ -2930,6 +2931,10 @@ class MasterNode(Node):
             with self.state_lock:
                 self.emergency = True
 
+                self.reset_in_progress = False
+                self.reset_ready = False
+                self.reset_waiting.clear()
+                self.scara_state = 'error'
                 self.start_flag = False
                 self.stm_state = 'error'
                 self.stm2_state = 'error'
@@ -2963,7 +2968,7 @@ class MasterNode(Node):
                 self.device_estop['stm1'] = True
                 self.device_estop['scara'] = True
                 self.device_estop['stm2'] = True
-                self.device_estop['manip'] = True
+                self.device_estop['manip'] = MANIP_HARVEST_ENABLED
 
                 if self.demo_mode:
                     self.demo_phase = DEMO_ERROR
@@ -3124,11 +3129,11 @@ class MasterNode(Node):
                         'RESET 완료 또는 장치 IDLE 상태가 아님'
                     )
                     return
-                if self.active_scara_job is not None:
-                    self.get_logger().warn(
-                        'SCARA 작업 중에는 DEMO_RESET 불가'
-                    )
-                    return
+                # if self.active_scara_job is not None:
+                #     self.get_logger().warn(
+                #         'SCARA 작업 중에는 DEMO_RESET 불가'
+                #     )
+                #     return
 
                 self.pending_scara_jobs.clear()
                 self.active_scara_job = None
@@ -3145,6 +3150,8 @@ class MasterNode(Node):
                     slot['state'] = SLOT_EMPTY
                     slot['job_id'] = None
 
+                self.demo_phase = DEMO_WAIT_FIRST_TRAY
+                self.demo_primary_seed_job_id = None
                 self.start_flag = False
 
                 self.scara_prehome_sent = False
@@ -3176,7 +3183,6 @@ class MasterNode(Node):
                 self.emergency = False
                 self.reset_ready = False
 
-                self._sync_slot_flags_locked()
 
             self._broadcast_all_flags()
             self.get_logger().info(
@@ -3403,6 +3409,10 @@ class MasterNode(Node):
                 f'nursery_right_label:{self.nursery_state["right"]["last_label"]},'
                 f'nursery_right_conf:{self.nursery_state["right"]["last_conf"]:.2f},'
                 f'nursery_right_stable:{self.nursery_state["right"]["stable_cnt"]},'
+                f'scara_state:{self.scara_state},'
+                f'reset_in_progress:{self.reset_in_progress},'
+                f'reset_ready:{self.reset_ready},'
+                f'reset_waiting:{"+".join(sorted(self.reset_waiting)) or "none"},'
 
                 f'nursery_left_slot:{self.nursery_slots["left"]["state"]},'
                 f'nursery_right_slot:{self.nursery_slots["right"]["state"]},'
