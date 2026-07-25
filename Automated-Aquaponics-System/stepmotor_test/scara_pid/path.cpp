@@ -20,28 +20,6 @@ enum PathState : uint8_t {
 
 static PathState currentPath = PATH_IDLE;
 static bool estopLatched = false;
-static void resetPathRuntimeState(PathState nextState)
-{
-    currentPath = nextState;
-    suspendedPath = PATH_IDLE;
-
-    sect0_started = false;
-    sect1_started = false;
-    sect2_started = false;
-    sect3_started = false;
-
-    step_command_issued = false;
-    sect3_preemptible = false;
-
-    pending_sect1 = false;
-    pending_sect2 = false;
-
-    sect3_step = SECT3_STEP_IDLE;
-
-    activeUv = 0;
-    activeSource = SCARA_SLOT_NONE;
-    activeDestination = SCARA_SLOT_NONE;
-}
 enum Sect3Step : uint8_t {
   SECT3_STEP_IDLE,
   SECT3_STEP_INIT,
@@ -78,6 +56,29 @@ static Sect3Step sect3_step = SECT3_STEP_IDLE;
 static uint16_t activeUv = 0;
 static uint8_t activeSource = SCARA_SLOT_NONE;
 static uint8_t activeDestination = SCARA_SLOT_NONE;
+
+static void resetPathRuntimeState(PathState nextState)
+{
+    currentPath = nextState;
+    suspendedPath = PATH_IDLE;
+
+    sect0_started = false;
+    sect1_started = false;
+    sect2_started = false;
+    sect3_started = false;
+
+    step_command_issued = false;
+    sect3_preemptible = false;
+
+    pending_sect1 = false;
+    pending_sect2 = false;
+
+    sect3_step = SECT3_STEP_IDLE;
+
+    activeUv = 0;
+    activeSource = SCARA_SLOT_NONE;
+    activeDestination = SCARA_SLOT_NONE;
+}
 
 static void failCurrentSection() {
   setSmf(0);

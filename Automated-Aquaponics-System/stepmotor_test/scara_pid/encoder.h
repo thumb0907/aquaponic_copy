@@ -62,6 +62,7 @@ void j2_set_pps(unsigned long pps);
 bool j2_home_stop_on_switch(bool toward_home, unsigned long pps);
 bool j2_home_precise(bool toward_home, unsigned long fast_pps, unsigned long slow_pps);
 void stop_j2_motion(bool disable_after = false);
+void stopAllMotion(bool disableDrivers = false);
 bool is_j2_endstop_pressed();
 void move_j2_continuous(bool dir, unsigned long pps);
 bool move_j2(float deg, unsigned long pps);
