@@ -207,8 +207,8 @@ void sect1(void) {
   move_j2_cm(1); // 살짝 올라가서
   enc_reset_j1();
   delay(100);
-  move_j1_wait(-20, 1000); // 뒤로 좀 빼고
-  delay(200);
+  move_j1_wait(-10, 900); // 뒤로 좀 빼고
+  delay(500);
   enc_reset_j1();
   move_j2_cm(10); // 올라가고
   //move_j1_wait(-10);

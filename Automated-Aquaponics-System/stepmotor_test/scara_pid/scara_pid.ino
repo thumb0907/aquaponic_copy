@@ -19,6 +19,7 @@ void setup() {
 }
 
 void loop() {
+  /*
     serialReceiveTask();
 
     if (processScaraControlRequests()) {
@@ -26,7 +27,11 @@ void loop() {
     }
 
     pathTask();
-  
+  */
+  sect0();
+  sect1();
+  delay(10000000000);
+//*/
 //*/
   /*
   Serial.print("A=");
@@ -36,7 +41,7 @@ void loop() {
   Serial.print("  pos=");
   Serial.println(j1_enc.pos);
   delay(50);
-  //*/
+  */
   
   //Serial.println(digitalRead(stop_j4)); // 안누르면 1, 누르면 0 이 나오면 정상
   //delay(15);

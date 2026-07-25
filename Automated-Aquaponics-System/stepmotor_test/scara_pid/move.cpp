@@ -128,12 +128,13 @@ void home()
   //Serial.println("j2 home");
 
   enc_reset_j1();
-  delay(10);
+  delay(200);
   //Serial.println("j1_back start");
   move_j1_wait(-30, 3000);
   //Serial.println("j1_back");
   delay(250);
-
+  enc_reset_j1();
+  delay(20);
   j1_home_stop_on_switch(false, 2000);
   delay(500);
   enc_reset_j1();

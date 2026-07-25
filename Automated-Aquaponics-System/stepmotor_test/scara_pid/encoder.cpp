@@ -163,6 +163,8 @@ bool move_j1_wait(
   unsigned long stable_ms,
   unsigned long timeout_ms
 ) {
+  j1_pid.prevError = 0.0f;
+  j1_pid.integral  = 0.0f;
   const unsigned long startedAt = millis();
   unsigned long inToleranceSince = 0;
 
@@ -175,6 +177,7 @@ bool move_j1_wait(
       targetAngle,
       max_pps,
       tolDeg
+      delay(2);   // PID 계산 주기를 약 500Hz로 제한
     );
 
     const float error = j1_error_deg(targetAngle);
