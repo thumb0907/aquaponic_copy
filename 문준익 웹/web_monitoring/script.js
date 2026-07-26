@@ -1,12 +1,9 @@
 // =====================================================
-// 실행 모드
+// 실행 설정
 // =====================================================
 
-// 실제 센서값 사용
-const TEST_MODE = false;
-
 // 그래프에 표시할 최대 데이터 수
-const MAX_POINTS = 20;
+const MAX_POINTS = 30;
 
 // 센서값 요청 주기
 const SENSOR_UPDATE_INTERVAL_MS = 1000;
@@ -82,9 +79,7 @@ function formatTime(date) {
       date.getSeconds()
     ).padStart(2, "0");
 
-  return (
-    `${hours}:${minutes}:${seconds}`
-  );
+  return `${hours}:${minutes}:${seconds}`;
 }
 
 
@@ -93,11 +88,6 @@ function formatTime(date) {
 // =====================================================
 
 const NORMAL_RANGE = {
-  level: {
-    min: 280,
-    max: 380
-  },
-
   temp: {
     min: 22.0,
     max: 28.0
@@ -119,7 +109,6 @@ const NORMAL_RANGE = {
 // 현재 센서값
 // =====================================================
 
-let currentLevel = null;
 let currentTemp = null;
 let currentPh = null;
 let currentTds = null;
@@ -135,7 +124,6 @@ let currentLastUpdate = null;
 
 const labels = [];
 
-const levelData = [];
 const tempData = [];
 const phData = [];
 const tdsData = [];
@@ -155,7 +143,6 @@ for (
     formatTime(time)
   );
 
-  levelData.push(null);
   tempData.push(null);
   phData.push(null);
   tdsData.push(null);
@@ -173,7 +160,8 @@ function createRealtimeChart(
   borderColor,
   backgroundColor,
   yMin,
-  yMax
+  yMax,
+  yStepSize
 ) {
   const canvas =
     document.getElementById(
@@ -182,7 +170,7 @@ function createRealtimeChart(
 
   if (!canvas) {
     console.error(
-      `Canvas를 찾을 수 없습니다: ${canvasId}`
+      `그래프 Canvas를 찾을 수 없습니다: ${canvasId}`
     );
 
     return null;
@@ -216,9 +204,11 @@ function createRealtimeChart(
 
             pointRadius: 0,
 
-            pointHoverRadius: 4,
+            pointHoverRadius: 6,
 
-            borderWidth: 2,
+            pointHitRadius: 15,
+
+            borderWidth: 3,
 
             spanGaps: true
           }
@@ -239,11 +229,44 @@ function createRealtimeChart(
           mode: "index"
         },
 
+        layout: {
+          padding: {
+            top: 4,
+            right: 7,
+            bottom: 2,
+            left: 2
+          }
+        },
+
         plugins: {
           legend: {
+            position: "top",
+
             labels: {
-              color: "#e5e7eb"
+              color: "#e5e7eb",
+
+              boxWidth: 42,
+              boxHeight: 13,
+
+              padding: 14,
+
+              font: {
+                size: 16,
+                weight: "600"
+              }
             }
+          },
+
+          tooltip: {
+            titleFont: {
+              size: 15
+            },
+
+            bodyFont: {
+              size: 15
+            },
+
+            padding: 12
           }
         },
 
@@ -251,7 +274,12 @@ function createRealtimeChart(
           x: {
             ticks: {
               color: "#94a3b8",
-              maxTicksLimit: 6
+
+              maxTicksLimit: 7,
+
+              font: {
+                size: 13
+              }
             },
 
             grid: {
@@ -264,7 +292,13 @@ function createRealtimeChart(
             max: yMax,
 
             ticks: {
-              color: "#94a3b8"
+              color: "#94a3b8",
+
+              stepSize: yStepSize,
+
+              font: {
+                size: 13
+              }
             },
 
             grid: {
@@ -279,20 +313,8 @@ function createRealtimeChart(
 
 
 // =====================================================
-// 그래프 객체
+// 그래프 객체 생성
 // =====================================================
-
-const levelChart =
-  createRealtimeChart(
-    "levelChart",
-    "수위",
-    levelData,
-    "#38bdf8",
-    "rgba(56, 189, 248, 0.12)",
-    0,
-    500
-  );
-
 
 const tempChart =
   createRealtimeChart(
@@ -300,9 +322,10 @@ const tempChart =
     "수온",
     tempData,
     "#f59e0b",
-    "rgba(245, 158, 11, 0.12)",
-    0,
-    40
+    "rgba(245, 158, 11, 0.14)",
+    15,
+    35,
+    2
   );
 
 
@@ -312,9 +335,10 @@ const phChart =
     "pH",
     phData,
     "#a78bfa",
-    "rgba(167, 139, 250, 0.12)",
-    0,
-    14
+    "rgba(167, 139, 250, 0.14)",
+    4,
+    10,
+    1
   );
 
 
@@ -324,9 +348,10 @@ const tdsChart =
     "TDS",
     tdsData,
     "#34d399",
-    "rgba(52, 211, 153, 0.12)",
-    0,
-    1000
+    "rgba(52, 211, 153, 0.14)",
+    300,
+    1000,
+    100
   );
 
 
@@ -377,15 +402,35 @@ function valueText(
 
 
 // =====================================================
-// 센서 요약값 표시
+// 정상 범위 판정
+// =====================================================
+
+function isOutOfRange(
+  value,
+  range
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    !Number.isFinite(
+      Number(value)
+    )
+  ) {
+    return false;
+  }
+
+  return (
+    value < range.min ||
+    value > range.max
+  );
+}
+
+
+// =====================================================
+// 센서 현재값 표시
 // =====================================================
 
 function updateSummary() {
-  const levelElement =
-    document.getElementById(
-      "levelValue"
-    );
-
   const tempElement =
     document.getElementById(
       "tempValue"
@@ -400,15 +445,6 @@ function updateSummary() {
     document.getElementById(
       "tdsValue"
     );
-
-
-  if (levelElement) {
-    levelElement.textContent =
-      valueText(
-        currentLevel,
-        0
-      );
-  }
 
 
   if (tempElement) {
@@ -438,16 +474,7 @@ function updateSummary() {
   }
 
 
-  updateSummaryCardState(
-    "levelValue",
-    isOutOfRange(
-      currentLevel,
-      NORMAL_RANGE.level
-    )
-  );
-
-
-  updateSummaryCardState(
+  updateSensorCardState(
     "tempValue",
     isOutOfRange(
       currentTemp,
@@ -456,7 +483,7 @@ function updateSummary() {
   );
 
 
-  updateSummaryCardState(
+  updateSensorCardState(
     "phValue",
     isOutOfRange(
       currentPh,
@@ -465,7 +492,7 @@ function updateSummary() {
   );
 
 
-  updateSummaryCardState(
+  updateSensorCardState(
     "tdsValue",
     isOutOfRange(
       currentTds,
@@ -475,7 +502,7 @@ function updateSummary() {
 }
 
 
-function updateSummaryCardState(
+function updateSensorCardState(
   valueElementId,
   abnormal
 ) {
@@ -488,19 +515,33 @@ function updateSummaryCardState(
     return;
   }
 
-  const summaryCard =
+  const sensorCard =
     valueElement.closest(
-      ".summary-card"
+      ".sensor-value-card"
     );
 
-  if (!summaryCard) {
+  if (!sensorCard) {
     return;
   }
 
-  summaryCard.classList.toggle(
+  sensorCard.classList.toggle(
     "abnormal",
     abnormal
   );
+
+  const statusElement =
+    sensorCard.querySelector(
+      ".sensor-status"
+    );
+
+  if (!statusElement) {
+    return;
+  }
+
+  statusElement.textContent =
+    abnormal
+      ? "ABNORMAL"
+      : "NORMAL RANGE";
 }
 
 
@@ -513,10 +554,6 @@ function pushChartData() {
 
   labels.push(
     formatTime(now)
-  );
-
-  levelData.push(
-    currentLevel
   );
 
   tempData.push(
@@ -538,16 +575,11 @@ function pushChartData() {
   ) {
     labels.shift();
 
-    levelData.shift();
     tempData.shift();
     phData.shift();
     tdsData.shift();
   }
 
-
-  if (levelChart) {
-    levelChart.update("none");
-  }
 
   if (tempChart) {
     tempChart.update("none");
@@ -652,7 +684,6 @@ function addLog(
 
 function addPeriodicSensorLog() {
   const allValuesMissing =
-    currentLevel === null &&
     currentTemp === null &&
     currentPh === null &&
     currentTds === null;
@@ -663,18 +694,6 @@ function addPeriodicSensorLog() {
 
 
   const abnormalSensors = [];
-
-
-  if (
-    isOutOfRange(
-      currentLevel,
-      NORMAL_RANGE.level
-    )
-  ) {
-    abnormalSensors.push(
-      "수위"
-    );
-  }
 
 
   if (
@@ -715,7 +734,6 @@ function addPeriodicSensorLog() {
 
   const message =
     `센서값 | ` +
-    `수위: ${valueText(currentLevel, 0)}mm / ` +
     `수온: ${valueText(currentTemp, 1)}°C / ` +
     `pH: ${valueText(currentPh, 2)} / ` +
     `TDS: ${valueText(currentTds, 0)}ppm`;
@@ -746,7 +764,6 @@ function addPeriodicSensorLog() {
 // =====================================================
 
 let lastAlertTime = {
-  level: 0,
   temp: 0,
   ph: 0,
   tds: 0,
@@ -766,7 +783,6 @@ function canAlert(key) {
     lastAlertTime[key] = 0;
   }
 
-
   if (
     now -
     lastAlertTime[key] >=
@@ -782,53 +798,10 @@ function canAlert(key) {
 
 
 // =====================================================
-// 정상 범위 판정
-// =====================================================
-
-function isOutOfRange(
-  value,
-  range
-) {
-  if (
-    value === null ||
-    value === undefined ||
-    !Number.isFinite(
-      Number(value)
-    )
-  ) {
-    return false;
-  }
-
-  return (
-    value < range.min ||
-    value > range.max
-  );
-}
-
-
-// =====================================================
 // 센서 이상 확인
 // =====================================================
 
 function checkAbnormalEvents() {
-  if (
-    isOutOfRange(
-      currentLevel,
-      NORMAL_RANGE.level
-    ) &&
-    canAlert("level")
-  ) {
-    addLog(
-      `수위 이상: 현재 ` +
-      `${currentLevel.toFixed(0)}mm ` +
-      `(정상 범위 ` +
-      `${NORMAL_RANGE.level.min}` +
-      `~${NORMAL_RANGE.level.max}mm)`,
-      "alert"
-    );
-  }
-
-
   if (
     isOutOfRange(
       currentTemp,
@@ -921,22 +894,15 @@ async function fetchSensorData() {
         }
       );
 
-
     if (!response.ok) {
       throw new Error(
         `HTTP ${response.status}`
       );
     }
 
-
     const data =
       await response.json();
 
-
-    currentLevel =
-      parseSensorValue(
-        data.level
-      );
 
     currentTemp =
       parseSensorValue(
@@ -980,7 +946,6 @@ async function fetchSensorData() {
       error
     );
 
-
     if (
       canAlert("fetch")
     ) {
@@ -995,7 +960,7 @@ async function fetchSensorData() {
 
 
 // =====================================================
-// 영상 자동 재생 보조
+// 영상 자동 재생
 // =====================================================
 
 function startTimelapseVideos() {
@@ -1005,9 +970,20 @@ function startTimelapseVideos() {
     );
 
   videos.forEach(
-    (video) => {
+    (video, index) => {
       video.muted = true;
       video.loop = true;
+      video.playsInline = true;
+
+      video.addEventListener(
+        "error",
+        () => {
+          addLog(
+            `타임랩스 ${index + 1} 영상 로드에 실패했습니다.`,
+            "alert"
+          );
+        }
+      );
 
       const playPromise =
         video.play();
@@ -1018,7 +994,7 @@ function startTimelapseVideos() {
         playPromise.catch(
           (error) => {
             console.warn(
-              "영상 자동 재생 실패:",
+              `타임랩스 ${index + 1} 자동 재생 실패:`,
               error
             );
           }

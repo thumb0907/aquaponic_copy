@@ -34,9 +34,15 @@
     <header class="topbar">
 
       <div class="topbar-left">
+
         <h1>
           Automated Aquaponics System
         </h1>
+
+        <div class="topbar-subtitle">
+          Resource-Circulating AI Cultivation Process
+        </div>
+
       </div>
 
       <div class="topbar-right">
@@ -111,8 +117,7 @@
                 type="video/mp4"
               >
 
-              브라우저가 영상 재생을
-              지원하지 않습니다.
+              브라우저가 영상 재생을 지원하지 않습니다.
 
             </video>
 
@@ -153,8 +158,7 @@
                 type="video/mp4"
               >
 
-              브라우저가 영상 재생을
-              지원하지 않습니다.
+              브라우저가 영상 재생을 지원하지 않습니다.
 
             </video>
 
@@ -176,174 +180,191 @@
         </div>
 
 
-        <!-- 현재 센서값 -->
+        <!-- 센서 3개 세로 배치 -->
 
-        <div class="summary-cards">
-
-
-          <!-- 수위 -->
-
-          <div class="summary-card">
-
-            <div class="summary-label">
-              수위
-            </div>
-
-            <div class="summary-value">
-
-              <span id="levelValue">
-                -
-              </span>
-
-              mm
-
-            </div>
-
-            <div class="summary-unit">
-              정상 범위: 280 ~ 380 mm
-            </div>
-
-          </div>
+        <div class="sensor-stack">
 
 
-          <!-- 수온 -->
+          <!-- =================================================
+               수온
+          ================================================== -->
 
-          <div class="summary-card">
+          <article class="sensor-row">
 
-            <div class="summary-label">
-              수온
-            </div>
+            <div class="sensor-value-card">
 
-            <div class="summary-value">
+              <div class="sensor-card-header">
 
-              <span id="tempValue">
-                -
-              </span>
+                <div class="sensor-name">
+                  수온
+                </div>
 
-              °C
+                <div class="sensor-status">
+                  NORMAL RANGE
+                </div>
+
+              </div>
+
+              <div class="sensor-main-value">
+
+                <span id="tempValue">
+                  -
+                </span>
+
+                <span class="sensor-value-unit">
+                  °C
+                </span>
+
+              </div>
+
+              <div class="sensor-normal-range">
+                정상 범위: 22.0 ~ 28.0°C
+              </div>
 
             </div>
 
-            <div class="summary-unit">
-              정상 범위: 22 ~ 28°C
-            </div>
 
-          </div>
+            <div class="chart-card">
 
+              <div class="chart-header">
 
-          <!-- pH -->
+                <div class="chart-title">
+                  실시간 수온 그래프
+                </div>
 
-          <div class="summary-card">
+                <div class="chart-description">
+                  Water Temperature
+                </div>
 
-            <div class="summary-label">
-              pH
-            </div>
+              </div>
 
-            <div class="summary-value">
-
-              <span id="phValue">
-                -
-              </span>
+              <div class="chart-wrap">
+                <canvas id="tempChart"></canvas>
+              </div>
 
             </div>
 
-            <div class="summary-unit">
-              정상 범위: 6.4 ~ 7.4
+          </article>
+
+
+          <!-- =================================================
+               pH
+          ================================================== -->
+
+          <article class="sensor-row">
+
+            <div class="sensor-value-card">
+
+              <div class="sensor-card-header">
+
+                <div class="sensor-name">
+                  pH
+                </div>
+
+                <div class="sensor-status">
+                  NORMAL RANGE
+                </div>
+
+              </div>
+
+              <div class="sensor-main-value">
+
+                <span id="phValue">
+                  -
+                </span>
+
+              </div>
+
+              <div class="sensor-normal-range">
+                정상 범위: 6.4 ~ 7.4
+              </div>
+
             </div>
 
-          </div>
 
+            <div class="chart-card">
 
-          <!-- TDS -->
+              <div class="chart-header">
 
-          <div class="summary-card">
+                <div class="chart-title">
+                  실시간 pH 그래프
+                </div>
 
-            <div class="summary-label">
-              TDS
+                <div class="chart-description">
+                  Acidity Level
+                </div>
+
+              </div>
+
+              <div class="chart-wrap">
+                <canvas id="phChart"></canvas>
+              </div>
+
             </div>
 
-            <div class="summary-value">
+          </article>
 
-              <span id="tdsValue">
-                -
-              </span>
 
-              ppm
+          <!-- =================================================
+               TDS
+          ================================================== -->
+
+          <article class="sensor-row">
+
+            <div class="sensor-value-card">
+
+              <div class="sensor-card-header">
+
+                <div class="sensor-name">
+                  TDS
+                </div>
+
+                <div class="sensor-status">
+                  NORMAL RANGE
+                </div>
+
+              </div>
+
+              <div class="sensor-main-value">
+
+                <span id="tdsValue">
+                  -
+                </span>
+
+                <span class="sensor-value-unit">
+                  ppm
+                </span>
+
+              </div>
+
+              <div class="sensor-normal-range">
+                정상 범위: 580 ~ 780ppm
+              </div>
 
             </div>
 
-            <div class="summary-unit">
-              정상 범위: 580 ~ 780 ppm
+
+            <div class="chart-card">
+
+              <div class="chart-header">
+
+                <div class="chart-title">
+                  실시간 TDS 그래프
+                </div>
+
+                <div class="chart-description">
+                  Total Dissolved Solids
+                </div>
+
+              </div>
+
+              <div class="chart-wrap">
+                <canvas id="tdsChart"></canvas>
+              </div>
+
             </div>
 
-          </div>
-
-        </div>
-
-
-        <!-- 센서 그래프 -->
-
-        <div class="chart-grid">
-
-
-          <!-- 수위 그래프 -->
-
-          <div class="chart-card">
-
-            <div class="chart-title">
-              수위 그래프
-            </div>
-
-            <div class="chart-wrap">
-              <canvas id="levelChart"></canvas>
-            </div>
-
-          </div>
-
-
-          <!-- 수온 그래프 -->
-
-          <div class="chart-card">
-
-            <div class="chart-title">
-              수온 그래프
-            </div>
-
-            <div class="chart-wrap">
-              <canvas id="tempChart"></canvas>
-            </div>
-
-          </div>
-
-
-          <!-- pH 그래프 -->
-
-          <div class="chart-card">
-
-            <div class="chart-title">
-              pH 그래프
-            </div>
-
-            <div class="chart-wrap">
-              <canvas id="phChart"></canvas>
-            </div>
-
-          </div>
-
-
-          <!-- TDS 그래프 -->
-
-          <div class="chart-card">
-
-            <div class="chart-title">
-              TDS 그래프
-            </div>
-
-            <div class="chart-wrap">
-              <canvas id="tdsChart"></canvas>
-            </div>
-
-          </div>
+          </article>
 
         </div>
 

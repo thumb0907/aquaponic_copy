@@ -13,16 +13,24 @@
     sans-serif;
 }
 
+html {
+  background: #0b1120;
+}
+
 body {
+  min-width: 1200px;
+
   background-color: #0b1120;
   color: #e5e7eb;
 
-  overflow-x: hidden;
+  overflow-x: auto;
 }
 
 .dashboard {
+  width: 100%;
   min-height: 100vh;
-  padding: 20px;
+
+  padding: 22px 24px 22px 34px;
 }
 
 
@@ -35,29 +43,37 @@ body {
   justify-content: space-between;
   align-items: center;
 
+  gap: 24px;
+
+  margin-bottom: 22px;
+  padding: 20px 26px;
+
   background: #111827;
 
   border: 1px solid #1f2937;
-  border-radius: 16px;
-
-  padding: 20px 24px;
-  margin-bottom: 20px;
-
-  gap: 20px;
+  border-radius: 18px;
 }
 
 .topbar-left h1 {
-  font-size: 28px;
+  font-size: clamp(28px, 1.8vw, 42px);
+  font-weight: 750;
   color: #f8fafc;
+
+  letter-spacing: -0.5px;
+}
+
+.topbar-subtitle {
+  margin-top: 6px;
+
+  font-size: clamp(12px, 0.75vw, 17px);
+  color: #64748b;
+
+  letter-spacing: 0.5px;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
-
-  gap: 12px;
-
-  flex-wrap: wrap;
 }
 
 
@@ -66,25 +82,25 @@ body {
 ===================================================== */
 
 .time-box {
+  min-width: 260px;
+
+  padding: 12px 18px;
+
   background: #0f172a;
 
   border: 1px solid #1e293b;
-  border-radius: 12px;
-
-  padding: 10px 14px;
-
-  min-width: 210px;
+  border-radius: 13px;
 }
 
 .time-label {
-  margin-bottom: 4px;
+  margin-bottom: 5px;
 
-  font-size: 12px;
+  font-size: clamp(12px, 0.7vw, 16px);
   color: #94a3b8;
 }
 
 .time-value {
-  font-size: 18px;
+  font-size: clamp(18px, 1.2vw, 27px);
   font-weight: 700;
   color: #f8fafc;
 }
@@ -98,11 +114,11 @@ body {
   display: grid;
 
   grid-template-columns:
-    1.05fr
-    1.8fr
-    0.95fr;
+    minmax(430px, 1.22fr)
+    minmax(760px, 2.08fr)
+    minmax(330px, 0.88fr);
 
-  gap: 20px;
+  gap: 22px;
 
   align-items: stretch;
 }
@@ -115,21 +131,21 @@ body {
 .left-panel,
 .center-panel,
 .right-panel {
+  min-width: 0;
+
+  padding: 18px;
+
   background: #111827;
 
   border: 1px solid #1f2937;
-  border-radius: 16px;
-
-  padding: 16px;
-
-  min-width: 0;
+  border-radius: 18px;
 }
 
 .panel-title {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 
-  font-size: 18px;
-  font-weight: 700;
+  font-size: clamp(19px, 1.1vw, 27px);
+  font-weight: 750;
   color: #f8fafc;
 }
 
@@ -143,12 +159,10 @@ body {
 
   grid-template-rows:
     auto
-    1fr
-    1fr;
+    minmax(0, 1fr)
+    minmax(0, 1fr);
 
-  gap: 16px;
-
-  height: calc(100vh - 120px);
+  gap: 17px;
 }
 
 .left-panel .panel-title {
@@ -157,7 +171,7 @@ body {
 
 
 /* =====================================================
-   타임랩스 영상 카드
+   타임랩스 카드
 ===================================================== */
 
 .camera-card {
@@ -166,12 +180,12 @@ body {
 
   min-height: 0;
 
+  padding: 15px;
+
   background: #0f172a;
 
   border: 1px solid #1e293b;
-  border-radius: 14px;
-
-  padding: 12px;
+  border-radius: 15px;
 }
 
 .camera-header {
@@ -179,157 +193,246 @@ body {
   justify-content: space-between;
   align-items: center;
 
-  margin-bottom: 10px;
-
-  font-size: 15px;
-  font-weight: 600;
-  color: #e2e8f0;
-
   flex-shrink: 0;
+
+  gap: 12px;
+
+  margin-bottom: 11px;
+
+  font-size: clamp(15px, 0.9vw, 21px);
+  font-weight: 650;
+  color: #e2e8f0;
 }
 
 .camera-status {
-  font-size: 13px;
-  font-weight: 700;
-
+  font-size: clamp(12px, 0.7vw, 16px);
+  font-weight: 750;
   color: #22c55e;
 }
 
 .camera-view {
   display: flex;
+  justify-content: center;
+  align-items: center;
 
   flex: 1;
-  min-height: 0;
+
+  min-height: 330px;
 
   overflow: hidden;
 
   background: #020617;
 
-  border-radius: 10px;
+  border-radius: 11px;
 }
 
-.camera-view img,
 .camera-view video {
+  display: block;
+
   width: 100%;
   height: 100%;
 
-  display: block;
-
-  object-fit: cover;
+  object-fit: contain;
 
   background: #020617;
 
-  border-radius: 10px;
+  border-radius: 11px;
 }
 
 
 /* =====================================================
-   센서 요약 카드
+   중앙 센서 패널
 ===================================================== */
 
-.summary-cards {
+.center-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.sensor-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+
+  gap: 18px;
+
+  flex: 1;
+}
+
+
+/* =====================================================
+   센서 1개 행
+===================================================== */
+
+.sensor-row {
   display: grid;
 
   grid-template-columns:
-    repeat(4, 1fr);
+    minmax(205px, 0.31fr)
+    minmax(0, 1fr);
 
-  gap: 12px;
+  gap: 16px;
+
+  min-height: 0;
+}
+
+
+/* =====================================================
+   센서 현재값 카드
+===================================================== */
+
+.sensor-value-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  min-height: 250px;
+
+  padding: 22px;
+
+  background: #0f172a;
+
+  border: 1px solid #1e293b;
+  border-radius: 16px;
+
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.sensor-card-header {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
 
   margin-bottom: 20px;
 }
 
-.summary-card {
-  background: #0f172a;
-
-  border: 1px solid #1e293b;
-  border-radius: 14px;
-
-  padding: 16px;
-
-  transition:
-    border-color 0.2s ease,
-    background-color 0.2s ease;
+.sensor-name {
+  font-size: clamp(19px, 1.1vw, 27px);
+  font-weight: 750;
+  color: #e2e8f0;
 }
 
-.summary-label {
-  margin-bottom: 8px;
+.sensor-status {
+  width: fit-content;
 
-  font-size: 13px;
-  color: #94a3b8;
+  padding: 5px 9px;
+
+  font-size: clamp(10px, 0.58vw, 14px);
+  font-weight: 750;
+  color: #4ade80;
+
+  background: rgba(34, 197, 94, 0.1);
+
+  border: 1px solid rgba(34, 197, 94, 0.24);
+  border-radius: 8px;
 }
 
-.summary-value {
-  margin-bottom: 6px;
+.sensor-main-value {
+  display: flex;
+  align-items: baseline;
 
-  font-size: 24px;
-  font-weight: 700;
+  gap: 8px;
+
+  margin-bottom: 15px;
+
+  font-size: clamp(38px, 2.8vw, 68px);
+  font-weight: 800;
   color: #f8fafc;
+
+  line-height: 1;
+  letter-spacing: -1px;
 }
 
-.summary-unit {
-  font-size: 12px;
+.sensor-value-unit {
+  font-size: clamp(18px, 1.25vw, 30px);
+  font-weight: 650;
+  color: #cbd5e1;
+}
+
+.sensor-normal-range {
+  font-size: clamp(13px, 0.73vw, 17px);
   color: #64748b;
 }
 
 
-/* 센서값 이상 */
+/* =====================================================
+   센서값 이상 상태
+===================================================== */
 
-.summary-card.abnormal {
-  background:
-    rgba(127, 29, 29, 0.2);
+.sensor-value-card.abnormal {
+  background: rgba(127, 29, 29, 0.22);
 
-  border-color:
-    rgba(248, 113, 113, 0.75);
+  border-color: rgba(248, 113, 113, 0.8);
+
+  box-shadow:
+    inset 0 0 0 1px rgba(248, 113, 113, 0.08);
 }
 
-.summary-card.abnormal .summary-label {
+.sensor-value-card.abnormal .sensor-name {
   color: #fca5a5;
 }
 
-.summary-card.abnormal .summary-value {
+.sensor-value-card.abnormal .sensor-main-value {
   color: #fecaca;
 }
 
-.summary-card.abnormal .summary-unit {
+.sensor-value-card.abnormal .sensor-normal-range {
   color: #f87171;
+}
+
+.sensor-value-card.abnormal .sensor-status {
+  color: #fca5a5;
+
+  background: rgba(239, 68, 68, 0.13);
+
+  border-color: rgba(248, 113, 113, 0.35);
 }
 
 
 /* =====================================================
-   센서 그래프
+   그래프 카드
 ===================================================== */
 
-.chart-grid {
-  display: grid;
-
-  grid-template-columns:
-    repeat(2, 1fr);
-
-  gap: 16px;
-}
-
 .chart-card {
+  min-width: 0;
+
+  padding: 17px 18px;
+
   background: #0f172a;
 
   border: 1px solid #1e293b;
-  border-radius: 14px;
+  border-radius: 16px;
+}
 
-  padding: 14px;
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  gap: 15px;
+
+  margin-bottom: 10px;
 }
 
 .chart-title {
-  margin-bottom: 12px;
-
-  font-size: 15px;
-  font-weight: 700;
+  font-size: clamp(17px, 1vw, 24px);
+  font-weight: 750;
   color: #f8fafc;
+}
+
+.chart-description {
+  font-size: clamp(11px, 0.65vw, 15px);
+  color: #64748b;
 }
 
 .chart-wrap {
   position: relative;
 
   width: 100%;
-  height: 260px;
+  height: clamp(240px, 25vh, 360px);
 }
 
 .chart-wrap canvas {
@@ -341,24 +444,29 @@ body {
 
 
 /* =====================================================
-   이벤트 로그
+   우측 이벤트 로그
 ===================================================== */
 
+.right-panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .log-box {
+  padding: 16px;
+
   background: #0f172a;
 
   border: 1px solid #1e293b;
-  border-radius: 14px;
-
-  padding: 14px;
+  border-radius: 15px;
 }
 
 .full-log-box {
   display: flex;
+  flex: 1;
   flex-direction: column;
 
-  height: calc(100vh - 180px);
-  min-height: 700px;
+  min-height: 760px;
 }
 
 .log-header-row {
@@ -368,28 +476,28 @@ body {
 
   gap: 12px;
 
-  margin-bottom: 14px;
+  margin-bottom: 15px;
 }
 
 .info-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: clamp(16px, 0.9vw, 21px);
+  font-weight: 750;
   color: #f8fafc;
 }
 
 .clear-log-btn {
-  background: #13203a;
-  color: #93c5fd;
-
-  border: 1px solid #27406f;
-  border-radius: 10px;
-
-  padding: 8px 12px;
+  padding: 9px 13px;
 
   cursor: pointer;
 
-  font-size: 13px;
-  font-weight: 600;
+  font-size: clamp(12px, 0.65vw, 15px);
+  font-weight: 650;
+  color: #93c5fd;
+
+  background: #13203a;
+
+  border: 1px solid #27406f;
+  border-radius: 10px;
 }
 
 .clear-log-btn:hover {
@@ -405,16 +513,15 @@ body {
 }
 
 .log-item {
-  padding: 12px 14px;
+  margin-bottom: 11px;
+  padding: 13px 15px;
 
-  margin-bottom: 10px;
-
-  border-radius: 12px;
-
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: clamp(13px, 0.72vw, 17px);
+  line-height: 1.55;
 
   word-break: keep-all;
+
+  border-radius: 12px;
 }
 
 .log-item:last-child {
@@ -422,9 +529,9 @@ body {
 }
 
 .log-time {
-  margin-right: 6px;
+  margin-right: 7px;
 
-  font-weight: 700;
+  font-weight: 750;
 }
 
 
@@ -433,14 +540,11 @@ body {
 ===================================================== */
 
 .log-item.sensor {
-  background:
-    rgba(59, 130, 246, 0.14);
-
   color: #c7dcff;
 
-  border:
-    1px solid
-    rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.14);
+
+  border: 1px solid rgba(59, 130, 246, 0.35);
 }
 
 .log-item.sensor .log-time {
@@ -453,14 +557,11 @@ body {
 ===================================================== */
 
 .log-item.alert {
-  background:
-    rgba(239, 68, 68, 0.2);
-
   color: #fecaca;
 
-  border:
-    1px solid
-    rgba(248, 113, 113, 0.7);
+  background: rgba(239, 68, 68, 0.2);
+
+  border: 1px solid rgba(248, 113, 113, 0.7);
 }
 
 .log-item.alert .log-time {
@@ -468,7 +569,7 @@ body {
 }
 
 .log-item.alert .log-message {
-  font-weight: 600;
+  font-weight: 650;
 }
 
 
@@ -477,14 +578,11 @@ body {
 ===================================================== */
 
 .log-item.system {
-  background:
-    rgba(148, 163, 184, 0.12);
-
   color: #d1d5db;
 
-  border:
-    1px solid
-    rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.12);
+
+  border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 
@@ -514,67 +612,122 @@ body {
 
 
 /* =====================================================
-   반응형 화면
+   중간 크기 화면
 ===================================================== */
 
-@media (max-width: 1450px) {
+@media (max-width: 1600px) {
+
+  body {
+    min-width: 0;
+  }
 
   .main-grid {
     grid-template-columns: 1fr;
   }
 
-  .summary-cards {
-    grid-template-columns:
-      repeat(2, 1fr);
+  .left-panel {
+    min-height: 850px;
   }
 
-  .chart-grid {
-    grid-template-columns: 1fr;
+  .sensor-row {
+    grid-template-columns:
+      minmax(220px, 0.3fr)
+      minmax(0, 1fr);
+  }
+
+  .right-panel {
+    min-height: 600px;
   }
 
   .full-log-box {
-    height: auto;
-    min-height: 500px;
-  }
-
-  .left-panel {
-    height: auto;
-
-    grid-template-rows:
-      auto
-      auto
-      auto;
-  }
-
-  .camera-card {
-    min-height: 300px;
+    min-height: 550px;
   }
 }
 
 
-@media (max-width: 768px) {
+/* =====================================================
+   태블릿 화면
+===================================================== */
+
+@media (max-width: 900px) {
 
   .dashboard {
-    padding: 10px;
+    padding: 12px;
   }
 
   .topbar {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
 
-    padding: 16px;
-  }
-
-  .topbar-left h1 {
-    font-size: 22px;
+    padding: 17px;
   }
 
   .time-box {
     width: 100%;
+    min-width: 0;
   }
 
-  .summary-cards {
+  .left-panel {
+    min-height: 700px;
+  }
+
+  .sensor-row {
     grid-template-columns: 1fr;
+  }
+
+  .sensor-value-card {
+    min-height: 190px;
+  }
+
+  .chart-wrap {
+    height: 280px;
+  }
+}
+
+
+/* =====================================================
+   모바일 화면
+===================================================== */
+
+@media (max-width: 600px) {
+
+  .dashboard {
+    padding: 8px;
+  }
+
+  .topbar-left h1 {
+    font-size: 23px;
+  }
+
+  .topbar-subtitle {
+    font-size: 11px;
+  }
+
+  .left-panel,
+  .center-panel,
+  .right-panel {
+    padding: 12px;
+  }
+
+  .left-panel {
+    min-height: 620px;
+  }
+
+  .camera-view {
+    min-height: 230px;
+  }
+
+  .sensor-main-value {
+    font-size: 42px;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .chart-wrap {
+    height: 250px;
   }
 
   .log-header-row {
@@ -584,9 +737,5 @@ body {
 
   .clear-log-btn {
     width: 100%;
-  }
-
-  .camera-card {
-    min-height: 240px;
   }
 }
