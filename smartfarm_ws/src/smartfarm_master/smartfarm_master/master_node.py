@@ -199,7 +199,8 @@ WATER_CAMERA_CONFIG = {
         'ignore_x_max': 0.65,
 
         # Empty right slot baseline is about 0.130; keep a noise margin.
-        'occupy_green_ratio': 0.20,
+        'tray_dark_value_max': 90,
+        'tray_dark_ratio': 0.32,
         'occupy_stable_frames': 5,
 
         'growth_area_ratio': WATER_GROWTH_AREA_RATIO,
@@ -4732,7 +4733,12 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
 
     cv2.putText(
         disp,
-        f'green={green_ratio:.3f} occ>{cfg["occupy_green_ratio"]:.2f} ready>{cfg["growth_area_ratio"]:.2f}',
+        (
+            f'green={green_ratio:.3f} '
+            f'dark={dark_ratio:.3f} '
+            f'tray>{cfg["tray_dark_ratio"]:.2f} '
+            f'ready>{cfg["growth_area_ratio"]:.2f}'
+        ),
         (20, 70),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
