@@ -180,10 +180,10 @@ WATER_COOLDOWN_SEC = 3.0
 #수경재배실쪽
 WATER_CAMERA_CONFIG = {
     'left': {
-        'roi_x_min': 0.29,
-        'roi_x_max': 0.87,
-        'roi_y_min': 0.27,
-        'roi_y_max': 0.72,
+        'roi_x_min': 0.27,
+        'roi_x_max': 0.89,
+        'roi_y_min': 0.25,
+        'roi_y_max': 0.75,
         'ignore_x_min': 0.35,
         'ignore_x_max': 0.65,
 
@@ -2870,9 +2870,9 @@ class MasterNode(Node):
     def _check_heartbeat(self):
         now = time.time()
         with self.state_lock:
-            pi1_now = (now - self.pi1_last_hb) < 3.0
-            pi2_now = (now - self.pi2_last_hb) < 3.0
-            pi3_now = (now - self.pi3_last_hb) < 3.0
+            pi1_now = (now - self.pi1_last_hb) < 10.0
+            pi2_now = (now - self.pi2_last_hb) < 10.0
+            pi3_now = (now - self.pi3_last_hb) < 10.0
 
             # Pi1 연결 상태 변화 감지
             if pi1_now and not self.pi1_alive_prev:
@@ -4741,7 +4741,17 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
         or foliage_ready
     )
 
-    growth_done = foliage_ready
+    with node.state_lock:
+        hold_demo_growing_slot = (
+            node.demo_mode
+            and position == node.demo_growing_water_slot
+            and node.water_slots[position]['state'] == SLOT_GROWING
+        )
+
+    growth_done = (
+        foliage_ready
+        and not hold_demo_growing_slot
+    )
 
     if growth_done:
         color = (0, 255, 0)       # 성장 완료: 초록
@@ -5155,11 +5165,102 @@ def nursery_video_receive_loop(node: MasterNode, stream_port: int, position: str
                 except Exception:
                     pass
 
+def get_latest_frame(frame_q, previous):
+    """큐에 쌓인 프레임 중 가장 최신 프레임만 반환한다."""
+    try:
+        while True:
+            previous = frame_q.get_nowait()
+    except queue.Empty:
+        return previous
 
+
+def make_camera_panel(
+    frame,
+    width: int,
+    height: int,
+    title: str
+):
+    """비율을 유지하면서 지정 크기의 카메라 패널을 만든다."""
+    panel = np.full(
+        (height, width, 3),
+        32,
+        dtype=np.uint8
+    )
+
+    if frame is None:
+        cv2.putText(
+            panel,
+            f'{title} - WAITING',
+            (20, height // 2),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 0, 255),
+            2
+        )
+        return panel
+
+    frame_h, frame_w = frame.shape[:2]
+
+    scale = min(
+        width / frame_w,
+        height / frame_h
+    )
+
+    resized_w = max(1, int(frame_w * scale))
+    resized_h = max(1, int(frame_h * scale))
+
+    resized = cv2.resize(
+        frame,
+        (resized_w, resized_h),
+        interpolation=cv2.INTER_AREA
+    )
+
+    x = (width - resized_w) // 2
+    y = (height - resized_h) // 2
+
+    panel[y:y + resized_h, x:x + resized_w] = resized
+
+    cv2.rectangle(
+        panel,
+        (0, 0),
+        (width - 1, 32),
+        (0, 0, 0),
+        -1
+    )
+
+    cv2.putText(
+        panel,
+        title,
+        (10, 23),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.65,
+        (255, 255, 255),
+        2
+    )
+
+    return panel
 
 def main(args=None):
     rclpy.init(args=args)
     node = MasterNode()
+    latest_frames = {
+        'conveyor': None,
+        'nursery_left': None,
+        'nursery_right': None,
+        'water_left': None,
+        'water_right': None,
+    }
+
+    cv2.namedWindow(
+        'SmartFarm Camera Dashboard',
+        cv2.WINDOW_NORMAL
+    )
+
+    cv2.resizeWindow(
+        'SmartFarm Camera Dashboard',
+        1200,
+        900
+    )
 
     threading.Thread(
         target=video_receive_loop,
@@ -5190,32 +5291,117 @@ def main(args=None):
     try:
         while rclpy.ok():
             rclpy.spin_once(node, timeout_sec=0.01)
-            try:
-                frame = frame_queue.get_nowait()
-                cv2.imshow('Pi1 Camera', frame)               
-            except queue.Empty:
-                pass
-            try:
-                frame = nursery_left_frame_queue.get_nowait()
-                cv2.imshow('Pi1 Nursery Left Camera', frame)
-            except queue.Empty:
-                pass
-            try:
-                frame = nursery_right_frame_queue.get_nowait()
-                cv2.imshow('Pi1 Nursery Right Camera', frame)
-            except queue.Empty:
-                pass
-            try:
-                frame = water_left_frame_queue.get_nowait()
-                cv2.imshow('Pi3 Water Left Camera', frame)
-            except queue.Empty:
-                pass
+            # try:
+            #     frame = frame_queue.get_nowait()
+            #     cv2.imshow('Pi1 Camera', frame)               
+            # except queue.Empty:
+            #     pass
+            # try:
+            #     frame = nursery_left_frame_queue.get_nowait()
+            #     cv2.imshow('Pi1 Nursery Left Camera', frame)
+            # except queue.Empty:
+            #     pass
+            # try:
+            #     frame = nursery_right_frame_queue.get_nowait()
+            #     cv2.imshow('Pi1 Nursery Right Camera', frame)
+            # except queue.Empty:
+            #     pass
+            # try:
+            #     frame = water_left_frame_queue.get_nowait()
+            #     cv2.imshow('Pi3 Water Left Camera', frame)
+            # except queue.Empty:
+            #     pass
 
-            try:
-                frame = water_right_frame_queue.get_nowait()
-                cv2.imshow('Pi3 Water Right Camera', frame)
-            except queue.Empty:
-                pass
+            # try:
+            #     frame = water_right_frame_queue.get_nowait()
+            #     cv2.imshow('Pi3 Water Right Camera', frame)
+            # except queue.Empty:
+            #     pass
+            latest_frames['conveyor'] = get_latest_frame(
+            frame_queue,
+            latest_frames['conveyor']
+            )
+
+            latest_frames['nursery_left'] = get_latest_frame(
+                nursery_left_frame_queue,
+                latest_frames['nursery_left']
+            )
+
+            latest_frames['nursery_right'] = get_latest_frame(
+                nursery_right_frame_queue,
+                latest_frames['nursery_right']
+            )
+
+            latest_frames['water_left'] = get_latest_frame(
+                water_left_frame_queue,
+                latest_frames['water_left']
+            )
+
+            latest_frames['water_right'] = get_latest_frame(
+                water_right_frame_queue,
+                latest_frames['water_right']
+            )
+
+            conveyor_panel = make_camera_panel(
+                latest_frames['conveyor'],
+                960,
+                270,
+                'Pi1 Conveyor'
+            )
+
+            nursery_left_panel = make_camera_panel(
+                latest_frames['nursery_left'],
+                480,
+                270,
+                'Nursery Left'
+            )
+
+            nursery_right_panel = make_camera_panel(
+                latest_frames['nursery_right'],
+                480,
+                270,
+                'Nursery Right'
+            )
+
+            water_left_panel = make_camera_panel(
+                latest_frames['water_left'],
+                480,
+                270,
+                'Water Left'
+            )
+
+            water_right_panel = make_camera_panel(
+                latest_frames['water_right'],
+                480,
+                270,
+                'Water Right'
+            )
+
+            nursery_row = cv2.hconcat([
+                nursery_left_panel,
+                nursery_right_panel
+            ])
+
+            water_row = cv2.hconcat([
+                water_left_panel,
+                water_right_panel
+            ])
+
+            dashboard = cv2.vconcat([
+                conveyor_panel,
+                nursery_row,
+                water_row
+            ])
+
+            cv2.imshow(
+                'SmartFarm Camera Dashboard',
+                dashboard
+            )
+
+            key = cv2.waitKey(1) & 0xFF
+
+            if key in (27, ord('q')):
+                break
             cv2.waitKey(1) 
     except KeyboardInterrupt:
         pass
