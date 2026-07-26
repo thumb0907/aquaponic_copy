@@ -160,6 +160,12 @@ WATER_RIGHT_STREAM_PORT = 5012
 WATER_LOWER_GREEN = np.array([38, 90, 90], dtype=np.uint8)
 WATER_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
 
+# Mature lettuce in the water room can be yellow-green and less saturated
+# than the strict green band above.  Keep this as a separate narrow band so
+# the green-tinted empty rack does not become foliage.
+WATER_LOWER_PALE_LEAF = np.array([18, 35, 45], dtype=np.uint8)
+WATER_UPPER_PALE_LEAF = np.array([37, 125, 255], dtype=np.uint8)
+
 WATER_ROI_X_MIN = 0.25
 WATER_ROI_X_MAX = 0.86
 WATER_ROI_Y_MIN = 0.30
@@ -4669,7 +4675,17 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     roi = frame[ry1:ry2, rx1:rx2]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-    mask = cv2.inRange(hsv, WATER_LOWER_GREEN, WATER_UPPER_GREEN)
+    strict_green_mask = cv2.inRange(
+        hsv,
+        WATER_LOWER_GREEN,
+        WATER_UPPER_GREEN
+    )
+    pale_leaf_mask = cv2.inRange(
+        hsv,
+        WATER_LOWER_PALE_LEAF,
+        WATER_UPPER_PALE_LEAF
+    )
+    mask = cv2.bitwise_or(strict_green_mask, pale_leaf_mask)
     dark_mask = cv2.inRange(
         hsv,
         np.array([0, 0, 0], dtype=np.uint8),
@@ -4712,15 +4728,20 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
         if area > largest_area:
             largest_area = area
 
-    occupied_seen = (
-        dark_ratio >= cfg['tray_dark_ratio']
-    )
-
-    growth_done = (
-        occupied_seen
-        and green_ratio >= cfg['growth_area_ratio']
+    foliage_ready = (
+        green_ratio >= cfg['growth_area_ratio']
         and largest_area >= cfg['min_leaf_area']
     )
+
+    # A mature canopy is also evidence that the slot is occupied.  This keeps
+    # a bright tray/background from blocking READY only because dark_ratio is
+    # slightly below the tray threshold.
+    occupied_seen = (
+        dark_ratio >= cfg['tray_dark_ratio']
+        or foliage_ready
+    )
+
+    growth_done = foliage_ready
 
     if growth_done:
         color = (0, 255, 0)       # 성장 완료: 초록
