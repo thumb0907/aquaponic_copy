@@ -868,9 +868,13 @@ class MasterNode(Node):
         if (
             not self.pi2_alive
             or not self.pi2_device_links['manip']
+            or self.manip_state != 'idle'
         ):
             self.get_logger().error(
-                '매니퓰레이터 UART 미연결: 수확 작업 생성 불가'
+                '매니퓰레이터가 수확 가능한 상태가 아님: '
+                f'pi2={self.pi2_alive}, '
+                f'link={self.pi2_device_links["manip"]}, '
+                f'state={self.manip_state}'
             )
             return None
 
@@ -3037,7 +3041,11 @@ class MasterNode(Node):
         # ─────────────────────────────
         # 전체 리셋: STM1 + SCARA
         # ─────────────────────────────
-        elif cmd in ('RESET', 'RESET_ALL'):
+        elif cmd in (
+            'RESET',
+            'RESET_ALL',
+            'RESET_CONTROLLERS',
+        ):
             with self.state_lock:
                 # RESET 중에도 자동 시퀀스는 계속 차단
                 self.emergency = True
@@ -3049,8 +3057,6 @@ class MasterNode(Node):
                     'scara',
                     'stm2',
                 }
-                if MANIP_HARVEST_ENABLED:
-                    self.reset_waiting.add('manip')
 
                 self.stm_state = 'resetting'
                 self.scara_state = 'resetting'
@@ -3591,7 +3597,7 @@ def process_frame(node: MasterNode, frame: np.ndarray):
                         # 매니퓰레이터가 새 트레이를 놓고
                         # 홈까지 복귀한 뒤에만 파종 허용
                         and node.stm_state == 'idle'
-                        and node.active_manip_job is None
+                        #and node.active_manip_job is None
                         and (now - node.last_tx) > COOLDOWN_SEC
                         and not node.emergency
                         and node.pi1_alive
