@@ -13,24 +13,45 @@
     sans-serif;
 }
 
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
 html {
   background: #0b1120;
 }
 
 body {
-  min-width: 1200px;
+  height: 100vh;
 
   background-color: #0b1120;
   color: #e5e7eb;
 
-  overflow-x: auto;
+  overflow: hidden;
 }
 
-.dashboard {
-  width: 100%;
-  min-height: 100vh;
 
-  padding: 22px 24px 22px 34px;
+/* =====================================================
+   전체 대시보드
+===================================================== */
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+
+  width: 100%;
+  height: 100vh;
+  min-height: 0;
+
+  padding:
+    20px
+    24px
+    20px
+    34px;
+
+  overflow: hidden;
 }
 
 
@@ -43,10 +64,12 @@ body {
   justify-content: space-between;
   align-items: center;
 
+  flex-shrink: 0;
+
   gap: 24px;
 
-  margin-bottom: 22px;
-  padding: 20px 26px;
+  padding: 18px 26px;
+  margin-bottom: 20px;
 
   background: #111827;
 
@@ -55,7 +78,13 @@ body {
 }
 
 .topbar-left h1 {
-  font-size: clamp(28px, 1.8vw, 42px);
+  font-size:
+    clamp(
+      28px,
+      1.8vw,
+      42px
+    );
+
   font-weight: 750;
   color: #f8fafc;
 
@@ -65,7 +94,13 @@ body {
 .topbar-subtitle {
   margin-top: 6px;
 
-  font-size: clamp(12px, 0.75vw, 17px);
+  font-size:
+    clamp(
+      12px,
+      0.75vw,
+      17px
+    );
+
   color: #64748b;
 
   letter-spacing: 0.5px;
@@ -74,6 +109,8 @@ body {
 .topbar-right {
   display: flex;
   align-items: center;
+
+  flex-shrink: 0;
 }
 
 
@@ -95,12 +132,24 @@ body {
 .time-label {
   margin-bottom: 5px;
 
-  font-size: clamp(12px, 0.7vw, 16px);
+  font-size:
+    clamp(
+      12px,
+      0.7vw,
+      16px
+    );
+
   color: #94a3b8;
 }
 
 .time-value {
-  font-size: clamp(18px, 1.2vw, 27px);
+  font-size:
+    clamp(
+      18px,
+      1.2vw,
+      27px
+    );
+
   font-weight: 700;
   color: #f8fafc;
 }
@@ -114,13 +163,20 @@ body {
   display: grid;
 
   grid-template-columns:
-    minmax(430px, 1.22fr)
-    minmax(760px, 2.08fr)
-    minmax(330px, 0.88fr);
+    minmax(0, 1.2fr)
+    minmax(0, 2fr)
+    minmax(0, 0.9fr);
 
   gap: 22px;
 
+  flex: 1;
+
+  min-width: 0;
+  min-height: 0;
+
   align-items: stretch;
+
+  overflow: hidden;
 }
 
 
@@ -132,6 +188,8 @@ body {
 .center-panel,
 .right-panel {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
 
   padding: 18px;
 
@@ -139,12 +197,22 @@ body {
 
   border: 1px solid #1f2937;
   border-radius: 18px;
+
+  overflow: hidden;
 }
 
 .panel-title {
+  flex-shrink: 0;
+
   margin-bottom: 16px;
 
-  font-size: clamp(19px, 1.1vw, 27px);
+  font-size:
+    clamp(
+      19px,
+      1.1vw,
+      27px
+    );
+
   font-weight: 750;
   color: #f8fafc;
 }
@@ -163,6 +231,11 @@ body {
     minmax(0, 1fr);
 
   gap: 17px;
+
+  min-height: 0;
+  height: 100%;
+
+  overflow: hidden;
 }
 
 .left-panel .panel-title {
@@ -178,14 +251,17 @@ body {
   display: flex;
   flex-direction: column;
 
+  min-width: 0;
   min-height: 0;
 
-  padding: 15px;
+  padding: 14px;
 
   background: #0f172a;
 
   border: 1px solid #1e293b;
   border-radius: 15px;
+
+  overflow: hidden;
 }
 
 .camera-header {
@@ -199,13 +275,27 @@ body {
 
   margin-bottom: 11px;
 
-  font-size: clamp(15px, 0.9vw, 21px);
+  font-size:
+    clamp(
+      15px,
+      0.9vw,
+      21px
+    );
+
   font-weight: 650;
   color: #e2e8f0;
 }
 
 .camera-status {
-  font-size: clamp(12px, 0.7vw, 16px);
+  flex-shrink: 0;
+
+  font-size:
+    clamp(
+      12px,
+      0.7vw,
+      16px
+    );
+
   font-weight: 750;
   color: #22c55e;
 }
@@ -217,7 +307,9 @@ body {
 
   flex: 1;
 
-  min-height: 330px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
 
   overflow: hidden;
 
@@ -226,6 +318,7 @@ body {
   border-radius: 11px;
 }
 
+.camera-view img,
 .camera-view video {
   display: block;
 
@@ -241,38 +334,58 @@ body {
 
 
 /* =====================================================
-   중앙 센서 패널
+   중앙 센서 대시보드
 ===================================================== */
 
 .center-panel {
   display: flex;
   flex-direction: column;
+
+  min-height: 0;
+  height: 100%;
+
+  overflow: hidden;
 }
 
 .sensor-stack {
   display: grid;
+
   grid-template-columns: 1fr;
+
+  grid-template-rows:
+    repeat(
+      3,
+      minmax(0, 1fr)
+    );
 
   gap: 18px;
 
   flex: 1;
+
+  min-width: 0;
+  min-height: 0;
+
+  overflow: hidden;
 }
 
 
 /* =====================================================
-   센서 1개 행
+   센서 한 줄
 ===================================================== */
 
 .sensor-row {
   display: grid;
 
   grid-template-columns:
-    minmax(205px, 0.31fr)
+    minmax(180px, 0.31fr)
     minmax(0, 1fr);
 
   gap: 16px;
 
+  min-width: 0;
   min-height: 0;
+
+  overflow: hidden;
 }
 
 
@@ -285,14 +398,17 @@ body {
   flex-direction: column;
   justify-content: center;
 
-  min-height: 250px;
+  min-width: 0;
+  min-height: 0;
 
-  padding: 22px;
+  padding: 20px;
 
   background: #0f172a;
 
   border: 1px solid #1e293b;
   border-radius: 16px;
+
+  overflow: hidden;
 
   transition:
     background-color 0.2s ease,
@@ -306,27 +422,56 @@ body {
 
   gap: 8px;
 
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .sensor-name {
-  font-size: clamp(19px, 1.1vw, 27px);
+  font-size:
+    clamp(
+      18px,
+      1.1vw,
+      27px
+    );
+
   font-weight: 750;
   color: #e2e8f0;
 }
 
 .sensor-status {
   width: fit-content;
+  max-width: 100%;
 
   padding: 5px 9px;
 
-  font-size: clamp(10px, 0.58vw, 14px);
+  font-size:
+    clamp(
+      9px,
+      0.58vw,
+      14px
+    );
+
   font-weight: 750;
   color: #4ade80;
 
-  background: rgba(34, 197, 94, 0.1);
+  white-space: nowrap;
 
-  border: 1px solid rgba(34, 197, 94, 0.24);
+  background:
+    rgba(
+      34,
+      197,
+      94,
+      0.1
+    );
+
+  border:
+    1px solid
+    rgba(
+      34,
+      197,
+      94,
+      0.24
+    );
+
   border-radius: 8px;
 }
 
@@ -338,7 +483,13 @@ body {
 
   margin-bottom: 15px;
 
-  font-size: clamp(38px, 2.8vw, 68px);
+  font-size:
+    clamp(
+      36px,
+      2.8vw,
+      68px
+    );
+
   font-weight: 800;
   color: #f8fafc;
 
@@ -347,13 +498,25 @@ body {
 }
 
 .sensor-value-unit {
-  font-size: clamp(18px, 1.25vw, 30px);
+  font-size:
+    clamp(
+      16px,
+      1.25vw,
+      30px
+    );
+
   font-weight: 650;
   color: #cbd5e1;
 }
 
 .sensor-normal-range {
-  font-size: clamp(13px, 0.73vw, 17px);
+  font-size:
+    clamp(
+      12px,
+      0.73vw,
+      17px
+    );
+
   color: #64748b;
 }
 
@@ -363,12 +526,34 @@ body {
 ===================================================== */
 
 .sensor-value-card.abnormal {
-  background: rgba(127, 29, 29, 0.22);
+  background:
+    rgba(
+      127,
+      29,
+      29,
+      0.22
+    );
 
-  border-color: rgba(248, 113, 113, 0.8);
+  border-color:
+    rgba(
+      248,
+      113,
+      113,
+      0.8
+    );
 
   box-shadow:
-    inset 0 0 0 1px rgba(248, 113, 113, 0.08);
+    inset
+    0
+    0
+    0
+    1px
+    rgba(
+      248,
+      113,
+      113,
+      0.08
+    );
 }
 
 .sensor-value-card.abnormal .sensor-name {
@@ -386,9 +571,21 @@ body {
 .sensor-value-card.abnormal .sensor-status {
   color: #fca5a5;
 
-  background: rgba(239, 68, 68, 0.13);
+  background:
+    rgba(
+      239,
+      68,
+      68,
+      0.13
+    );
 
-  border-color: rgba(248, 113, 113, 0.35);
+  border-color:
+    rgba(
+      248,
+      113,
+      113,
+      0.35
+    );
 }
 
 
@@ -397,14 +594,20 @@ body {
 ===================================================== */
 
 .chart-card {
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
 
-  padding: 17px 18px;
+  min-width: 0;
+  min-height: 0;
+
+  padding: 15px 17px;
 
   background: #0f172a;
 
   border: 1px solid #1e293b;
   border-radius: 16px;
+
+  overflow: hidden;
 }
 
 .chart-header {
@@ -412,27 +615,49 @@ body {
   justify-content: space-between;
   align-items: center;
 
+  flex-shrink: 0;
+
   gap: 15px;
 
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .chart-title {
-  font-size: clamp(17px, 1vw, 24px);
+  font-size:
+    clamp(
+      16px,
+      1vw,
+      24px
+    );
+
   font-weight: 750;
   color: #f8fafc;
 }
 
 .chart-description {
-  font-size: clamp(11px, 0.65vw, 15px);
+  flex-shrink: 0;
+
+  font-size:
+    clamp(
+      10px,
+      0.65vw,
+      15px
+    );
+
   color: #64748b;
 }
 
 .chart-wrap {
   position: relative;
 
+  flex: 1;
+
   width: 100%;
-  height: clamp(240px, 25vh, 360px);
+
+  min-width: 0;
+  min-height: 0;
+
+  overflow: hidden;
 }
 
 .chart-wrap canvas {
@@ -450,6 +675,12 @@ body {
 .right-panel {
   display: flex;
   flex-direction: column;
+
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+
+  overflow: hidden;
 }
 
 .log-box {
@@ -466,7 +697,12 @@ body {
   flex: 1;
   flex-direction: column;
 
-  min-height: 760px;
+  width: 100%;
+
+  min-width: 0;
+  min-height: 0;
+
+  overflow: hidden;
 }
 
 .log-header-row {
@@ -474,23 +710,41 @@ body {
   justify-content: space-between;
   align-items: center;
 
+  flex-shrink: 0;
+
   gap: 12px;
 
   margin-bottom: 15px;
 }
 
 .info-title {
-  font-size: clamp(16px, 0.9vw, 21px);
+  min-width: 0;
+
+  font-size:
+    clamp(
+      15px,
+      0.9vw,
+      21px
+    );
+
   font-weight: 750;
   color: #f8fafc;
 }
 
 .clear-log-btn {
+  flex-shrink: 0;
+
   padding: 9px 13px;
 
   cursor: pointer;
 
-  font-size: clamp(12px, 0.65vw, 15px);
+  font-size:
+    clamp(
+      11px,
+      0.65vw,
+      15px
+    );
+
   font-weight: 650;
   color: #93c5fd;
 
@@ -504,22 +758,42 @@ body {
   background: #17294b;
 }
 
+
+/* =====================================================
+   로그 목록
+===================================================== */
+
 .log-list {
   flex: 1;
 
-  overflow-y: auto;
+  width: 100%;
 
-  padding-right: 4px;
+  min-width: 0;
+  min-height: 0;
+
+  padding-right: 6px;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  overscroll-behavior: contain;
 }
 
 .log-item {
   margin-bottom: 11px;
   padding: 13px 15px;
 
-  font-size: clamp(13px, 0.72vw, 17px);
+  font-size:
+    clamp(
+      12px,
+      0.72vw,
+      17px
+    );
+
   line-height: 1.55;
 
   word-break: keep-all;
+  overflow-wrap: anywhere;
 
   border-radius: 12px;
 }
@@ -542,9 +816,22 @@ body {
 .log-item.sensor {
   color: #c7dcff;
 
-  background: rgba(59, 130, 246, 0.14);
+  background:
+    rgba(
+      59,
+      130,
+      246,
+      0.14
+    );
 
-  border: 1px solid rgba(59, 130, 246, 0.35);
+  border:
+    1px solid
+    rgba(
+      59,
+      130,
+      246,
+      0.35
+    );
 }
 
 .log-item.sensor .log-time {
@@ -559,9 +846,22 @@ body {
 .log-item.alert {
   color: #fecaca;
 
-  background: rgba(239, 68, 68, 0.2);
+  background:
+    rgba(
+      239,
+      68,
+      68,
+      0.2
+    );
 
-  border: 1px solid rgba(248, 113, 113, 0.7);
+  border:
+    1px solid
+    rgba(
+      248,
+      113,
+      113,
+      0.7
+    );
 }
 
 .log-item.alert .log-time {
@@ -580,14 +880,27 @@ body {
 .log-item.system {
   color: #d1d5db;
 
-  background: rgba(148, 163, 184, 0.12);
+  background:
+    rgba(
+      148,
+      163,
+      184,
+      0.12
+    );
 
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  border:
+    1px solid
+    rgba(
+      148,
+      163,
+      184,
+      0.2
+    );
 }
 
 
 /* =====================================================
-   이벤트 로그 스크롤바
+   로그 스크롤바
 ===================================================== */
 
 .log-list::-webkit-scrollbar {
@@ -612,27 +925,93 @@ body {
 
 
 /* =====================================================
-   중간 크기 화면
+   작은 노트북 및 태블릿
+   1200px 미만에서는 세로 배치
 ===================================================== */
 
-@media (max-width: 1600px) {
+@media (max-width: 1199px) {
+
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+  }
 
   body {
     min-width: 0;
+
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .dashboard {
+    height: auto;
+    min-height: 100vh;
+
+    padding: 14px;
+
+    overflow: visible;
+  }
+
+  .topbar {
+    margin-bottom: 14px;
   }
 
   .main-grid {
+    display: grid;
+
     grid-template-columns: 1fr;
+
+    flex: none;
+
+    min-height: auto;
+
+    overflow: visible;
+  }
+
+  .left-panel,
+  .center-panel,
+  .right-panel {
+    height: auto;
+    min-height: auto;
+
+    overflow: visible;
   }
 
   .left-panel {
-    min-height: 850px;
+    grid-template-rows:
+      auto
+      auto
+      auto;
+  }
+
+  .camera-card {
+    min-height: 360px;
+  }
+
+  .camera-view {
+    min-height: 300px;
+  }
+
+  .sensor-stack {
+    grid-template-rows: none;
+
+    overflow: visible;
   }
 
   .sensor-row {
-    grid-template-columns:
-      minmax(220px, 0.3fr)
-      minmax(0, 1fr);
+    min-height: 300px;
+
+    overflow: visible;
+  }
+
+  .sensor-value-card,
+  .chart-card {
+    min-height: 300px;
+  }
+
+  .chart-wrap {
+    min-height: 235px;
   }
 
   .right-panel {
@@ -640,7 +1019,8 @@ body {
   }
 
   .full-log-box {
-    min-height: 550px;
+    height: 550px;
+    min-height: 0;
   }
 }
 
@@ -652,7 +1032,7 @@ body {
 @media (max-width: 900px) {
 
   .dashboard {
-    padding: 12px;
+    padding: 10px;
   }
 
   .topbar {
@@ -667,20 +1047,30 @@ body {
     min-width: 0;
   }
 
-  .left-panel {
-    min-height: 700px;
+  .camera-card {
+    min-height: 300px;
+  }
+
+  .camera-view {
+    min-height: 250px;
   }
 
   .sensor-row {
     grid-template-columns: 1fr;
+
+    min-height: auto;
   }
 
   .sensor-value-card {
     min-height: 190px;
   }
 
+  .chart-card {
+    min-height: 300px;
+  }
+
   .chart-wrap {
-    height: 280px;
+    min-height: 240px;
   }
 }
 
@@ -709,12 +1099,12 @@ body {
     padding: 12px;
   }
 
-  .left-panel {
-    min-height: 620px;
+  .camera-card {
+    min-height: 270px;
   }
 
   .camera-view {
-    min-height: 230px;
+    min-height: 220px;
   }
 
   .sensor-main-value {
@@ -726,8 +1116,12 @@ body {
     align-items: flex-start;
   }
 
+  .chart-card {
+    min-height: 280px;
+  }
+
   .chart-wrap {
-    height: 250px;
+    min-height: 220px;
   }
 
   .log-header-row {
@@ -737,5 +1131,9 @@ body {
 
   .clear-log-btn {
     width: 100%;
+  }
+
+  .full-log-box {
+    height: 500px;
   }
 }
