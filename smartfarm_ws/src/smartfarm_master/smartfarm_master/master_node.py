@@ -182,12 +182,12 @@ WATER_CAMERA_CONFIG = {
         'ignore_x_max': 0.65,
 
         # green_ratio만으로 점유 판단
-        'occupy_green_ratio': 0.04,
-        'occupy_stable_frames': 3,
+        'occupy_green_ratio': 0.20,
+        'occupy_stable_frames': 5,
 
         # green_ratio + largest_area로 성장완료 판단
-        'growth_area_ratio': 0.06,
-        'min_leaf_area': 700,
+        'growth_area_ratio': 0.18,
+        'min_leaf_area': 2000,
     },
     'right': {
         'roi_x_min': WATER_ROI_X_MIN,
@@ -198,8 +198,8 @@ WATER_CAMERA_CONFIG = {
         'ignore_x_max': 0.65,
 
         # Empty right slot baseline is about 0.130; keep a noise margin.
-        'occupy_green_ratio': 0.16,
-        'occupy_stable_frames': 3,
+        'occupy_green_ratio': 0.20,
+        'occupy_stable_frames': 5,
 
         'growth_area_ratio': WATER_GROWTH_AREA_RATIO,
         'min_leaf_area': WATER_MIN_LEAF_AREA,
@@ -3215,6 +3215,15 @@ class MasterNode(Node):
                     slot['state'] = SLOT_EMPTY
                     slot['job_id'] = None
 
+                # 수경재배실 영상 판정 누적값 초기화
+                for water_state in self.water_state.values():
+                    water_state['stable_cnt'] = 0
+                    water_state['occupied_cnt'] = 0
+                    water_state['lost_cnt'] = 0
+                    water_state['last_tx'] = 0.0
+                    water_state['last_label'] = 'none'
+                    water_state['last_score'] = 0.0
+
                 self.demo_phase = DEMO_WAIT_FIRST_TRAY
                 self.demo_primary_seed_job_id = None
                 self.start_flag = False
@@ -4753,34 +4762,55 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
         st = node.water_state[position]
         logical_slot = node.water_slots[position]
 
-        # _sync_slot_flags_locked() 호출 전 값
+        # 데모에서 발아실 트레이가 들어갈 수경재배실 목적지는
+        # SCARA 적재 완료 전까지 카메라만으로 점유 상태를 만들지 않는다.
+        suppress_destination_detection = (
+            node.demo_mode
+            and position == DEMO_ROUTE['germinated_water_dst']
+            and logical_slot['state'] in (
+                SLOT_UNKNOWN,
+                SLOT_EMPTY,
+                SLOT_RESERVED_IN,
+            )
+        )
+        # _sync_slot_flags_ locked() 호출 전 값
         previous_flag = node.flags[flag_name]
 
         # ─────────────────────────────────────
         # 1. 카메라 판정 안정화
         # ─────────────────────────────────────
-        if occupied_seen:
-            st['occupied_cnt'] += 1
-        else:
+        if suppress_destination_detection:
+            # 빈 목적지 또는 SCARA 적재 중에는 영상 판정값을 누적하지 않는다.
             st['occupied_cnt'] = 0
-
-        if growth_done:
-            st['stable_cnt'] += 1
-            st['lost_cnt'] = 0
-            st['last_label'] = 'growth_done'
-            st['last_score'] = green_ratio
-        else:
             st['stable_cnt'] = 0
-            st['lost_cnt'] += 1
-            st['last_label'] = (
-                'occupied'
-                if occupied_seen
-                else 'none'
-            )
+            st['lost_cnt'] = 0
+            st['last_label'] = 'none'
             st['last_score'] = green_ratio
+
+        else:
+            if occupied_seen:
+                st['occupied_cnt'] += 1
+            else:
+                st['occupied_cnt'] = 0
+
+            if growth_done:
+                st['stable_cnt'] += 1
+                st['lost_cnt'] = 0
+                st['last_label'] = 'growth_done'
+                st['last_score'] = green_ratio
+            else:
+                st['stable_cnt'] = 0
+                st['lost_cnt'] += 1
+                st['last_label'] = (
+                    'occupied'
+                    if occupied_seen
+                    else 'none'
+                )
+                st['last_score'] = green_ratio
         # 점유 확정
         if (
-            st['occupied_cnt'] >= cfg['occupy_stable_frames']
+            not suppress_destination_detection
+            and st['occupied_cnt'] >= cfg['occupy_stable_frames']
             and logical_slot['state'] in (SLOT_UNKNOWN, SLOT_EMPTY)
         ):
             previous_state = logical_slot['state']
@@ -4796,7 +4826,8 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
         # 2. 성장 완료 확정
         # ─────────────────────────────────────
         if (
-            st['stable_cnt'] >= WATER_STABLE_FRAMES
+            not suppress_destination_detection
+            and st['stable_cnt'] >= WATER_STABLE_FRAMES
             and now - st['last_tx'] > WATER_COOLDOWN_SEC
         ):
             st['last_tx'] = now
