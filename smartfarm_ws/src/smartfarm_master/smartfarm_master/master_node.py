@@ -182,7 +182,8 @@ WATER_CAMERA_CONFIG = {
         'ignore_x_max': 0.65,
 
         # green_ratio만으로 점유 판단
-        'occupy_green_ratio': 0.20,
+        'tray_dark_value_max': 90,
+        'tray_dark_ratio': 0.32,
         'occupy_stable_frames': 5,
 
         # green_ratio + largest_area로 성장완료 판단
@@ -4668,6 +4669,14 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
     mask = cv2.inRange(hsv, WATER_LOWER_GREEN, WATER_UPPER_GREEN)
+    dark_mask = cv2.inRange(
+        hsv,
+        np.array([0, 0, 0], dtype=np.uint8),
+        np.array(
+            [179, 255, cfg['tray_dark_value_max']],
+            dtype=np.uint8
+        )
+    )
 
     kernel = np.ones((5, 5), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
@@ -4682,10 +4691,13 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
         ix1 = int(mask.shape[1] * ignore_x_min)
         ix2 = int(mask.shape[1] * ignore_x_max)
         mask[:, ix1:ix2] = 0
+        dark_mask[:, ix1:ix2] = 0
         valid_pixels -= mask.shape[0] * max(0, ix2 - ix1)
 
     green_pixels = cv2.countNonZero(mask)
     green_ratio = green_pixels / max(1, valid_pixels)
+    dark_pixels = cv2.countNonZero(dark_mask)
+    dark_ratio = dark_pixels / max(1, valid_pixels)
 
     contours, _ = cv2.findContours(
         mask,
@@ -4700,14 +4712,21 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
             largest_area = area
 
     occupied_seen = (
-        green_ratio >= cfg['occupy_green_ratio']
+        dark_ratio >= cfg['tray_dark_ratio']
     )
 
     growth_done = (
-        green_ratio >= cfg['growth_area_ratio']
+        occupied_seen
+        and green_ratio >= cfg['growth_area_ratio']
         and largest_area >= cfg['min_leaf_area']
     )
-    color = (0, 255, 0) if growth_done else (0, 0, 255)
+
+    if growth_done:
+        color = (0, 255, 0)       # 성장 완료: 초록
+    elif occupied_seen:
+        color = (0, 255, 255)     # 트레이만 있음: 노랑
+    else:
+        color = (0, 0, 255)       # 빈 공간: 빨강
 
     cv2.rectangle(disp, (rx1, ry1), (rx2, ry2), color, 2)
 
