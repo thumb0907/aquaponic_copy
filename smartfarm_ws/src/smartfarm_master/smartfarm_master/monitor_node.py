@@ -44,6 +44,17 @@ class MonitorNode(Node):
             'stm_state':  'idle',
             'stm2_state': 'idle',
             'manip_state': 'unknown',
+            'scara_state': 'unknown',
+
+            # 전체 리셋 및 데모 진행 상태
+            'reset_in_progress': False,
+            'reset_ready': False,
+            'reset_waiting': 'none',
+            'demo_phase': 'unknown',
+
+            # 현재 실행 작업
+            'active_scara_job': '0',
+            'active_manip_job': '0',
             'pi1_alive':  False,
             'pi2_alive':  False,
             'pi3_alive':  False,
@@ -267,8 +278,105 @@ class MonitorNode(Node):
         emg    = self.status.get('emergency', False)
         sf     = self.status.get('start_flag', False)
         st     = self.status.get('stm_state', 'idle')
+        demo_phase = self.status.get(
+            'demo_phase',
+            'unknown'
+        )
+
+        reset_in_progress = self.status.get(
+            'reset_in_progress',
+            False
+        )
+
+        reset_ready = self.status.get(
+            'reset_ready',
+            False
+        )
+
+        reset_waiting = self.status.get(
+            'reset_waiting',
+            'none'
+        )
+
+        active_scara_job = self.status.get(
+            'active_scara_job',
+            '0'
+        )
+
+        active_manip_job = self.status.get(
+            'active_manip_job',
+            '0'
+        )
 
         print(f'{C.BOLD}━━━ 전체 플래그 상태 ━━━━━━━━━━━━━━━━━━━{C.RESET}')
+        print()
+                # ── 데모 진행 상태 ─────────────────────
+        phase_labels = {
+            'WAIT_FIRST_TRAY': '첫 트레이 투입 대기',
+            'SEEDING': '파종 진행 중',
+            'MOVING_C1_TO_NURSERY': '파종 트레이 발아실 이송 중',
+            'WAIT_GERMINATED_TRAY': '발아 완료 트레이 대기',
+            'MOVING_NURSERY_TO_WATER': '발아실 → 수경재배실 이송 중',
+            'WAIT_MATURE_TRAY': '성장 완료 트레이 대기',
+            'MOVING_WATER_TO_C2': '수경재배실 → 진동부/C2 이송 중',
+            'WAIT_HARVEST_COMPLETE': '수확 완료 대기',
+            'COMPLETE': '데모 완료',
+            'ERROR': '오류 및 초기화 필요',
+            'unknown': '상태 수신 대기',
+        }
+
+        phase_text = phase_labels.get(
+            demo_phase,
+            demo_phase
+        )
+
+        if demo_phase == 'COMPLETE':
+            phase_color = C.CYAN
+        elif demo_phase == 'ERROR' or emg:
+            phase_color = C.RED
+        elif demo_phase == 'WAIT_FIRST_TRAY':
+            phase_color = C.GREEN
+        elif demo_phase == 'unknown':
+            phase_color = C.GRAY
+        else:
+            phase_color = C.YELLOW
+
+        if reset_in_progress:
+            reset_text = (
+                f'{C.YELLOW}RESET 진행 중 '
+                f'(대기: {reset_waiting}){C.RESET}'
+            )
+
+        elif reset_ready:
+            reset_text = (
+                f'{C.GREEN}RESET 완료 — '
+                f'DEMO_RESET 실행 가능{C.RESET}'
+            )
+
+        elif (
+            demo_phase == 'WAIT_FIRST_TRAY'
+            and not emg
+        ):
+            reset_text = (
+                f'{C.GREEN}DEMO_RESET 적용됨{C.RESET}'
+            )
+
+        else:
+            reset_text = (
+                f'{C.GRAY}초기화 대기{C.RESET}'
+            )
+
+        print(f'{C.BOLD}  ── 데모 상태 ──{C.RESET}')
+        print(
+            f'  현재 단계    :  '
+            f'{phase_color}{C.BOLD}'
+            f'{phase_text}'
+            f'{C.RESET}'
+        )
+        print(f'  초기화 상태  :  {reset_text}')
+        print(f'  RESET 대기   :  {reset_waiting}')
+        print(f'  SCARA 작업   :  {active_scara_job}')
+        print(f'  MANIP 작업   :  {active_manip_job}')
         print()
 
         # 연결 상태

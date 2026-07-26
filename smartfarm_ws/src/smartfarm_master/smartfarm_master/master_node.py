@@ -79,7 +79,7 @@ ROI_Y_MIN = 0.05
 ROI_Y_MAX = 0.95
 # 발아실 ROI
 NURSERY_ROI_X_MIN = 0.13
-NURSERY_ROI_X_MAX = 0.90
+NURSERY_ROI_X_MAX = 0.88
 NURSERY_ROI_Y_MIN = 0.17
 NURSERY_ROI_Y_MAX = 0.74
 NURSERY_TRAY_MIN_BOX_RATIO = 0.5   # 트레이 박스가 화면 대비 최소 50% 이상이어야 감지
@@ -95,6 +95,7 @@ NURSERY_CAMERA_CONFIG = {
     'right': {
         'roi': (0.02, 0.78, 0.08, 0.72),
         'ignore': (0.40, 0.72),
+        'tray_conf': 0.90,
     },
 }
 
@@ -141,13 +142,13 @@ NURSERY_MIN_SPROUT_HEIGHT = 8
 NURSERY_CENTER_EXCLUDE_X_MIN = 0.36
 NURSERY_CENTER_EXCLUDE_X_MAX = 0.67
 
-NURSERY_STABLE_FRAMES = 3
+NURSERY_STABLE_FRAMES = 2
 NURSERY_COOLDOWN_SEC = 3.0
-NURSERY_SPROUT_DONE_COUNT = 15  # 새싹 후보가 몇 개 이상이면 발아 완료로 볼지 정하는 값. 
+NURSERY_SPROUT_DONE_COUNT = 10  # 새싹 후보가 몇 개 이상이면 발아 완료로 볼지 정하는 값. 
 NURSERY_SEND_FLAGS = True  
 
-TRAY_OCCUPY_FRAMES = 2
-TRAY_LOST_FRAMES = 7
+TRAY_OCCUPY_FRAMES = 5
+TRAY_LOST_FRAMES = 5
 
 # 수경재배실 카메라(pi3)
 WATER_LEFT_STREAM_PORT = 5011
@@ -157,10 +158,10 @@ WATER_RIGHT_STREAM_PORT = 5012
 WATER_LOWER_GREEN = np.array([35, 45, 40], dtype=np.uint8)
 WATER_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
 
-WATER_ROI_X_MIN = 0.23
-WATER_ROI_X_MAX = 0.91
-WATER_ROI_Y_MIN = 0.20
-WATER_ROI_Y_MAX = 0.80
+WATER_ROI_X_MIN = 0.25
+WATER_ROI_X_MAX = 0.86
+WATER_ROI_Y_MIN = 0.30
+WATER_ROI_Y_MAX = 0.75
 
 WATER_GROWTH_AREA_RATIO = 0.18
 WATER_MIN_LEAF_AREA = 2500
@@ -171,15 +172,15 @@ WATER_COOLDOWN_SEC = 3.0
 #수경재배실쪽
 WATER_CAMERA_CONFIG = {
     'left': {
-        'roi_x_min': 0.23,
-        'roi_x_max': 0.91,
-        'roi_y_min': 0.24,
-        'roi_y_max': 0.79,
+        'roi_x_min': 0.29,
+        'roi_x_max': 0.87,
+        'roi_y_min': 0.27,
+        'roi_y_max': 0.72,
         'ignore_x_min': 0.35,
         'ignore_x_max': 0.65,
 
         # green_ratio만으로 점유 판단
-        'occupy_green_ratio': 0.03,
+        'occupy_green_ratio': 0.04,
         'occupy_stable_frames': 3,
 
         # green_ratio + largest_area로 성장완료 판단
@@ -191,10 +192,10 @@ WATER_CAMERA_CONFIG = {
         'roi_x_max': WATER_ROI_X_MAX,
         'roi_y_min': WATER_ROI_Y_MIN,
         'roi_y_max': WATER_ROI_Y_MAX,
-        'ignore_x_min': None,
-        'ignore_x_max': None,
+        'ignore_x_min': 0.35,
+        'ignore_x_max': 0.65,
 
-        'occupy_green_ratio': 0.03,
+        'occupy_green_ratio': 0.04,
         'occupy_stable_frames': 3,
 
         'growth_area_ratio': WATER_GROWTH_AREA_RATIO,
@@ -4048,6 +4049,10 @@ def process_nursery_frame(
 
     roi_x_min, roi_x_max, roi_y_min, roi_y_max = cfg['roi']
     ignore_x_min, ignore_x_max = cfg['ignore']
+    tray_conf_threshold = cfg.get(
+        'tray_conf',
+        NURSERY_TRAY_CONF
+    )
     
     # 가운데 흰색 영역 표시
     roi_px1 = int(w * roi_x_min)
@@ -4162,7 +4167,17 @@ def process_nursery_frame(
             and box_h_ratio > min_box_ratio
         )
 
-        color = (0, 255, 0) if in_roi else (0, 0, 255)
+        valid_tray = (
+            class_name == 'tray'
+            and in_roi
+            and conf >= tray_conf_threshold
+        )
+
+        color = (
+            (0, 255, 0)
+            if valid_tray
+            else (0, 0, 255)
+        )
 
         cv2.rectangle(
             disp,
@@ -4183,9 +4198,8 @@ def process_nursery_frame(
         )
 
         # 새 트레이 모델이 클래스 이름을 tray로 사용한다는 전제
-        if class_name == 'tray' and in_roi:
+        if valid_tray:
             tray_count = 1
-
     tray_detected = tray_count > 0
 
     # 트레이가 있을 때만 OpenCV 새싹 검출
