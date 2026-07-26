@@ -207,7 +207,7 @@ void sect1(void) {
   move_j2_cm(1); // 살짝 올라가서
   enc_reset_j1();
   delay(100);
-  move_j1_wait(-20, 600, 2.0, 150, 1000); // 뒤로 좀 빼고
+  move_j1_wait(-20, 800, 2.0, 150, 1000); // 뒤로 좀 빼고
   delay(500);
   enc_reset_j1();
   move_j2_cm(10); // 올라가고
@@ -248,14 +248,17 @@ void sect1(void) {
     enc_reset_j3();
     
     enc_reset_j1();
-    move_j1_wait(45, 2500);
+    delay(10);
+    move_j1_wait(45, 1000, 2.0, 150, 2500);
+    delay(300);
     enc_reset_j1();
+    delay(10);
     
     
     moveRail(2600,1);   
     delay(2000);
     
-    moveRail(1200,0);
+    moveRail(1050,0);
     delay(1400);
     stopRail();
     move_j2_cm(-3.7);
@@ -609,7 +612,7 @@ void sect3(void) {
 
     enc_reset_j1();
     delay(35);
-    move_j1_wait(20,500);
+    move_j1_wait(20,500, 1.0, 150, 2000);
     delay(500);
     enc_reset_j1();
 
@@ -700,7 +703,7 @@ void sect3(void) {
   moveRail_untilStop(true, 2000, stop_rail);
 
   moveRail(2000, 1); 
-  delay(800);
+  delay(1800);
   stopRail();
 
   move_j2_cm(-8.5);

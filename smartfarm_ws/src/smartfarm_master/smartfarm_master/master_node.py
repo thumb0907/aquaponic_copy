@@ -155,7 +155,9 @@ WATER_LEFT_STREAM_PORT = 5011
 WATER_RIGHT_STREAM_PORT = 5012
 
 #수경재배실 opencv기준값
-WATER_LOWER_GREEN = np.array([35, 45, 40], dtype=np.uint8)
+# Reject the low-saturation gray/green tint from the empty rack and pipes.
+# The previous S/V limits (45/40) made an empty water slot look like foliage.
+WATER_LOWER_GREEN = np.array([38, 90, 90], dtype=np.uint8)
 WATER_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
 
 WATER_ROI_X_MIN = 0.25
@@ -195,7 +197,8 @@ WATER_CAMERA_CONFIG = {
         'ignore_x_min': 0.35,
         'ignore_x_max': 0.65,
 
-        'occupy_green_ratio': 0.04,
+        # Empty right slot baseline is about 0.130; keep a noise margin.
+        'occupy_green_ratio': 0.16,
         'occupy_stable_frames': 3,
 
         'growth_area_ratio': WATER_GROWTH_AREA_RATIO,

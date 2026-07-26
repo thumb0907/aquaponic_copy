@@ -53,7 +53,7 @@ bool move_j1_wait(float targetAngle,
                   unsigned long max_pps = J1_DEFAULT_MAX_PPS,
                   float tolDeg = 1.0f,
                   unsigned long stable_ms = 150,
-                  unsigned long timeout_ms = 80000);
+                  unsigned long timeout_ms = 8000);
 void enc_reset_j1();
 void j1_home_stop_on_switch(bool dir_to_switch, unsigned long pps);
 ///////////////////////////////////////////////////////////////////////////////////
