@@ -156,63 +156,36 @@ static float j1_error_deg(float targetAngle) //현재 오차값 저장하는 함
   return (j1_gear * targetAngle) - j1_now_deg();
 }
 
-bool move_j1_wait(
-  float targetAngle,
-  unsigned long max_pps,
-  float tolDeg,
-  unsigned long stable_ms,
-  unsigned long timeout_ms
-) {
-  j1_pid.prevError = 0.0f;
-  j1_pid.integral  = 0.0f;
-  const unsigned long startedAt = millis();
-  unsigned long inToleranceSince = 0;
-
-  bool completed = false;
+bool move_j1_wait(float targetAngle,
+                  unsigned long max_pps,
+                  float tolDeg,
+                  unsigned long stable_ms,
+                  unsigned long timeout_ms)
+{
+  unsigned long t0 = millis();
+  unsigned long inTolSince = 0;
 
   motors_enable_all(true);
 
   while (true) {
-    move_j1(
-      targetAngle,
-      max_pps,
-      tolDeg
-      delay(2);   // PID 계산 주기를 약 500Hz로 제한
-    );
+    move_j1(targetAngle, max_pps, tolDeg);
 
-    const float error = j1_error_deg(targetAngle);
-
-    if (fabs(error) <= j1_gear * tolDeg) {
-      if (inToleranceSince == 0) {
-        inToleranceSince = millis();
-      }
-
-      if (
-        millis() - inToleranceSince
-        >= stable_ms
-      ) {
-        completed = true;
-        break;
-      }
-    }
-    else {
-      inToleranceSince = 0;
+    float e = j1_error_deg(targetAngle);
+    if (fabs(e) <j1_gear* tolDeg) {
+      if (inTolSince == 0) inTolSince = millis();
+      if (millis() - inTolSince >= stable_ms) break;
+    } else {
+      inTolSince = 0;
     }
 
-    if (
-      millis() - startedAt
-      >= timeout_ms
-    ) {
-      completed = false;
-      break;
-    }
+    if (millis() - t0 > timeout_ms) break;
   }
 
+  // 정지(필요하면)
   j1_run = false;
   digitalWrite(j1_pul, LOW);
   motors_enable_all(false);
-
-  return completed;
+  return true;
 }
 
 static void j1_set_pps(unsigned long pps) {

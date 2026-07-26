@@ -19,7 +19,7 @@ void setup() {
 }
 
 void loop() {
-  /*
+  ///*
     serialReceiveTask();
 
     if (processScaraControlRequests()) {
@@ -27,10 +27,10 @@ void loop() {
     }
 
     pathTask();
-  */
-  sect0();
-  sect1();
-  delay(10000000000);
+  //*/
+  //sect0();
+  //sect1();
+  //delay(10000000000);
 //*/
 //*/
   /*
