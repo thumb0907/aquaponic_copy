@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Automated-Aquaponics-System</title>
+  <meta name="description" content="스마트팜 통합 모니터링(센서/카메라/로봇) 아키텍처 소개 + 대시보드" />
+
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <!-- Top Nav -->
+  <header class="topbar">
+    <div class="wrap topbar__inner">
+      <a class="brand" href="#home">
+        <span class="brand__mark"></span>
+        <span class="brand__text">UNIDAD</span>
+      </a>
+
+      <nav class="nav" id="nav">
+        <a href="#vision">소개</a>
+        <a href="#architecture">아키텍처</a>
+        <a href="#systems">서브시스템</a>
+        <a href="#gallery">프로세스</a>
+        <a href="#dashboard">대시보드</a>
+      </nav>
+
+      <button class="navBtn" id="navBtn" aria-label="메뉴 열기">☰</button>
+    </div>
+    <div class="progress" id="progress"></div>
+  </header>
+
+  <!-- HERO -->
+  <section id="home" class="hero">
+    <div class="wrap hero__grid">
+      <div class="hero__left">
+        <div class="chip">
+          <span class="dot"></span>
+          <span>Keep Scrolling</span>
+        </div>
+
+        <h1 class="h1">
+          <span class="grad">실시간 통합 모니터링</span>
+            <br/>
+            <br/>
+        </h1>
+
+        <div class="cta">
+          <a class="btn" href="#vision">Project Process</a>
+          <a class="btn ghost" href="#dashboard">Sensor UI</a>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="stat__k">센서</div>
+            <div class="stat__v">pH · TDS · 수온 · 온습도 · 수위</div>
+          </div>
+          <div class="stat">
+            <div class="stat__k">통신</div>
+            <div class="stat__v">SBC ↔ PC (TCP/IP), MCU ↔ SBC (Serial)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero__right">
+        <div class="glass">
+          <div class="glass__top">
+            <div class="pill">LIVE</div>
+          </div>
+
+          <div class="mock">
+            <div class="mock__grid">
+              <div class="mock__card">
+                <div class="k">수경+양식장</div>
+                <div class="v">센서허브 + C270</div>
+              </div>
+              <div class="mock__card">
+                <div class="k">파종 컨베이어</div>
+                <div class="v">직교로봇 + C270</div>
+              </div>
+              <div class="mock__card">
+                <div class="k">수확 컨베이어</div>
+                <div class="v">D435 + 스카라 MCU</div>
+              </div>
+              <div class="mock__card warn">
+                <div class="k">안전허브</div>
+                <div class="v">수위/펌프 제어</div>
+              </div>
+            </div>
+
+            <div class="mock__bar">
+              <div class="spark"></div>
+              <div class="muted">?</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="badgeRow">
+          <div class="badge">UI/UX Story</div>
+          <div class="badge">Realtime Dashboard</div>
+          <div class="badge">Alarm-ready</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VISION -->
+  <section id="vision" class="section">
+    <div class="wrap">
+      <div class="secHead reveal">
+        <h2 class="h2">프로젝트 목표</h2>
+        <p class="sub">
+          “현장에서 돌아가는 자동화 스마트팜”을 최종 목표로,
+          단계별로 확장 가능한 구조를 먼저 설계합니다.
+        </p>
+      </div>
+
+      <div class="grid3">
+        <article class="card reveal">
+          <h3>1) 통합 관제</h3>
+          <p>3개의 SBC + 안전허브를 PC에서 하나로 모니터링</p>
+          <ul>
+            <li>TCP/IP 기반 상태 수집</li>
+            <li>카메라(웹캠/뎁스) 스트림 관리</li>
+          </ul>
+        </article>
+
+        <article class="card reveal">
+          <h3>2) 실시간 센서</h3>
+          <p>수경·양식장 센서허브(STM32)가 센서값을 묶어서 전송</p>
+          <ul>
+            <li>pH / TDS / 온습도 / 수온</li>
+            <li>수위는 안전허브에서 독립 처리</li>
+          </ul>
+        </article>
+
+        <article class="card reveal">
+          <h3>3) 이상 감지 & 알람</h3>
+          <p>임계값 기반 이상 상태 표시 → 추후 알림 연동</p>
+          <ul>
+            <li>화면 경고 배너</li>
+            <li>이벤트 로그</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- SYSTEMS (Sticky Scrollytelling) -->
+  <section id="systems" class="section">
+    <div class="wrap">
+      <div class="secHead reveal">
+        <h2 class="h2">Project Process</h2>
+            <br/>
+      </div>
+
+      <div class="story">
+        <div class="story__sticky" id="storySticky">
+          <div class="storyCard">
+            <div class="storyCard__top">
+              <div class="pill" id="storyPill">SBC #1</div>
+              <div class="muted" id="storyLine">TCP/IP → PC</div>
+            </div>
+            <h3 id="storyTitle">수경재배 + 양식장</h3>
+            <p class="muted" id="storyDesc">
+              STM32 센서허브가 pH/TDS/수온/온습도를 묶어서 전송하고,
+              웹캠 영상도 함께 전송합니다.
+            </p>
+            <div class="storyIcons" id="storyIcons">
+              <span class="ico">pH</span>
+              <span class="ico">TDS</span>
+              <span class="ico">Temp</span>
+              <span class="ico">TH</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="story__steps" id="storySteps">
+          <div class="step" data-step="0">
+            <div class="step__num">01</div>
+            <div class="step__body">
+              <div class="step__title">수경재배 + 양식장</div>
+              <div class="step__text">센서허브(STM32) + 웹캠(C270) → PC로 통합 전송</div>
+            </div>
+          </div>
+
+          <div class="step" data-step="1">
+            <div class="step__num">02</div>
+            <div class="step__body">
+              <div class="step__title">파종 컨베이어</div>
+              <div class="step__text">직교로봇/엔드스탑 상태 + 웹캠 영상으로 파종 공정 모니터링</div>
+            </div>
+          </div>
+
+          <div class="step" data-step="2">
+            <div class="step__num">03</div>
+            <div class="step__body">
+              <div class="step__title">수확 컨베이어</div>
+              <div class="step__text">D435 뎁스 + 스카라/매니퓰레이터 상태를 PC에서 확인</div>
+            </div>
+          </div>
+
+          <div class="step" data-step="3">
+            <div class="step__num">04</div>
+            <div class="step__body">
+              <div class="step__title">안전허브</div>
+              <div class="step__text">수위 기반 펌프 제어를 로컬에서 즉시 수행 + PC에 상태 보고</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GALLERY (Drag Slider) -->
+  <section id="gallery" class="section soft">
+    <div class="wrap">
+      <div class="secHead reveal">
+        <h2 class="h2">공정 & 기능</h2>
+        <br/>
+      </div>
+
+      <div class="slider reveal" id="slider" aria-label="drag slider">
+        <div class="slider__track" id="sliderTrack">
+          <div class="slide">
+            <div class="slide__tag">Monitoring</div>
+            <h3>실시간 환경 모니터링</h3>
+            <p>센서값을 카드/그래프로 표시하고, 상태를 한 눈에 확인</p>
+          </div>
+          <div class="slide">
+            <div class="slide__tag">Video</div>
+            <h3>카메라 스트림</h3>
+            <p>C270 / D435 영상(또는 뎁스)을 관제 UI에 연결</p>
+          </div>
+          <div class="slide">
+            <div class="slide__tag">Robot</div>
+            <h3>로봇 공정 상태</h3>
+            <p>직교/스카라 동작 상태, 엔드스탑, 모터 상태까지 요약</p>
+          </div>
+          <div class="slide">
+            <div class="slide__tag warn">Safety</div>
+            <h3>안전 우선 제어</h3>
+            <p>수위 이상 시 로컬에서 즉시 펌프 제어 + 이벤트 기록</p>
+          </div>
+          <div class="slide">
+            <div class="slide__tag">Storage</div>
+            <h3>30분 스냅샷 저장</h3>
+            <p>비용 절감을 위해 현재는 30분마다만 저장(프로토타입)</p>
+          </div>
+        </div>
+      </div>
+      <br/>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="dashboard" class="section">
+    <div class="wrap">
+      <div class="secHead reveal">
+        <h2 class="h2">Sensor UI</h2>
+        <br/>
+      </div>
+
+      <div class="dash reveal">
+        <div class="dash__top">
+          <div class="pill">LIVE</div>
+          <div class="muted" id="dashMeta">-</div>
+          <div class="dash__btns">
+            <button class="btn ghost" id="saveNow">지금 스냅샷 저장</button>
+            <button class="btn ghost" id="exportJson">스냅샷 JSON 내보내기</button>
+            <button class="btn ghost" id="clearLocal">로컬 초기화</button>
+          </div>
+        </div>
+
+        <div class="sensorGrid" id="sensorGrid"></div>
+
+        <div class="twoCol">
+          <div class="panel">
+            <div class="panel__head">
+              <h3>최근 스냅샷</h3>
+              <div class="muted" id="snapInfo">-</div>
+            </div>
+            <pre class="panel__body pre" id="snapPreview">아직 저장된 스냅샷이 없습니다.</pre>
+          </div>
+
+          <div class="panel">
+            <div class="panel__head">
+              <h3>이벤트 로그</h3>
+              <div class="muted">임계값 벗어나면 WARN 기록</div>
+            </div>
+            <div class="panel__body">
+              <ul class="log" id="log"></ul>
+              <br/>
+            </div>
+          </div>
+        </div>
+            <br/>
+            <br/>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="wrap footer__inner">
+      <div class="muted">© UNIDAD Smartfarm UI Prototype</div>
+      <div class="muted">Front-only · Bright scroll storytelling · Dashboard</div>
+    </div>
+  </footer>
+
+  <script src="./main.js"></script>
+</body>
+</html>

@@ -1,0 +1,592 @@
+/* =====================================================
+   전체 기본 설정
+===================================================== */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+
+  font-family:
+    "Segoe UI",
+    "Malgun Gothic",
+    sans-serif;
+}
+
+body {
+  background-color: #0b1120;
+  color: #e5e7eb;
+
+  overflow-x: hidden;
+}
+
+.dashboard {
+  min-height: 100vh;
+  padding: 20px;
+}
+
+
+/* =====================================================
+   상단 헤더
+===================================================== */
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  background: #111827;
+
+  border: 1px solid #1f2937;
+  border-radius: 16px;
+
+  padding: 20px 24px;
+  margin-bottom: 20px;
+
+  gap: 20px;
+}
+
+.topbar-left h1 {
+  font-size: 28px;
+  color: #f8fafc;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+
+  gap: 12px;
+
+  flex-wrap: wrap;
+}
+
+
+/* =====================================================
+   현재 시각
+===================================================== */
+
+.time-box {
+  background: #0f172a;
+
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+
+  padding: 10px 14px;
+
+  min-width: 210px;
+}
+
+.time-label {
+  margin-bottom: 4px;
+
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.time-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+
+/* =====================================================
+   전체 3열 레이아웃
+===================================================== */
+
+.main-grid {
+  display: grid;
+
+  grid-template-columns:
+    1.05fr
+    1.8fr
+    0.95fr;
+
+  gap: 20px;
+
+  align-items: stretch;
+}
+
+
+/* =====================================================
+   공통 패널
+===================================================== */
+
+.left-panel,
+.center-panel,
+.right-panel {
+  background: #111827;
+
+  border: 1px solid #1f2937;
+  border-radius: 16px;
+
+  padding: 16px;
+
+  min-width: 0;
+}
+
+.panel-title {
+  margin-bottom: 14px;
+
+  font-size: 18px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+
+/* =====================================================
+   좌측 타임랩스 패널
+===================================================== */
+
+.left-panel {
+  display: grid;
+
+  grid-template-rows:
+    auto
+    1fr
+    1fr;
+
+  gap: 16px;
+
+  height: calc(100vh - 120px);
+}
+
+.left-panel .panel-title {
+  margin-bottom: 0;
+}
+
+
+/* =====================================================
+   타임랩스 영상 카드
+===================================================== */
+
+.camera-card {
+  display: flex;
+  flex-direction: column;
+
+  min-height: 0;
+
+  background: #0f172a;
+
+  border: 1px solid #1e293b;
+  border-radius: 14px;
+
+  padding: 12px;
+}
+
+.camera-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  margin-bottom: 10px;
+
+  font-size: 15px;
+  font-weight: 600;
+  color: #e2e8f0;
+
+  flex-shrink: 0;
+}
+
+.camera-status {
+  font-size: 13px;
+  font-weight: 700;
+
+  color: #22c55e;
+}
+
+.camera-view {
+  display: flex;
+
+  flex: 1;
+  min-height: 0;
+
+  overflow: hidden;
+
+  background: #020617;
+
+  border-radius: 10px;
+}
+
+.camera-view img,
+.camera-view video {
+  width: 100%;
+  height: 100%;
+
+  display: block;
+
+  object-fit: cover;
+
+  background: #020617;
+
+  border-radius: 10px;
+}
+
+
+/* =====================================================
+   센서 요약 카드
+===================================================== */
+
+.summary-cards {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, 1fr);
+
+  gap: 12px;
+
+  margin-bottom: 20px;
+}
+
+.summary-card {
+  background: #0f172a;
+
+  border: 1px solid #1e293b;
+  border-radius: 14px;
+
+  padding: 16px;
+
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.summary-label {
+  margin-bottom: 8px;
+
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.summary-value {
+  margin-bottom: 6px;
+
+  font-size: 24px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.summary-unit {
+  font-size: 12px;
+  color: #64748b;
+}
+
+
+/* 센서값 이상 */
+
+.summary-card.abnormal {
+  background:
+    rgba(127, 29, 29, 0.2);
+
+  border-color:
+    rgba(248, 113, 113, 0.75);
+}
+
+.summary-card.abnormal .summary-label {
+  color: #fca5a5;
+}
+
+.summary-card.abnormal .summary-value {
+  color: #fecaca;
+}
+
+.summary-card.abnormal .summary-unit {
+  color: #f87171;
+}
+
+
+/* =====================================================
+   센서 그래프
+===================================================== */
+
+.chart-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, 1fr);
+
+  gap: 16px;
+}
+
+.chart-card {
+  background: #0f172a;
+
+  border: 1px solid #1e293b;
+  border-radius: 14px;
+
+  padding: 14px;
+}
+
+.chart-title {
+  margin-bottom: 12px;
+
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.chart-wrap {
+  position: relative;
+
+  width: 100%;
+  height: 260px;
+}
+
+.chart-wrap canvas {
+  display: block;
+
+  width: 100% !important;
+  height: 100% !important;
+}
+
+
+/* =====================================================
+   이벤트 로그
+===================================================== */
+
+.log-box {
+  background: #0f172a;
+
+  border: 1px solid #1e293b;
+  border-radius: 14px;
+
+  padding: 14px;
+}
+
+.full-log-box {
+  display: flex;
+  flex-direction: column;
+
+  height: calc(100vh - 180px);
+  min-height: 700px;
+}
+
+.log-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  gap: 12px;
+
+  margin-bottom: 14px;
+}
+
+.info-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.clear-log-btn {
+  background: #13203a;
+  color: #93c5fd;
+
+  border: 1px solid #27406f;
+  border-radius: 10px;
+
+  padding: 8px 12px;
+
+  cursor: pointer;
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.clear-log-btn:hover {
+  background: #17294b;
+}
+
+.log-list {
+  flex: 1;
+
+  overflow-y: auto;
+
+  padding-right: 4px;
+}
+
+.log-item {
+  padding: 12px 14px;
+
+  margin-bottom: 10px;
+
+  border-radius: 12px;
+
+  font-size: 13px;
+  line-height: 1.5;
+
+  word-break: keep-all;
+}
+
+.log-item:last-child {
+  margin-bottom: 0;
+}
+
+.log-time {
+  margin-right: 6px;
+
+  font-weight: 700;
+}
+
+
+/* =====================================================
+   정상 센서 로그
+===================================================== */
+
+.log-item.sensor {
+  background:
+    rgba(59, 130, 246, 0.14);
+
+  color: #c7dcff;
+
+  border:
+    1px solid
+    rgba(59, 130, 246, 0.35);
+}
+
+.log-item.sensor .log-time {
+  color: #93c5fd;
+}
+
+
+/* =====================================================
+   비정상 센서 및 연결 오류
+===================================================== */
+
+.log-item.alert {
+  background:
+    rgba(239, 68, 68, 0.2);
+
+  color: #fecaca;
+
+  border:
+    1px solid
+    rgba(248, 113, 113, 0.7);
+}
+
+.log-item.alert .log-time {
+  color: #f87171;
+}
+
+.log-item.alert .log-message {
+  font-weight: 600;
+}
+
+
+/* =====================================================
+   시스템 로그
+===================================================== */
+
+.log-item.system {
+  background:
+    rgba(148, 163, 184, 0.12);
+
+  color: #d1d5db;
+
+  border:
+    1px solid
+    rgba(148, 163, 184, 0.2);
+}
+
+
+/* =====================================================
+   이벤트 로그 스크롤바
+===================================================== */
+
+.log-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.log-list::-webkit-scrollbar-track {
+  background: #0b1120;
+
+  border-radius: 10px;
+}
+
+.log-list::-webkit-scrollbar-thumb {
+  background: #334155;
+
+  border-radius: 10px;
+}
+
+.log-list::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+
+/* =====================================================
+   반응형 화면
+===================================================== */
+
+@media (max-width: 1450px) {
+
+  .main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-cards {
+    grid-template-columns:
+      repeat(2, 1fr);
+  }
+
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .full-log-box {
+    height: auto;
+    min-height: 500px;
+  }
+
+  .left-panel {
+    height: auto;
+
+    grid-template-rows:
+      auto
+      auto
+      auto;
+  }
+
+  .camera-card {
+    min-height: 300px;
+  }
+}
+
+
+@media (max-width: 768px) {
+
+  .dashboard {
+    padding: 10px;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+
+    padding: 16px;
+  }
+
+  .topbar-left h1 {
+    font-size: 22px;
+  }
+
+  .time-box {
+    width: 100%;
+  }
+
+  .summary-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .log-header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .clear-log-btn {
+    width: 100%;
+  }
+
+  .camera-card {
+    min-height: 240px;
+  }
+}
