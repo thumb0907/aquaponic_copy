@@ -1823,6 +1823,9 @@ class MasterNode(Node):
         self.get_logger().info(f'[STM1] {line}')
 
         with self.state_lock:
+            # STM1 메시지를 받았다는 것 자체가 Pi1이 살아 있다는 증거
+            self.pi1_last_hb = time.time()
+            self.pi1_alive = True
             if line == 'STM1:PC:STATE:HOMING':
                 self.stm_state = 'homing'
                 self.scara_prehome_sent = False
@@ -2660,6 +2663,10 @@ class MasterNode(Node):
             return
 
         with self.state_lock:
+            # device_status를 받았으면 Pi1 ROS 노드는 살아 있음
+            self.pi1_last_hb = time.time()
+            self.pi1_alive = True
+
             previous = self.stm1_link
             self.stm1_link = connected
 
@@ -2729,15 +2736,15 @@ class MasterNode(Node):
             if previous[key] == connected:
                 continue
 
-            log = (
-                self.get_logger().info
-                if connected
-                else self.get_logger().warn
-            )
-            log(
+            message = (
                 f'[Pi2/{key.upper()}] '
                 f'{"연결됨" if connected else "연결 끊김"}'
             )
+
+            if connected:
+                self.get_logger().info(message)
+            else:
+                self.get_logger().warn(message)
 
         if reset_stm2_on_connect:
             self._send_reset_stm2()
@@ -2870,9 +2877,9 @@ class MasterNode(Node):
     def _check_heartbeat(self):
         now = time.time()
         with self.state_lock:
-            pi1_now = (now - self.pi1_last_hb) < 10.0
-            pi2_now = (now - self.pi2_last_hb) < 10.0
-            pi3_now = (now - self.pi3_last_hb) < 10.0
+            pi1_now = (now - self.pi1_last_hb) < 12.0
+            pi2_now = (now - self.pi2_last_hb) < 12.0
+            pi3_now = (now - self.pi3_last_hb) < 12.0
 
             # Pi1 연결 상태 변화 감지
             if pi1_now and not self.pi1_alive_prev:

@@ -186,9 +186,9 @@ class MonitorNode(Node):
             self.pi3_last_hb = time.time()
 
     def _refresh(self):
-        self.status['pi1_alive'] = (time.time() - self.pi1_last_hb) < 3.0
-        self.status['pi2_alive'] = (time.time() - self.pi2_last_hb) < 3.0
-        self.status['pi3_alive'] = (time.time() - self.pi3_last_hb) < 3.0
+        self.status['pi1_alive'] = (time.time() - self.pi1_last_hb) < 12.0
+        self.status['pi2_alive'] = (time.time() - self.pi2_last_hb) < 12.0
+        self.status['pi3_alive'] = (time.time() - self.pi3_last_hb) < 12.0
 
         if self.mode == 'stm':
             self._draw_stm()

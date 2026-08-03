@@ -208,7 +208,12 @@ def try_connect(port: str, label: str):
     성공 시 Serial 객체 반환, 실패 시 None 반환.
     """
     try:
-        ser = serial.Serial(port, BAUD, timeout=0.1)
+        ser = serial.Serial(
+            port,
+            BAUD,
+            timeout=0.1,
+            write_timeout=0.5,
+        )
         try:
             ser.setDTR(False)  # STM32/아두이노 리셋 방지
         except Exception:
@@ -255,19 +260,19 @@ class Pi2Node(Node):
 
         # ── Publisher ─────────────────────────
         self.pub_uart = self.create_publisher(
-            String, '/pi2/uart_response', 10)
+            String, '/pi2/uart_response', 12)
         self.pub_hb   = self.create_publisher(
-            String, '/system/heartbeat', 10)
+            String, '/system/heartbeat', 12)
         self.pub_flag = self.create_publisher(
-            String, '/pi2/flag_update', 10)
+            String, '/pi2/flag_update', 12)
         self.pub_device_status = self.create_publisher(
-            String, '/pi2/device_status', 10)
+            String, '/pi2/device_status', 12)
 
         # ── Subscriber ────────────────────────
         # PC → Pi2 명령 수신 (앞 1바이트가 대상 식별자)
         self.create_subscription(
             UInt8MultiArray, '/pi2/uart_cmd',
-            self._on_uart_cmd, 10)
+            self._on_uart_cmd, 12)
 
         self.create_timer(1.0, self._heartbeat)
         self.create_timer(1.0, self._publish_device_status)
@@ -323,33 +328,53 @@ class Pi2Node(Node):
             self.get_logger().warn(
                 f'알 수 없는 대상 식별자: 0x{target:02X}')
 
-    def _write_to(self, label: str, ser, payload: bytes) -> bool:
-        """지정 장치의 시리얼 포트로 바이트 전송"""
+    def _write_to(
+            self,
+            label: str,
+            ser,
+            payload: bytes,
+        ) -> bool:
+            """지정 장치의 시리얼 포트로 바이트 전송"""
 
-        if ser is None or not ser.is_open:
-            self.get_logger().error(
-                f'{label} 미연결 — 전송 불가'
-            )
-            return False
+            if ser is None or not ser.is_open:
+                self.get_logger().error(
+                    f'{label} 미연결 — 전송 불가'
+                )
+                return False
 
-        try:
-            ser.write(payload)
-            ser.flush()
+            try:
+                written = ser.write(payload)
 
-            self.get_logger().info(
-                f'→ {label}: {payload.hex()}'
-            )
+                if written != len(payload):
+                    raise IOError(
+                        f'{label} 일부 전송: '
+                        f'{written}/{len(payload)} bytes'
+                    )
 
-            return True
+                # flush()는 사용하지 않는다.
+                # USB 시리얼 장치가 멈추면 ROS heartbeat까지
+                # 정지할 수 있기 때문이다.
+                self.get_logger().info(
+                    f'→ {label}: {payload.hex()}'
+                )
 
-        except Exception as e:
-            self.get_logger().error(
-                f'{label} 전송 실패: {e}'
-            )
+                return True
 
-            self._mark_device_disconnected(label)
-            return False
+            except serial.SerialTimeoutException as e:
+                self.get_logger().error(
+                    f'{label} 전송 시간 초과: {e}'
+                )
 
+                self._mark_device_disconnected(label)
+                return False
+
+            except Exception as e:
+                self.get_logger().error(
+                    f'{label} 전송 실패: {e}'
+                )
+
+                self._mark_device_disconnected(label)
+                return False
     def _initialize_stm2_once(self):
         """
         Pi2 노드가 실행된 후 STM2에 처음 연결되면
