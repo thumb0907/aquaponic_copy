@@ -216,7 +216,9 @@ WATER_CAMERA_CONFIG = {
 
 
 SCARA_SECT2_ENABLED = True
-SCARA_SECT3_ENABLED = True
+SCARA_SECT3_ENABLED = True       # 반드시 True: 진동부 → C2 적재 동작
+C2_LOAD_ONLY_MODE = True         # 신규: C2 적재 후 시퀀스 종료
+MANIP_HARVEST_ENABLED = False    # 매니퓰레이터 명령 금지
 
 # 자동 재전송은 실제 중복 동작 위험이 있으므로 하지 않고 오류 상태로 전환한다.
 SCARA_JOB_TIMEOUT_SEC = 180.0
@@ -271,7 +273,7 @@ DEMO_WAIT_HARVEST_COMPLETE = 'WAIT_HARVEST_COMPLETE'
 DEMO_COMPLETE = 'COMPLETE'
 DEMO_ERROR = 'ERROR'
 # 매니퓰레이터 바이너리 펌웨어가 준비되기 전까지 False
-MANIP_HARVEST_ENABLED = True
+MANIP_HARVEST_ENABLED = False
 
 SLOT_NONE = 0x00
 SLOT_LEFT = 0x01
@@ -652,6 +654,19 @@ class MasterNode(Node):
             or self.active_manip_job is not None
         )
 
+    def _is_c2_drop_available_locked(self) -> bool:
+        """SCARA가 C2 적재 작업을 시작할 수 있는지 확인한다."""
+
+        if C2_LOAD_ONLY_MODE:
+            # 시험 모드에서는 STM2 UART 및 상태를 요구하지 않는다.
+            return True
+
+        return (
+            self.pi2_device_links['stm2']
+            and self.stm2_state == 'idle'
+            and self.flags['ff'] == 0
+        )
+
     def _try_send_scara_prehome_locked(self) -> bool:
         """파종 사이클 중 SCARA가 비는 순간 HMF를 한 번만 전송한다."""
         if self.stm_state not in (
@@ -950,10 +965,7 @@ class MasterNode(Node):
 
             if (
                 next_job['type'] == JOB_WATER_TO_VIB_AND_C2
-                and (
-                    not self.pi2_device_links['stm2']
-                    or self.stm2_state != 'idle'
-                )
+                and not self._is_c2_drop_available_locked()
             ):
                 return
 
@@ -1214,11 +1226,11 @@ class MasterNode(Node):
                     == SLOT_READY
                 )
 
-                stm2_ready = (
-                    self.stm2_state == 'idle'
+                c2_drop_available = (
+                    self._is_c2_drop_available_locked()
                 )
 
-                if water_ready and stm2_ready:
+                if water_ready and c2_drop_available:
                     queued = self._queue_water_to_c2_locked(
                         water_source
                     )
@@ -1271,7 +1283,7 @@ class MasterNode(Node):
 
         if (
             water_source is not None
-            and self.stm2_state == 'idle'
+            and self._is_c2_drop_available_locked()
         ):
             queued = self._queue_water_to_c2_locked(
                 water_source
@@ -1451,26 +1463,36 @@ class MasterNode(Node):
         # ─────────────────────────────────────
         # 3. STM2가 이전 수확 작업 중인지 검사
         # ─────────────────────────────────────
-        if self.stm2_state != 'idle':
-            self.get_logger().warn(
-                f'2번 컨베이어 사용 불가: '
-                f'stm2_state={self.stm2_state}'
-            )
-            return False
+        # if self.stm2_state != 'idle':
+        #     self.get_logger().warn(
+        #         f'2번 컨베이어 사용 불가: '
+        #         f'stm2_state={self.stm2_state}'
+        #     )
+        #     return False
 
-        if not self.pi2_device_links['stm2']:
-            self.get_logger().warn(
-                '2번 컨베이어 UART 미연결: sect3 작업 생성 생략'
-            )
-            return False
+        # if not self.pi2_device_links['stm2']:
+        #     self.get_logger().warn(
+        #         '2번 컨베이어 UART 미연결: sect3 작업 생성 생략'
+        #     )
+        #     return False
 
-        # FF=1이면 이미 STM2 시작 요청이 살아 있는 상태
-        if self.flags['ff'] != 0:
+        # # FF=1이면 이미 STM2 시작 요청이 살아 있는 상태
+        # if self.flags['ff'] != 0:
+        #     self.get_logger().warn(
+        #         f'2번 컨베이어 시작 요청이 이미 존재함: '
+        #         f'ff={self.flags["ff"]}'
+        #     )
+        #     return False
+        if not self._is_c2_drop_available_locked():
             self.get_logger().warn(
-                f'2번 컨베이어 시작 요청이 이미 존재함: '
+                'C2 적재 위치 사용 불가: '
+                f'load_only={C2_LOAD_ONLY_MODE}, '
+                f'stm2_link={self.pi2_device_links["stm2"]}, '
+                f'stm2_state={self.stm2_state}, '
                 f'ff={self.flags["ff"]}'
             )
             return False
+
 
         # ─────────────────────────────────────
         # 4. 새로운 SCARA 작업 ID 생성
@@ -1709,12 +1731,28 @@ class MasterNode(Node):
             water_source['job_id'] = None
 
             # 이제 STM2 사이클을 시작할 수 있다.
-            self.flags['ff'] = 1
-            self.stm2_start_requested_at = time.time()
-            if self.demo_mode:
-                self.demo_phase = (
-                    DEMO_WAIT_HARVEST_COMPLETE
+            if C2_LOAD_ONLY_MODE:
+                # STM2와 매니퓰레이터를 시작하지 않는다.
+                self.flags['ff'] = 0
+                self.flags['hf'] = 0
+                self.stm2_start_requested_at = 0.0
+
+                if self.demo_mode:
+                    self.demo_phase = DEMO_COMPLETE
+
+                self.get_logger().info(
+                    'C2 적재 전용 시험 완료: '
+                    f'job_id={job_id}, '
+                    f'water={source} -> vibration -> conveyor2'
                 )
+
+            else:
+                # 기존 전체 수확 시퀀스
+                self.flags['ff'] = 1
+                self.stm2_start_requested_at = time.time()
+
+                if self.demo_mode:
+                    self.demo_phase = DEMO_WAIT_HARVEST_COMPLETE
 
                 self.get_logger().info(
                     f'데모 단계 변경: '
@@ -1795,7 +1833,9 @@ class MasterNode(Node):
 
     def _broadcast_all_flags(self):
         self._broadcast_flags_to_scara()
-        self._broadcast_flags_to_stm2()
+
+        if not C2_LOAD_ONLY_MODE:
+            self._broadcast_flags_to_stm2()
 
     # ══════════════════════════════════════════
     # STM1 상태 수신
@@ -2131,19 +2171,28 @@ class MasterNode(Node):
                     make_flag_u8(PID_CRF, 0)
                 )
 
-            # SCARA가 C2에 트레이를 놓은 뒤에만 STM2 시작
+            # SCARA가 C2에 트레이를 놓은 뒤 후속 처리
             elif (
                 completed_job['type']
                 == JOB_WATER_TO_VIB_AND_C2
             ):
-                self._send_stm2(
-                    make_flag_u8(PID_FF, 1)
-                )
+                if C2_LOAD_ONLY_MODE:
+                    # C2에 내려놓는 것으로 시퀀스 종료
+                    self.get_logger().info(
+                        f'C2 적재 전용 모드: STM2 FF=1 전송 생략, '
+                        f'job_id={completed_job["job_id"]}'
+                    )
 
-                self.get_logger().info(
-                    f'STM2 FF=1 전송: '
-                    f'job_id={completed_job["job_id"]}'
-                )
+                else:
+                    # 기존 전체 수확 시퀀스
+                    self._send_stm2(
+                        make_flag_u8(PID_FF, 1)
+                    )
+
+                    self.get_logger().info(
+                        f'STM2 FF=1 전송: '
+                        f'job_id={completed_job["job_id"]}'
+                    )
 
             self.get_logger().info(
                 f'SCARA 플래그 작업 완료: '
@@ -2241,17 +2290,26 @@ class MasterNode(Node):
                 # 완료 결과를 기존 호환 플래그로 재전송
                 self._broadcast_all_flags()
 
-            # 수경실 트레이가 2번 컨베이어에 실제로 놓인 경우에만
-            # STM2 사이클 시작 명령을 한 번 전송
+            # 수경실 트레이가 C2 위치에 실제로 놓인 경우
             if completed_job['type'] == JOB_WATER_TO_VIB_AND_C2:
-                self._send_stm2(
-                    make_flag_u8(PID_FF, 1)
-                )
+                if C2_LOAD_ONLY_MODE:
+                    # STM2 컨베이어와 매니퓰레이터를 시작하지 않는다.
+                    self.get_logger().info(
+                        f'C2 적재 전용 모드: '
+                        f'STM2 사이클 시작 FF=1 전송 생략, '
+                        f'job_id={completed_job["job_id"]}'
+                    )
 
-                self.get_logger().info(
-                    f'STM2 사이클 시작 FF=1 전송: '
-                    f'job_id={completed_job["job_id"]}'
-                )
+                else:
+                    # 기존 전체 수확 시퀀스
+                    self._send_stm2(
+                        make_flag_u8(PID_FF, 1)
+                    )
+
+                    self.get_logger().info(
+                        f'STM2 사이클 시작 FF=1 전송: '
+                        f'job_id={completed_job["job_id"]}'
+                    )
             # 1번 컨베이어 트레이를 SCARA가 가져갔으므로
             # STM1에도 CRF=0을 직접 전달
             if completed_job['type'] == JOB_C1_TO_NURSERY:
@@ -3073,8 +3131,10 @@ class MasterNode(Node):
                 self.reset_waiting = {
                     'stm1',
                     'scara',
-                    'stm2',
                 }
+
+                if not C2_LOAD_ONLY_MODE:
+                    self.reset_waiting.add('stm2')
 
                 self.stm_state = 'resetting'
                 self.scara_state = 'resetting'
@@ -3202,7 +3262,10 @@ class MasterNode(Node):
                     or self.active_manip_job is not None
                     or self.stm_state != 'idle'
                     or self.scara_state != 'idle'
-                    or self.stm2_state != 'idle'
+                    or (
+                        not C2_LOAD_ONLY_MODE
+                        and self.stm2_state != 'idle'
+                    )
                 ):
                     self.get_logger().warn(
                         'DEMO_RESET 거부: '
@@ -3358,7 +3421,10 @@ class MasterNode(Node):
     def _send_reset_all(self):
         self._send_reset_stm1()
         self._send_reset_scara()
-        self._send_reset_stm2()
+
+        if not C2_LOAD_ONLY_MODE:
+            self._send_reset_stm2()
+
         self._send_reset_manip()
     # ══════════════════════════════════════════
     # 송신
