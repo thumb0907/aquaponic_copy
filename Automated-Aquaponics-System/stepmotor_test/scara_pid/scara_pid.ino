@@ -19,7 +19,8 @@ void setup() {
 }
 
 void loop() {
-  ///*
+  move_j2_cm(1);
+  /*
     serialReceiveTask();
 
     if (processScaraControlRequests()) {
@@ -27,7 +28,7 @@ void loop() {
     }
 
     pathTask();
-  //*/
+  */
   //sect0();
   //sect1();
   //delay(10000000000);

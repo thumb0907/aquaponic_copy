@@ -1,5 +1,8 @@
-../Core/Src/test.c:38:13:Test_Send	16	static
-../Core/Src/test.c:44:13:Test_Process	16	static
-../Core/Src/test.c:102:6:Test_RxCallback	8	static
-../Core/Src/test.c:120:6:Test_Init	8	static
-../Core/Src/test.c:136:6:Test_Run	8	static
+../Core/Src/test.c:78:13:Test_Send	16	static
+../Core/Src/test.c:97:13:Test_CycleFail	16	static
+../Core/Src/test.c:110:13:Test_ConveyorCycleStart	8	static
+../Core/Src/test.c:129:13:Test_ConveyorCycleRun	16	static
+../Core/Src/test.c:295:13:Test_Process	16	static
+../Core/Src/test.c:378:6:Test_RxCallback	8	static
+../Core/Src/test.c:396:6:Test_Init	8	static
+../Core/Src/test.c:412:6:Test_Run	8	static

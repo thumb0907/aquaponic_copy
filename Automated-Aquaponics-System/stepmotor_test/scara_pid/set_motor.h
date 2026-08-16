@@ -15,7 +15,7 @@
 
 //z축
 #define STEP_PIN  36
-#define DIR_PIN   33 //  27에서 변경
+#define DIR_PIN   51 //  27에서 변경
 #define j2_en     28
 //#define BK_PIN  21
 #define ALM_PIN   29
@@ -37,7 +37,7 @@
 #define j4_A    2
 #define j4_B    22
 #define j4_Z    25
-#define stop_j4 45 // == 53으로 돼 있음
+#define stop_j4 27 // == 53으로 돼 있음
 
 //리니어 레일
 #define rail_pul  41

@@ -16,28 +16,24 @@
 	#include "stm32f4xx_hal.h"
 
 	/* ── 동작 파라미터 (실측 후 수정) ────────────── */
-	#define CONVEY_HZ        3000U   // 컨베이어 속도 (step/s)
-	#define STOP_SETTLE_MS    200U   // IR 감지 후 정착 딜레이 (ms)
+	/* 테스트 모드 CY에서 검증된 값 */
+	#define CONVEY_HZ              3500U
+	#define STOP_SETTLE_MS          200U
 
-	// 포토센서 위치까지 하강
-	#define Z_DESCEND_HZ          1000U
+	#define Z_DESCEND_HZ           1000U
+	#define Z_DESCEND_MAX_STEPS   15000
 
-	// 포토센서 고장 시 기계 끝까지 내려가지 않도록 하는 최대 하강량
-	// 실제 장비 치수에 맞춰 반드시 조정
-	#define Z_DESCEND_MAX_STEPS  5000
+	#define Z_RETURN_STEPS         5000
+	#define Z_RETURN_HZ            1000U
 
-	// 수확 완료 후 상승 거리
-	#define Z_RETURN_STEPS        4000
-	#define Z_RETURN_HZ           1000U
-
-	#define EXIT_MIN_RUN_MS   500U   // 배출 컨베이어 최소 구동 시간 (ms)
+	#define EXIT_MIN_RUN_MS         500U
 
 	/* ── 타임아웃 ────────────────────────────────── */
-	#define TIMEOUT_CONVEY_MS   30000U   // 컨베이어 IR 감지 대기
-	#define TIMEOUT_HOMING_MS   15000U   // Z 호밍 리밋 감지 대기
-	#define TIMEOUT_MOVE_MS      5000U   // Z 이동 완료 대기
-	#define TIMEOUT_HARVEST_MS 360000U
-	#define TIMEOUT_EXIT_MS     15000U   // 배출 완료 대기
+	#define TIMEOUT_CONVEY_MS     30000U
+	#define TIMEOUT_HOMING_MS     17000U
+	#define TIMEOUT_MOVE_MS       12000U
+	#define TIMEOUT_HARVEST_MS   360000U
+	#define TIMEOUT_EXIT_MS       15000U
 
 	/* ── SKIP_COMM 시뮬레이션 용 ─────────────────── */
 	#define HARVEST_SIM_MS  3000U
@@ -183,11 +179,14 @@
 					/* 컨베이어 구동 → IR 감지 대기 */
 					case SEQ_CONVEY_RUN:
 						if (IR_Detected()) {
-							Conveyor_Stop();
-							Conveyor_Enable(false);
-							settle_start = HAL_GetTick();
-							Comm_SendState(STATE_IR_DETECTED);
-							seq_state = SEQ_CONVEY_STOP;
+						    // STEP 펄스만 중지하고 드라이버는 활성 상태로 유지
+						    Conveyor_Stop();
+						    Conveyor_Enable(true);
+
+						    settle_start = HAL_GetTick();
+
+						    Comm_SendState(STATE_IR_DETECTED);
+						    seq_state = SEQ_CONVEY_STOP;
 						} else if (TIMED_OUT(TIMEOUT_CONVEY_MS)) {
 							Handle_Timeout(ERR_CONVEY_TIMEOUT);
 						}
@@ -195,23 +194,25 @@
 
 					/* 정착 딜레이 후 Z 호밍 시작 */
 					case SEQ_CONVEY_STOP:
-					    if ((HAL_GetTick() - settle_start) >= STOP_SETTLE_MS) {
+					    if (
+					        (HAL_GetTick() - settle_start)
+					        >= STOP_SETTLE_MS
+					    ) {
 					        z_photo_hit = false;
 
-					        /*
-					         * 포토센서가 이미 감지 중이면 더 내려가지 않는다.
-					         * 현재 위치를 고정 위치로 판단한다.
-					         */
+					        // 이미 센서가 눌려 있으면 하강하지 않음
 					        if (Z_PhotoDetected()) {
 					            z_photo_hit = true;
 					            Z_Enable(true);
+
 					            Comm_SendState(STATE_Z_FIX);
 					            seq_state = SEQ_SEND_HARVEST;
 					        }
 					        else {
-					            // 현재 코드 방향 기준: 음수 스텝이 하강
+					            // 센서가 눌릴 때까지 하강
+					            Z_Enable(true);
 					            Z_MoveSteps(
-					                -Z_DESCEND_MAX_STEPS,
+					                +Z_DESCEND_MAX_STEPS,
 					                Z_DESCEND_HZ
 					            );
 
@@ -308,7 +309,7 @@
 				/* 테스트 모드: HARVEST_SIM_MS 딜레이로 수확 시뮬레이션 */
 				if (TIMED_OUT(HARVEST_SIM_MS)) {
 					Z_Enable(true);
-					Z_MoveSteps(+Z_RETURN_STEPS, Z_RETURN_HZ);
+					Z_MoveSteps(-Z_RETURN_STEPS, Z_RETURN_HZ);
 					TIMER_START();
 					seq_state = SEQ_WAIT_Z_RETURN;
 					sys_state = SYS_RUN_CYCLE;
@@ -316,12 +317,18 @@
 			#else
 				/* 정상 모드: 라파2로부터 HF=1 수신 대기 */
 				if (Comm_IsHfSet()) {
-					Comm_ClearHfFlag();
-					Z_Enable(true);
-					Z_MoveSteps(+Z_RETURN_STEPS, Z_RETURN_HZ);
-					TIMER_START();
-					seq_state = SEQ_WAIT_Z_RETURN;
-					sys_state = SYS_RUN_CYCLE;
+				    Comm_ClearHfFlag();
+
+				    // 먼저 Z축 복귀
+				    Z_Enable(true);
+				    Z_MoveSteps(
+				        -Z_RETURN_STEPS,
+				        Z_RETURN_HZ
+				    );
+
+				    TIMER_START();
+				    seq_state = SEQ_WAIT_Z_RETURN;
+				    sys_state = SYS_RUN_CYCLE;
 				} else if (TIMED_OUT(TIMEOUT_HARVEST_MS)) {
 					Handle_Timeout(ERR_HARVEST_TIMEOUT);
 				}

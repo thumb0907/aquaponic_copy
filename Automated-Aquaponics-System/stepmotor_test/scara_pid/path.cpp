@@ -185,7 +185,7 @@ void sect1(void) {
   enc_reset_j3();
   move_j3_wait(155+45+5-360+75);
   //delay(100000);
-  j1_home_stop_on_switch(false, 3200);
+  j1_home_stop_on_switch(false, 2200);
   delay(1300);
   enc_reset_j1();
   delay(10);
@@ -249,7 +249,7 @@ void sect1(void) {
     
     enc_reset_j1();
     delay(10);
-    move_j1_wait(45, 1000, 2.0, 150, 2500);
+    move_j1_wait(45, 1200, 2.0, 150, 2500);
     delay(300);
     enc_reset_j1();
     delay(10);
@@ -305,11 +305,12 @@ void sect1(void) {
     j4_stop();
     move_j2_cm(3.7);
     j1_home_stop_on_switch(true, 3500);
+    delay(200);
     enc_reset_j1();
     delay(500);
     //uv++;
   }
-  
+  delay(1000);
   finishSect1();
 
   sect1_started = false;

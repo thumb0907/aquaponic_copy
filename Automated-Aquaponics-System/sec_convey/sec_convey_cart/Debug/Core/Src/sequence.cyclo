@@ -1,6 +1,6 @@
-../Core/Src/sequence.c:74:14:Handle_Timeout	1
-../Core/Src/sequence.c:85:14:Do_EStop	1
-../Core/Src/sequence.c:95:14:Do_Reset	1
-../Core/Src/sequence.c:108:7:Sequence_OnPhotoDetected	4
-../Core/Src/sequence.c:124:7:Sequence_Init	1
-../Core/Src/sequence.c:138:7:App_Run	31
+../Core/Src/sequence.c:70:14:Handle_Timeout	1
+../Core/Src/sequence.c:81:14:Do_EStop	1
+../Core/Src/sequence.c:91:14:Do_Reset	1
+../Core/Src/sequence.c:104:7:Sequence_OnPhotoDetected	4
+../Core/Src/sequence.c:120:7:Sequence_Init	1
+../Core/Src/sequence.c:134:7:App_Run	31
