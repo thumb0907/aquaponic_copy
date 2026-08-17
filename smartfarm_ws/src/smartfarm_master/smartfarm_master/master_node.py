@@ -217,8 +217,8 @@ WATER_CAMERA_CONFIG = {
 
 SCARA_SECT2_ENABLED = True
 SCARA_SECT3_ENABLED = True       # 반드시 True: 진동부 → C2 적재 동작
-C2_LOAD_ONLY_MODE = False         # 신규: C2 적재 후 시퀀스 종료, False면 stm2 동작시작
-MANIP_HARVEST_ENABLED = False    # 매니퓰레이터 명령 금지
+C2_LOAD_ONLY_MODE = False        # 신규: C2 적재 후 시퀀스 종료, False면 stm2 동작시작
+MANIP_HARVEST_ENABLED = True     # False: 매니퓰레이터 명령 금지
 
 # 자동 재전송은 실제 중복 동작 위험이 있으므로 하지 않고 오류 상태로 전환한다.
 SCARA_JOB_TIMEOUT_SEC = 180.0
