@@ -429,7 +429,7 @@ class MasterNode(Node):
         self.start_flag = False
         # 실제 STM1 상태를 받기 전까지 idle로 가정하지 않는다.
         self.stm_state = 'unknown'
-        self.scara_prehome_sent = False # 이번 사이클에서 스카라 사전 홈잉을 보냈는지
+        self.scara_prehome_sent = False # 트레이 배출 후 SCARA 홈잉을 보냈는지
         self.scara_prehome_done = False # HMF=0 완료 응답까지 받았는지
         self.scara_prehome_sent_at = 0.0
         # 노드 시작 후 컨트롤러 자동 리셋 관리
@@ -666,12 +666,8 @@ class MasterNode(Node):
         )
 
     def _try_send_scara_prehome_locked(self) -> bool:
-        """파종 사이클 중 SCARA가 비는 순간 HMF를 한 번만 전송한다."""
-        if self.stm_state not in (
-            'seeding',
-            'ejecting',
-            'waiting_scara',
-        ):
+        """트레이 배출 완료 후 SCARA에 HMF를 한 번만 전송한다."""
+        if self.stm_state != 'waiting_scara':
             return False
 
         if self.scara_prehome_sent or self.scara_prehome_done:
@@ -704,12 +700,13 @@ class MasterNode(Node):
         self._send_scara(make_flag_u8(PID_HMF, 1))
 
         self.get_logger().info(
-            f'SCARA 사전 홈잉 HMF=1 전송: target={target_slot}'
+            f'트레이 배출 완료 후 SCARA 홈잉 HMF=1 전송: '
+            f'target={target_slot}'
         )
         return True
 
     def _retry_scara_prehome(self):
-        """SEEDING 순간 SCARA가 바빴던 경우 유휴 상태에서 다시 시도한다."""
+        """배출 완료 시 SCARA가 바빴다면 유휴 상태에서 다시 시도한다."""
         with self.state_lock:
             self._try_send_scara_prehome_locked()
 
@@ -747,13 +744,13 @@ class MasterNode(Node):
                     not self.pi2_alive
                     or not self.pi2_device_links['scara']
                 ):
-                    scara_fault = 'SCARA 사전 홈잉 중 UART 연결 끊김'
+                    scara_fault = 'SCARA 배출 후 홈잉 중 UART 연결 끊김'
                 elif (
                     self.scara_prehome_sent_at > 0
                     and now - self.scara_prehome_sent_at
                     > SCARA_PREHOME_TIMEOUT_SEC
                 ):
-                    scara_fault = 'SCARA 사전 홈잉 완료 타임아웃'
+                    scara_fault = 'SCARA 배출 후 홈잉 완료 타임아웃'
 
             if (
                 self.flags['ff'] == 1
@@ -1876,22 +1873,6 @@ class MasterNode(Node):
                 self.stm_state = 'picking'
             elif line == 'STM1:PC:STATE:SEEDING':
                 self.stm_state = 'seeding'
-
-                if (
-                    not self.scara_prehome_sent
-                    and not self.scara_prehome_done
-                ):
-                    if not self._try_send_scara_prehome_locked():
-                        self.get_logger().warn(
-                            f'SCARA 사전 호밍 전송 불가: '
-                            f'sent={self.scara_prehome_sent}, '
-                            f'done={self.scara_prehome_done}, '
-                            f'smf={self.flags["smf"]}, '
-                            f'hmf={self.flags["hmf"]}, '
-                            f'scara_link={self.pi2_device_links["scara"]}, '
-                            f'pi2_alive={self.pi2_alive}, '
-                            f'emergency={self.emergency}'
-                        )
             elif line == 'STM1:PC:STATE:EJECTING':
                 self.stm_state = 'ejecting'
             elif line == 'STM1:PC:STATE:WAIT_SCARA_PICK':
@@ -1961,6 +1942,18 @@ class MasterNode(Node):
                         f'job_id={job_id}, '
                         f'destination={target_slot}, '
                         f'demo_phase={self.demo_phase}'
+                    )
+
+                # 직교로봇의 파종 및 트레이 배출이 모두 끝난 뒤에만
+                # SCARA 홈잉을 시작한다. sect1 작업은 HMF=0 수신 전까지
+                # _schedule_scara_jobs()의 완료 게이트에서 대기한다.
+                if not self._try_send_scara_prehome_locked():
+                    self.get_logger().info(
+                        '트레이 배출 완료: SCARA 홈잉 전송 대기 '
+                        f'(smf={self.flags["smf"]}, '
+                        f'hmf={self.flags["hmf"]}, '
+                        f'scara_link={self.pi2_device_links["scara"]}, '
+                        f'pi2_alive={self.pi2_alive})'
                     )
             elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
@@ -2091,7 +2084,7 @@ class MasterNode(Node):
                 '→ STM1에 CRF=0 전달'
             )
             return
-                # SCARA 사전 홈 완료
+        # 트레이 배출 후 SCARA 홈 완료
         if line == 'SCARA:PC:FLAG:HMF:0':
             with self.state_lock:
                 if (
@@ -2111,7 +2104,7 @@ class MasterNode(Node):
                 #self.scara_prehome_sent = False
 
             self.get_logger().info(
-                'SCARA 사전 홈 완료: HMF=0'
+                '트레이 배출 후 SCARA 홈 완료: HMF=0; sect1 실행 가능'
             )
             return
 
