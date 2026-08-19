@@ -218,7 +218,7 @@ WATER_CAMERA_CONFIG = {
 SCARA_SECT2_ENABLED = True
 SCARA_SECT3_ENABLED = True       # 반드시 True: 진동부 → C2 적재 동작
 C2_LOAD_ONLY_MODE = False        # 신규: C2 적재 후 시퀀스 종료, False면 stm2 동작시작
-MANIP_HARVEST_ENABLED = True     # False: 매니퓰레이터 명령 금지
+MANIP_HARVEST_ENABLED = False     # False: 매니퓰레이터 명령 금지
 
 # 자동 재전송은 실제 중복 동작 위험이 있으므로 하지 않고 오류 상태로 전환한다.
 SCARA_JOB_TIMEOUT_SEC = 180.0
@@ -666,44 +666,52 @@ class MasterNode(Node):
         )
 
     def _try_send_scara_prehome_locked(self) -> bool:
-        """트레이 배출 완료 후 SCARA에 HMF를 한 번만 전송한다."""
-        if self.stm_state != 'waiting_scara':
-            return False
-
-        if self.scara_prehome_sent or self.scara_prehome_done:
-            return False
-
-        if self.active_scara_job is not None or self.flags['smf'] != 0:
-            return False
-
-        target_slot = self.seed_target_slot
-        if (
-            target_slot is None
-            or target_slot not in self.nursery_slots
-            or self.nursery_slots[target_slot]['state']
-            != SLOT_RESERVED_IN
+        """파종 중 SCARA에 HMF를 한 번만 전송한다."""
+        if self.stm_state not in (
+            'seeding',
+            'ejecting',
+            'waiting_scara',
         ):
             return False
+    # def _try_send_scara_prehome_locked(self) -> bool:
+    #     """트레이 배출 완료 후 SCARA에 HMF를 한 번만 전송한다."""
+    #     if self.stm_state != 'waiting_scara':
+    #         return False
 
-        if (
-            self.flags['hmf'] != 0
-            or self.emergency
-            or not self.pi2_alive
-            or not self.pi2_device_links['scara']
-        ):
-            return False
+    #     if self.scara_prehome_sent or self.scara_prehome_done:
+    #         return False
 
-        self.scara_prehome_sent = True
-        self.scara_prehome_sent_at = time.time()
-        self.flags['hmf'] = 1
-        self.flags['smf'] = 1
-        self._send_scara(make_flag_u8(PID_HMF, 1))
+    #     if self.active_scara_job is not None or self.flags['smf'] != 0:
+    #         return False
 
-        self.get_logger().info(
-            f'트레이 배출 완료 후 SCARA 홈잉 HMF=1 전송: '
-            f'target={target_slot}'
-        )
-        return True
+    #     target_slot = self.seed_target_slot
+    #     if (
+    #         target_slot is None
+    #         or target_slot not in self.nursery_slots
+    #         or self.nursery_slots[target_slot]['state']
+    #         != SLOT_RESERVED_IN
+    #     ):
+    #         return False
+
+    #     if (
+    #         self.flags['hmf'] != 0
+    #         or self.emergency
+    #         or not self.pi2_alive
+    #         or not self.pi2_device_links['scara']
+    #     ):
+    #         return False
+
+    #     self.scara_prehome_sent = True
+    #     self.scara_prehome_sent_at = time.time()
+    #     self.flags['hmf'] = 1
+    #     self.flags['smf'] = 1
+    #     self._send_scara(make_flag_u8(PID_HMF, 1))
+
+    #     self.get_logger().info(
+    #         f'트레이 배출 완료 후 SCARA 홈잉 HMF=1 전송: '
+    #         f'target={target_slot}'
+    #     )
+    #     return True
 
     def _retry_scara_prehome(self):
         """배출 완료 시 SCARA가 바빴다면 유휴 상태에서 다시 시도한다."""
@@ -1871,8 +1879,15 @@ class MasterNode(Node):
                 self.stm_state = 'running'
             elif line == 'STM1:PC:STATE:PICKING':
                 self.stm_state = 'picking'
+            # elif line == 'STM1:PC:STATE:SEEDING':
+            #     self.stm_state = 'seeding'
             elif line == 'STM1:PC:STATE:SEEDING':
                 self.stm_state = 'seeding'
+                if (
+                    not self.scara_prehome_sent
+                    and not self.scara_prehome_done
+                ):
+                    self._try_send_scara_prehome_locked()
             elif line == 'STM1:PC:STATE:EJECTING':
                 self.stm_state = 'ejecting'
             elif line == 'STM1:PC:STATE:WAIT_SCARA_PICK':
@@ -1947,14 +1962,14 @@ class MasterNode(Node):
                 # 직교로봇의 파종 및 트레이 배출이 모두 끝난 뒤에만
                 # SCARA 홈잉을 시작한다. sect1 작업은 HMF=0 수신 전까지
                 # _schedule_scara_jobs()의 완료 게이트에서 대기한다.
-                if not self._try_send_scara_prehome_locked():
-                    self.get_logger().info(
-                        '트레이 배출 완료: SCARA 홈잉 전송 대기 '
-                        f'(smf={self.flags["smf"]}, '
-                        f'hmf={self.flags["hmf"]}, '
-                        f'scara_link={self.pi2_device_links["scara"]}, '
-                        f'pi2_alive={self.pi2_alive})'
-                    )
+                # if not self._try_send_scara_prehome_locked():
+                #     self.get_logger().info(
+                #         '트레이 배출 완료: SCARA 홈잉 전송 대기 '
+                #         f'(smf={self.flags["smf"]}, '
+                #         f'hmf={self.flags["hmf"]}, '
+                #         f'scara_link={self.pi2_device_links["scara"]}, '
+                #         f'pi2_alive={self.pi2_alive})'
+                #     )
             elif line == 'STM1:PC:STATE:IDLE':
                 self.stm_state  = 'idle'
                 self.start_flag = False
