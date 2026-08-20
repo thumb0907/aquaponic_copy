@@ -137,6 +137,20 @@ NURSERY_CLOSE_KERNEL_SIZE = 3
 NURSERY_MIN_SPROUT_WIDTH = 8
 NURSERY_MIN_SPROUT_HEIGHT = 8
 
+# 왼쪽 카메라 화면의 오른쪽 검은 매트는 조명이 어둡고 새싹이 작다.
+# 공통 조건을 완화하면 왼쪽 철제 프레임까지 검출될 수 있으므로
+# 오른쪽 새싹 영역에만 별도 조건을 적용한다.
+NURSERY_RIGHT_LOWER_HSV = np.array([22, 45, 45], dtype=np.uint8)
+NURSERY_RIGHT_UPPER_HSV = np.array([65, 255, 255], dtype=np.uint8)
+NURSERY_RIGHT_MIN_GREEN = 80
+NURSERY_RIGHT_MIN_RED = 65
+NURSERY_RIGHT_MIN_GREEN_BLUE_DIFF = 12
+NURSERY_RIGHT_MIN_RED_BLUE_DIFF = 6
+NURSERY_RIGHT_MIN_SPROUT_AREA = 25
+NURSERY_RIGHT_MIN_SPROUT_WIDTH = 5
+NURSERY_RIGHT_MIN_SPROUT_HEIGHT = 5
+NURSERY_RIGHT_MERGE_DISTANCE = 22
+
 # 발아실 ROI 내부에서 가운데 흰색 영역 제외
 # ROI 내부 너비를 0~1로 봤을 때의 비율
 NURSERY_CENTER_EXCLUDE_X_MIN = 0.36
@@ -165,6 +179,18 @@ WATER_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
 # the green-tinted empty rack does not become foliage.
 WATER_LOWER_PALE_LEAF = np.array([18, 35, 45], dtype=np.uint8)
 WATER_UPPER_PALE_LEAF = np.array([37, 125, 255], dtype=np.uint8)
+
+# Water Left 화면의 IGNORE 오른쪽 잎은 역광으로 채도가 낮고 밝다.
+# 빈 랙의 녹색 기운까지 공통 마스크에 포함하지 않도록 오른쪽 영역에만
+# 별도 마스크를 덧붙인다.
+WATER_OUTER_RIGHT_LOWER_PALE_LEAF = np.array(
+    [18, 20, 70],
+    dtype=np.uint8
+)
+WATER_OUTER_RIGHT_UPPER_PALE_LEAF = np.array(
+    [42, 190, 255],
+    dtype=np.uint8
+)
 
 WATER_ROI_X_MIN = 0.25
 WATER_ROI_X_MAX = 0.86
@@ -3940,27 +3966,34 @@ def detect_sprouts_by_color(
         yellow_mask
     )
 
-    # ROI 오른쪽 새싹 영역
-    right_start = int(roi_w * 0.67)
+    # ROI 오른쪽 새싹 영역. 카메라별 IGNORE 영역의
+    # 오른쪽 끝을 기준으로 해야 흰색 판과 겹치지 않는다.
+    right_start = int(roi_w * ignore_x_max)
 
     right_roi = roi[:, right_start:]
     right_hsv = hsv[:, right_start:]
 
-    # 오른쪽 새싹은 밝은 노랑·황록색
+    # 오른쪽 새싹은 어두운 녹색·황록색까지 포함
     right_hsv_mask = cv2.inRange(
         right_hsv,
-        np.array([24, 45, 115], dtype=np.uint8),
-        np.array([42, 220, 255], dtype=np.uint8)
+        NURSERY_RIGHT_LOWER_HSV,
+        NURSERY_RIGHT_UPPER_HSV
     )
 
     # BGR 채널 조건
     b, g, r = cv2.split(right_roi)
 
     right_bgr_mask = (
-        (g >= 120)
-        & (r >= 110)
-        & ((g.astype(np.int16) - b.astype(np.int16)) >= 25)
-        & ((r.astype(np.int16) - b.astype(np.int16)) >= 20)
+        (g >= NURSERY_RIGHT_MIN_GREEN)
+        & (r >= NURSERY_RIGHT_MIN_RED)
+        & (
+            (g.astype(np.int16) - b.astype(np.int16))
+            >= NURSERY_RIGHT_MIN_GREEN_BLUE_DIFF
+        )
+        & (
+            (r.astype(np.int16) - b.astype(np.int16))
+            >= NURSERY_RIGHT_MIN_RED_BLUE_DIFF
+        )
     ).astype(np.uint8) * 255
 
     # HSV 또는 BGR 조건을 만족하는 영역
@@ -4055,21 +4088,38 @@ def detect_sprouts_by_color(
     for contour in contours:
         area = cv2.contourArea(contour)
 
+        x, y, bw, bh = cv2.boundingRect(contour)
+        is_right_sprout = x >= right_start
+
+        min_sprout_area = (
+            NURSERY_RIGHT_MIN_SPROUT_AREA
+            if is_right_sprout
+            else NURSERY_MIN_SPROUT_AREA
+        )
+        min_sprout_width = (
+            NURSERY_RIGHT_MIN_SPROUT_WIDTH
+            if is_right_sprout
+            else NURSERY_MIN_SPROUT_WIDTH
+        )
+        min_sprout_height = (
+            NURSERY_RIGHT_MIN_SPROUT_HEIGHT
+            if is_right_sprout
+            else NURSERY_MIN_SPROUT_HEIGHT
+        )
+
         # 너무 작은 노이즈 제거
-        if area < NURSERY_MIN_SPROUT_AREA:
+        if area < min_sprout_area:
             continue
 
         # 지나치게 큰 배경 영역 제거
         if area > NURSERY_MAX_SPROUT_AREA:
             continue
 
-        x, y, bw, bh = cv2.boundingRect(contour)
-
         # 너무 작거나 가느다란 형태 제거
-        if bw < NURSERY_MIN_SPROUT_WIDTH:
+        if bw < min_sprout_width:
             continue
 
-        if bh < NURSERY_MIN_SPROUT_HEIGHT:
+        if bh < min_sprout_height:
             continue
         
         # 지나치게 가늘고 긴 물체 제거
@@ -4108,9 +4158,24 @@ def detect_sprouts_by_color(
             (x1, y1, x2, y2, area)
         )
 
+    # 오른쪽은 새싹 간격이 좁아 35px 기준을 쓰면
+    # 서로 다른 새싹이 하나로 합쳐진다.
+    right_boundary = rx1 + right_start
+    left_sprout_boxes = [
+        box for box in sprout_boxes
+        if (box[0] + box[2]) / 2 < right_boundary
+    ]
+    right_sprout_boxes = [
+        box for box in sprout_boxes
+        if (box[0] + box[2]) / 2 >= right_boundary
+    ]
+
     sprout_boxes = merge_nearby_sprout_boxes(
-        sprout_boxes,
+        left_sprout_boxes,
         merge_distance=35
+    ) + merge_nearby_sprout_boxes(
+        right_sprout_boxes,
+        merge_distance=NURSERY_RIGHT_MERGE_DISTANCE
     )
 
     sprout_boxes.sort(
@@ -4754,6 +4819,9 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     roi = frame[ry1:ry2, rx1:rx2]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
+    ignore_x_min = cfg.get('ignore_x_min')
+    ignore_x_max = cfg.get('ignore_x_max')
+
     strict_green_mask = cv2.inRange(
         hsv,
         WATER_LOWER_GREEN,
@@ -4765,6 +4833,28 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
         WATER_UPPER_PALE_LEAF
     )
     mask = cv2.bitwise_or(strict_green_mask, pale_leaf_mask)
+
+    # 중앙 IGNORE 오른쪽의 역광 잎만 더 넓은 pale 범위로 보강한다.
+    # 전체 ROI에 적용하면 빈 랙과 조명 반사까지 잎으로 잡힐 수 있다.
+    outer_right_start = None
+    if ignore_x_max is not None:
+        outer_right_start = int(mask.shape[1] * ignore_x_max)
+        outer_right_start = max(
+            0,
+            min(mask.shape[1], outer_right_start)
+        )
+
+        if outer_right_start < mask.shape[1]:
+            outer_right_pale_mask = cv2.inRange(
+                hsv[:, outer_right_start:],
+                WATER_OUTER_RIGHT_LOWER_PALE_LEAF,
+                WATER_OUTER_RIGHT_UPPER_PALE_LEAF
+            )
+            mask[:, outer_right_start:] = cv2.bitwise_or(
+                mask[:, outer_right_start:],
+                outer_right_pale_mask
+            )
+
     dark_mask = cv2.inRange(
         hsv,
         np.array([0, 0, 0], dtype=np.uint8),
@@ -4780,9 +4870,6 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
 
     valid_pixels = mask.shape[0] * mask.shape[1]
 
-    ignore_x_min = cfg.get('ignore_x_min')
-    ignore_x_max = cfg.get('ignore_x_max')
-
     if ignore_x_min is not None and ignore_x_max is not None:
         ix1 = int(mask.shape[1] * ignore_x_min)
         ix2 = int(mask.shape[1] * ignore_x_max)
@@ -4794,6 +4881,21 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     green_ratio = green_pixels / max(1, valid_pixels)
     dark_pixels = cv2.countNonZero(dark_mask)
     dark_ratio = dark_pixels / max(1, valid_pixels)
+
+    outer_right_green_ratio = 0.0
+    if (
+        outer_right_start is not None
+        and outer_right_start < mask.shape[1]
+    ):
+        outer_right_mask = mask[:, outer_right_start:]
+        outer_right_pixels = (
+            outer_right_mask.shape[0]
+            * outer_right_mask.shape[1]
+        )
+        outer_right_green_ratio = (
+            cv2.countNonZero(outer_right_mask)
+            / max(1, outer_right_pixels)
+        )
 
     contours, _ = cv2.findContours(
         mask,
@@ -4858,7 +4960,10 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
 
     cv2.putText(
         disp,
-        f'area={largest_area:.0f}/{cfg["min_leaf_area"]}',
+        (
+            f'area={largest_area:.0f}/{cfg["min_leaf_area"]} '
+            f'right={outer_right_green_ratio:.3f}'
+        ),
         (20, 100),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
