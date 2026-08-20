@@ -20,18 +20,20 @@ static volatile bool     z_busy   = false;
 /* ── GPIO 제어 ───────────────────────────────── */
 void Z_Enable(bool en)
 {
-    /*
-     * TB6600 기준: EN LOW = 활성화
-     * 드라이버에 따라 반전될 수 있음 — 실측 후 수정
-     */
-    HAL_GPIO_WritePin(CART_PORT, CART_EN_PIN,
-                      en ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    GPIO_PinState state =
+        en ? GPIO_PIN_SET : GPIO_PIN_RESET;
+
+    HAL_GPIO_WritePin(CART1_PORT, CART1_EN_PIN, state);
+    HAL_GPIO_WritePin(CART2_PORT, CART2_EN_PIN, state);
 }
 
 void Z_SetDir(bool dir)
 {
-    HAL_GPIO_WritePin(CART_PORT, CART_DIR_PIN,
-                      dir ? GPIO_PIN_RESET : GPIO_PIN_SET);
+    GPIO_PinState state =
+        dir ? GPIO_PIN_RESET : GPIO_PIN_SET;
+
+    HAL_GPIO_WritePin(CART1_PORT, CART1_DIR_PIN, state);
+    HAL_GPIO_WritePin(CART2_PORT, CART2_DIR_PIN, state);
 }
 
 /* ── TIM5 주파수 설정 ────────────────────────── */

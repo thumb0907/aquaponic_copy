@@ -3,4 +3,4 @@
 ../Core/Src/sequence.c:91:14:Do_Reset	1
 ../Core/Src/sequence.c:104:7:Sequence_OnPhotoDetected	4
 ../Core/Src/sequence.c:120:7:Sequence_Init	1
-../Core/Src/sequence.c:134:7:App_Run	31
+../Core/Src/sequence.c:134:7:App_Run	1

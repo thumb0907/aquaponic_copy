@@ -11,10 +11,15 @@
 #define CON_PORT	  GPIOC
 
 // 직교로봇
-// 직교로봇 pul- pa0 (tim5_ch1)
-#define CART_DIR_PIN	GPIO_PIN_12
-#define CART_EN_PIN	  	GPIO_PIN_11
-#define CART_PORT	  	GPIOA
+// 직교로봇 모터 1
+#define CART1_DIR_PIN    GPIO_PIN_12
+#define CART1_EN_PIN     GPIO_PIN_11
+#define CART1_PORT       GPIOA
+
+// 직교로봇 모터 2
+#define CART2_DIR_PIN    GPIO_PIN_10
+#define CART2_EN_PIN     GPIO_PIN_11
+#define CART2_PORT       GPIOC
 
 // 적외선센서
 #define IR_PIN		GPIO_PIN_3
