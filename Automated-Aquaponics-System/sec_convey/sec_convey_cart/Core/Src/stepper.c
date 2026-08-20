@@ -48,10 +48,12 @@ static void TIM5_SetStepHz(uint32_t hz)
 
     uint32_t tick_hz = tim_clk / (psc + 1);
     uint32_t arr     = (tick_hz / hz) - 1;  /* TIM5는 32bit — 오버플로 없음 */
+    uint32_t pulse = (arr + 1) / 2;
 
     __HAL_TIM_SET_PRESCALER(&htim5, psc);
     __HAL_TIM_SET_AUTORELOAD(&htim5, arr);
-    __HAL_TIM_SET_COMPARE(&htim5, TIM_CHANNEL_1, (arr + 1) / 2);  /* 50 % 듀티 */
+    __HAL_TIM_SET_COMPARE(&htim5, TIM_CHANNEL_1, pulse);  /* 50 % 듀티 */
+    __HAL_TIM_SET_COMPARE(&htim5, TIM_CHANNEL_2, pulse);
     __HAL_TIM_SET_COUNTER(&htim5, 0);
     HAL_TIM_GenerateEvent(&htim5, TIM_EVENTSOURCE_UPDATE);
 }
@@ -78,12 +80,15 @@ void Z_MoveSteps(int32_t steps, uint32_t step_hz)
     __HAL_TIM_CLEAR_FLAG(&htim5, TIM_FLAG_UPDATE);
     __HAL_TIM_ENABLE_IT(&htim5, TIM_IT_UPDATE);
     HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_1);
+    HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_2);
 }
 
 /* ── 즉시 정지 ───────────────────────────────── */
 static void Z_StopPulse(void)
 {
     HAL_TIM_PWM_Stop(&htim5, TIM_CHANNEL_1);
+    HAL_TIM_PWM_Stop(&htim5, TIM_CHANNEL_2);
+
     __HAL_TIM_DISABLE_IT(&htim5, TIM_IT_UPDATE);
 
     z_remain = 0;

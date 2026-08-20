@@ -17,7 +17,7 @@
 
 	/* ── 동작 파라미터 (실측 후 수정) ────────────── */
 	/* 테스트 모드 CY에서 검증된 값 */
-	#define CONVEY_HZ              3500U
+	#define CONVEY_HZ              3800U
 	#define STOP_SETTLE_MS          200U
 
 	#define Z_DESCEND_HZ           1000U
@@ -29,11 +29,11 @@
 	#define EXIT_MIN_RUN_MS         500U
 
 	/* ── 타임아웃 ────────────────────────────────── */
-	#define TIMEOUT_CONVEY_MS     30000U
-	#define TIMEOUT_HOMING_MS     17000U
-	#define TIMEOUT_MOVE_MS       12000U
+	#define TIMEOUT_CONVEY_MS     300000U
+	#define TIMEOUT_HOMING_MS     30000U
+	#define TIMEOUT_MOVE_MS       300000U
 	#define TIMEOUT_HARVEST_MS   360000U
-	#define TIMEOUT_EXIT_MS       15000U
+	#define TIMEOUT_EXIT_MS       30000U
 
 	/* ── SKIP_COMM 시뮬레이션 용 ─────────────────── */
 	#define HARVEST_SIM_MS  3000U
