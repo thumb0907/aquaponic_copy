@@ -91,6 +91,7 @@ NURSERY_CAMERA_CONFIG = {
     'left': {
         'roi': (0.13, 0.90, 0.17, 0.74),
         'ignore': (0.36, 0.67),
+        'tray_conf': 0.40,
     },
     'right': {
         'roi': (0.02, 0.78, 0.08, 0.72),
@@ -113,18 +114,18 @@ NURSERY_LEFT_STREAM_PORT = 5001
 NURSERY_RIGHT_STREAM_PORT = 5002
 
 #NURSERY_MIN_CONF = 0.2     # YOLO conf 최소값, 이게 트레이일 확률이 20%이상이어야 박스를 그림
-NURSERY_TRAY_CONF = 0.70
+NURSERY_TRAY_CONF = 0.40
 
 # 초록색 새싹 (hsv)
-NURSERY_LOWER_GREEN = np.array([38, 90, 90], dtype=np.uint8)
-NURSERY_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
+NURSERY_LOWER_GREEN = np.array([35, 50, 65], dtype=np.uint8)
+NURSERY_UPPER_GREEN = np.array([95, 255, 255], dtype=np.uint8)
 
 # 노란색·황록색 새싹
-NURSERY_LOWER_YELLOW = np.array([22, 85, 130], dtype=np.uint8)
-NURSERY_UPPER_YELLOW = np.array([42, 220, 255], dtype=np.uint8)
+NURSERY_LOWER_YELLOW = np.array([18, 35, 75], dtype=np.uint8)
+NURSERY_UPPER_YELLOW = np.array([48, 225, 255], dtype=np.uint8)
 
 # 새싹으로 인정할 최소/최대 면적
-NURSERY_MIN_SPROUT_AREA = 45
+NURSERY_MIN_SPROUT_AREA = 25
 NURSERY_MAX_SPROUT_AREA = 20000
 
 # 작은 노이즈 제거용
@@ -134,22 +135,8 @@ NURSERY_OPEN_KERNEL_SIZE = 3
 NURSERY_CLOSE_KERNEL_SIZE = 3
 
 # 너무 작고 가느다란 영역 제거
-NURSERY_MIN_SPROUT_WIDTH = 8
-NURSERY_MIN_SPROUT_HEIGHT = 8
-
-# 왼쪽 카메라 화면의 오른쪽 검은 매트는 조명이 어둡고 새싹이 작다.
-# 공통 조건을 완화하면 왼쪽 철제 프레임까지 검출될 수 있으므로
-# 오른쪽 새싹 영역에만 별도 조건을 적용한다.
-NURSERY_RIGHT_LOWER_HSV = np.array([22, 45, 45], dtype=np.uint8)
-NURSERY_RIGHT_UPPER_HSV = np.array([65, 255, 255], dtype=np.uint8)
-NURSERY_RIGHT_MIN_GREEN = 80
-NURSERY_RIGHT_MIN_RED = 65
-NURSERY_RIGHT_MIN_GREEN_BLUE_DIFF = 12
-NURSERY_RIGHT_MIN_RED_BLUE_DIFF = 6
-NURSERY_RIGHT_MIN_SPROUT_AREA = 25
-NURSERY_RIGHT_MIN_SPROUT_WIDTH = 5
-NURSERY_RIGHT_MIN_SPROUT_HEIGHT = 5
-NURSERY_RIGHT_MERGE_DISTANCE = 22
+NURSERY_MIN_SPROUT_WIDTH = 5
+NURSERY_MIN_SPROUT_HEIGHT = 5
 
 # 발아실 ROI 내부에서 가운데 흰색 영역 제외
 # ROI 내부 너비를 0~1로 봤을 때의 비율
@@ -180,18 +167,6 @@ WATER_UPPER_GREEN = np.array([90, 255, 255], dtype=np.uint8)
 WATER_LOWER_PALE_LEAF = np.array([18, 35, 45], dtype=np.uint8)
 WATER_UPPER_PALE_LEAF = np.array([37, 125, 255], dtype=np.uint8)
 
-# Water Left 화면의 IGNORE 오른쪽 잎은 역광으로 채도가 낮고 밝다.
-# 빈 랙의 녹색 기운까지 공통 마스크에 포함하지 않도록 오른쪽 영역에만
-# 별도 마스크를 덧붙인다.
-WATER_OUTER_RIGHT_LOWER_PALE_LEAF = np.array(
-    [18, 20, 70],
-    dtype=np.uint8
-)
-WATER_OUTER_RIGHT_UPPER_PALE_LEAF = np.array(
-    [42, 190, 255],
-    dtype=np.uint8
-)
-
 WATER_ROI_X_MIN = 0.25
 WATER_ROI_X_MAX = 0.86
 WATER_ROI_Y_MIN = 0.30
@@ -213,14 +188,14 @@ WATER_CAMERA_CONFIG = {
         'ignore_x_min': 0.35,
         'ignore_x_max': 0.65,
 
-        # green_ratio만으로 점유 판단
         'tray_dark_value_max': 90,
         'tray_dark_ratio': 0.32,
         'occupy_stable_frames': 5,
 
-        # green_ratio + largest_area로 성장완료 판단
-        'growth_area_ratio': 0.18,
-        'min_leaf_area': 2000,
+        # 0.18에서 0.24로 변경
+        'growth_area_ratio': 0.20,
+        'min_leaf_area': 6000,
+        'ready_dark_ratio': 0.27,
     },
     'right': {
         'roi_x_min': WATER_ROI_X_MIN,
@@ -244,7 +219,7 @@ WATER_CAMERA_CONFIG = {
 SCARA_SECT2_ENABLED = True
 SCARA_SECT3_ENABLED = True       # 반드시 True: 진동부 → C2 적재 동작
 C2_LOAD_ONLY_MODE = False        # 신규: C2 적재 후 시퀀스 종료, False면 stm2 동작시작
-MANIP_HARVEST_ENABLED = False     # False: 매니퓰레이터 명령 금지
+MANIP_HARVEST_ENABLED = True    # False: 매니퓰레이터 명령 금지
 
 # 자동 재전송은 실제 중복 동작 위험이 있으므로 하지 않고 오류 상태로 전환한다.
 SCARA_JOB_TIMEOUT_SEC = 180.0
@@ -699,45 +674,43 @@ class MasterNode(Node):
             'waiting_scara',
         ):
             return False
-    # def _try_send_scara_prehome_locked(self) -> bool:
-    #     """트레이 배출 완료 후 SCARA에 HMF를 한 번만 전송한다."""
-    #     if self.stm_state != 'waiting_scara':
-    #         return False
 
-    #     if self.scara_prehome_sent or self.scara_prehome_done:
-    #         return False
+        if self.scara_prehome_sent or self.scara_prehome_done:
+            return False
 
-    #     if self.active_scara_job is not None or self.flags['smf'] != 0:
-    #         return False
+        if self.active_scara_job is not None or self.flags['smf'] != 0:
+            return False
 
-    #     target_slot = self.seed_target_slot
-    #     if (
-    #         target_slot is None
-    #         or target_slot not in self.nursery_slots
-    #         or self.nursery_slots[target_slot]['state']
-    #         != SLOT_RESERVED_IN
-    #     ):
-    #         return False
+        target_slot = self.seed_target_slot
+        if (
+            target_slot is None
+            or target_slot not in self.nursery_slots
+            or self.nursery_slots[target_slot]['state']
+            != SLOT_RESERVED_IN
+        ):
+            return False
 
-    #     if (
-    #         self.flags['hmf'] != 0
-    #         or self.emergency
-    #         or not self.pi2_alive
-    #         or not self.pi2_device_links['scara']
-    #     ):
-    #         return False
+        if (
+            self.flags['hmf'] != 0
+            or self.emergency
+            or not self.pi2_alive
+            or not self.pi2_device_links['scara']
+        ):
+            return False
 
-    #     self.scara_prehome_sent = True
-    #     self.scara_prehome_sent_at = time.time()
-    #     self.flags['hmf'] = 1
-    #     self.flags['smf'] = 1
-    #     self._send_scara(make_flag_u8(PID_HMF, 1))
+        self.scara_prehome_sent = True
+        self.scara_prehome_sent_at = time.time()
+        self.flags['hmf'] = 1
+        self.flags['smf'] = 1
 
-    #     self.get_logger().info(
-    #         f'트레이 배출 완료 후 SCARA 홈잉 HMF=1 전송: '
-    #         f'target={target_slot}'
-    #     )
-    #     return True
+        self._send_scara(
+            make_flag_u8(PID_HMF, 1)
+        )
+
+        self.get_logger().info(
+            f'파종 중 SCARA 홈잉 HMF=1 전송: target={target_slot}'
+        )
+        return True
 
     def _retry_scara_prehome(self):
         """배출 완료 시 SCARA가 바빴다면 유휴 상태에서 다시 시도한다."""
@@ -3966,34 +3939,27 @@ def detect_sprouts_by_color(
         yellow_mask
     )
 
-    # ROI 오른쪽 새싹 영역. 카메라별 IGNORE 영역의
-    # 오른쪽 끝을 기준으로 해야 흰색 판과 겹치지 않는다.
-    right_start = int(roi_w * ignore_x_max)
+    # ROI 오른쪽 새싹 영역
+    right_start = int(roi_w * 0.67)
 
     right_roi = roi[:, right_start:]
     right_hsv = hsv[:, right_start:]
 
-    # 오른쪽 새싹은 어두운 녹색·황록색까지 포함
+    # 오른쪽 새싹은 밝은 노랑·황록색
     right_hsv_mask = cv2.inRange(
         right_hsv,
-        NURSERY_RIGHT_LOWER_HSV,
-        NURSERY_RIGHT_UPPER_HSV
+        np.array([24, 45, 115], dtype=np.uint8),
+        np.array([42, 220, 255], dtype=np.uint8)
     )
 
     # BGR 채널 조건
     b, g, r = cv2.split(right_roi)
 
     right_bgr_mask = (
-        (g >= NURSERY_RIGHT_MIN_GREEN)
-        & (r >= NURSERY_RIGHT_MIN_RED)
-        & (
-            (g.astype(np.int16) - b.astype(np.int16))
-            >= NURSERY_RIGHT_MIN_GREEN_BLUE_DIFF
-        )
-        & (
-            (r.astype(np.int16) - b.astype(np.int16))
-            >= NURSERY_RIGHT_MIN_RED_BLUE_DIFF
-        )
+        (g >= 120)
+        & (r >= 110)
+        & ((g.astype(np.int16) - b.astype(np.int16)) >= 25)
+        & ((r.astype(np.int16) - b.astype(np.int16)) >= 20)
     ).astype(np.uint8) * 255
 
     # HSV 또는 BGR 조건을 만족하는 영역
@@ -4088,38 +4054,21 @@ def detect_sprouts_by_color(
     for contour in contours:
         area = cv2.contourArea(contour)
 
-        x, y, bw, bh = cv2.boundingRect(contour)
-        is_right_sprout = x >= right_start
-
-        min_sprout_area = (
-            NURSERY_RIGHT_MIN_SPROUT_AREA
-            if is_right_sprout
-            else NURSERY_MIN_SPROUT_AREA
-        )
-        min_sprout_width = (
-            NURSERY_RIGHT_MIN_SPROUT_WIDTH
-            if is_right_sprout
-            else NURSERY_MIN_SPROUT_WIDTH
-        )
-        min_sprout_height = (
-            NURSERY_RIGHT_MIN_SPROUT_HEIGHT
-            if is_right_sprout
-            else NURSERY_MIN_SPROUT_HEIGHT
-        )
-
         # 너무 작은 노이즈 제거
-        if area < min_sprout_area:
+        if area < NURSERY_MIN_SPROUT_AREA:
             continue
 
         # 지나치게 큰 배경 영역 제거
         if area > NURSERY_MAX_SPROUT_AREA:
             continue
 
+        x, y, bw, bh = cv2.boundingRect(contour)
+
         # 너무 작거나 가느다란 형태 제거
-        if bw < min_sprout_width:
+        if bw < NURSERY_MIN_SPROUT_WIDTH:
             continue
 
-        if bh < min_sprout_height:
+        if bh < NURSERY_MIN_SPROUT_HEIGHT:
             continue
         
         # 지나치게 가늘고 긴 물체 제거
@@ -4158,24 +4107,9 @@ def detect_sprouts_by_color(
             (x1, y1, x2, y2, area)
         )
 
-    # 오른쪽은 새싹 간격이 좁아 35px 기준을 쓰면
-    # 서로 다른 새싹이 하나로 합쳐진다.
-    right_boundary = rx1 + right_start
-    left_sprout_boxes = [
-        box for box in sprout_boxes
-        if (box[0] + box[2]) / 2 < right_boundary
-    ]
-    right_sprout_boxes = [
-        box for box in sprout_boxes
-        if (box[0] + box[2]) / 2 >= right_boundary
-    ]
-
     sprout_boxes = merge_nearby_sprout_boxes(
-        left_sprout_boxes,
+        sprout_boxes,
         merge_distance=35
-    ) + merge_nearby_sprout_boxes(
-        right_sprout_boxes,
-        merge_distance=NURSERY_RIGHT_MERGE_DISTANCE
     )
 
     sprout_boxes.sort(
@@ -4819,9 +4753,6 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     roi = frame[ry1:ry2, rx1:rx2]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-    ignore_x_min = cfg.get('ignore_x_min')
-    ignore_x_max = cfg.get('ignore_x_max')
-
     strict_green_mask = cv2.inRange(
         hsv,
         WATER_LOWER_GREEN,
@@ -4833,28 +4764,6 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
         WATER_UPPER_PALE_LEAF
     )
     mask = cv2.bitwise_or(strict_green_mask, pale_leaf_mask)
-
-    # 중앙 IGNORE 오른쪽의 역광 잎만 더 넓은 pale 범위로 보강한다.
-    # 전체 ROI에 적용하면 빈 랙과 조명 반사까지 잎으로 잡힐 수 있다.
-    outer_right_start = None
-    if ignore_x_max is not None:
-        outer_right_start = int(mask.shape[1] * ignore_x_max)
-        outer_right_start = max(
-            0,
-            min(mask.shape[1], outer_right_start)
-        )
-
-        if outer_right_start < mask.shape[1]:
-            outer_right_pale_mask = cv2.inRange(
-                hsv[:, outer_right_start:],
-                WATER_OUTER_RIGHT_LOWER_PALE_LEAF,
-                WATER_OUTER_RIGHT_UPPER_PALE_LEAF
-            )
-            mask[:, outer_right_start:] = cv2.bitwise_or(
-                mask[:, outer_right_start:],
-                outer_right_pale_mask
-            )
-
     dark_mask = cv2.inRange(
         hsv,
         np.array([0, 0, 0], dtype=np.uint8),
@@ -4870,6 +4779,9 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
 
     valid_pixels = mask.shape[0] * mask.shape[1]
 
+    ignore_x_min = cfg.get('ignore_x_min')
+    ignore_x_max = cfg.get('ignore_x_max')
+
     if ignore_x_min is not None and ignore_x_max is not None:
         ix1 = int(mask.shape[1] * ignore_x_min)
         ix2 = int(mask.shape[1] * ignore_x_max)
@@ -4881,21 +4793,6 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     green_ratio = green_pixels / max(1, valid_pixels)
     dark_pixels = cv2.countNonZero(dark_mask)
     dark_ratio = dark_pixels / max(1, valid_pixels)
-
-    outer_right_green_ratio = 0.0
-    if (
-        outer_right_start is not None
-        and outer_right_start < mask.shape[1]
-    ):
-        outer_right_mask = mask[:, outer_right_start:]
-        outer_right_pixels = (
-            outer_right_mask.shape[0]
-            * outer_right_mask.shape[1]
-        )
-        outer_right_green_ratio = (
-            cv2.countNonZero(outer_right_mask)
-            / max(1, outer_right_pixels)
-        )
 
     contours, _ = cv2.findContours(
         mask,
@@ -4912,6 +4809,10 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
     foliage_ready = (
         green_ratio >= cfg['growth_area_ratio']
         and largest_area >= cfg['min_leaf_area']
+        and dark_ratio >= cfg.get(
+            'ready_dark_ratio',
+            0.0
+        )
     )
 
     # A mature canopy is also evidence that the slot is occupied.  This keeps
@@ -4929,8 +4830,16 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
             and node.water_slots[position]['state'] == SLOT_GROWING
         )
 
+    # growth_done = (
+    #     foliage_ready
+    #     and not hold_demo_growing_slot
+    # )
+    # 왼쪽: 점유 감지로 성장 완료 판단
+    # 오른쪽: 기존 잎 비율·면적 기준 유지
+    ready_seen = occupied_seen if position == 'left' else foliage_ready
+
     growth_done = (
-        foliage_ready
+        ready_seen
         and not hold_demo_growing_slot
     )
 
@@ -4960,10 +4869,7 @@ def process_water_frame(node: MasterNode, frame: np.ndarray, position: str):
 
     cv2.putText(
         disp,
-        (
-            f'area={largest_area:.0f}/{cfg["min_leaf_area"]} '
-            f'right={outer_right_green_ratio:.3f}'
-        ),
+        f'area={largest_area:.0f}/{cfg["min_leaf_area"]}',
         (20, 100),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
