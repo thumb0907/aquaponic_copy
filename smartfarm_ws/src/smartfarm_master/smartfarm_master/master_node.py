@@ -218,6 +218,7 @@ WATER_CAMERA_CONFIG = {
 
 SCARA_SECT2_ENABLED = True
 SCARA_SECT3_ENABLED = True       # 반드시 True: 진동부 → C2 적재 동작
+AUTO_MODE_DEFAULT = True         # 노드 시작 시 운전 모드 (True=자동, False=수동)
 C2_LOAD_ONLY_MODE = False        # 신규: C2 적재 후 시퀀스 종료, False면 stm2 동작시작
 MANIP_HARVEST_ENABLED = True    # False: 매니퓰레이터 명령 금지
 
@@ -408,6 +409,8 @@ class MasterNode(Node):
         # 발표 데모 진행 상태
         #예를 들어 파종 트레이가 발아실 왼쪽에 들어가면: self.demo_seeded_nursery_slot = 'left' 이후 데모 스케줄러는 발아 완료 트레이를 오른쪽에서만 찾습니다.
         self.demo_mode = True
+        # 운전 모드: True=자동, False=수동 (/system/command 로 MODE_AUTO / MODE_MANUAL 전환)
+        self.auto_mode = AUTO_MODE_DEFAULT
         self.demo_phase = DEMO_WAIT_FIRST_TRAY
         # 이번 데모에서 방금 파종한 트레이가 들어간 발아실 슬롯
         # 미리 준비한 발아 완료 트레이를 선택할 때 제외한다.
@@ -941,6 +944,16 @@ class MasterNode(Node):
 
         with self.state_lock:
             if self.emergency:
+                return
+
+            # 수동모드: 스카라 자동 작업 생성/전송 모두 중단
+            if not self.auto_mode:
+                if self.pending_scara_jobs:
+                    self.get_logger().info(
+                        f'수동모드: 대기 중 스카라 작업 폐기 '
+                        f'{self.pending_scara_jobs}'
+                    )
+                    self.pending_scara_jobs.clear()
                 return
 
             if not self.pi2_alive:
@@ -2597,6 +2610,13 @@ class MasterNode(Node):
                         'STM2 SKIP_COMM 시뮬레이션 사용'
                     )
 
+                # 수동모드: 매니퓰레이터 자동 수확 명령 생략
+                elif not self.auto_mode:
+                    self.get_logger().info(
+                        'STM2 수확 단계 진입: 수동모드라 '
+                        '매니퓰레이터 자동 명령 생략'
+                    )
+
                 else:
                     manip_frame = (
                         self._start_manip_harvest_locked()
@@ -2997,8 +3017,41 @@ class MasterNode(Node):
     # ══════════════════════════════════════════
     # 외부 명령
     # ══════════════════════════════════════════
+    def _set_run_mode(self, auto: bool):
+        with self.state_lock:
+            # 작업 도중 전환하면 상태가 꼬이므로 거부
+            if (
+                self.active_scara_job is not None
+                or self.active_manip_job is not None
+            ):
+                self.get_logger().warn(
+                    f'작업 실행 중 모드 전환 거부: '
+                    f'scara={self.active_scara_job}, '
+                    f'manip={self.active_manip_job}'
+                )
+                return
+
+            self.auto_mode = auto
+
+            # 수동 전환 시 대기 중 자동 작업 폐기
+            if not auto:
+                self.pending_scara_jobs.clear()
+
+        if auto:
+            self.get_logger().warn(
+                '자동모드 전환. 수동 이동은 슬롯 상태에 반영되지 않으므로 '
+                '설비 정리 후 DEMO_RESET 권장'
+            )
+        else:
+            self.get_logger().info('수동모드 전환: 스카라/매니퓰레이터 자동 명령 중단')
+
     def _on_command(self, msg: String):
         cmd = msg.data.strip()
+
+        # ── 운전 모드 전환: MODE_AUTO / MODE_MANUAL ──
+        if cmd.upper() in ('MODE_AUTO', 'MODE_MANUAL'):
+            self._set_run_mode(cmd.upper() == 'MODE_AUTO')
+            return
 
         # 수경실은 트레이 존재를 인식할 수 없으므로 운용자가 초기 상태를 명시한다.
         # 형식: SET_WATER_SLOT:left:empty
